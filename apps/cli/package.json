@@ -1,0 +1,33 @@
+{
+  "name": "@buoy/cli",
+  "version": "0.0.1",
+  "description": "Buoy CLI - Design drift detection for the AI era",
+  "type": "module",
+  "bin": {
+    "buoy": "./dist/bin.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "start": "node ./dist/bin/buoy.js"
+  },
+  "dependencies": {
+    "@buoy/core": "workspace:*",
+    "@buoy/db": "workspace:*",
+    "@buoy/scanners": "workspace:*",
+    "chalk": "^5.3.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^12.1.0",
+    "glob": "^11.0.0",
+    "ora": "^8.1.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,159 @@
+import chalk from 'chalk';
+import ora, { Ora } from 'ora';
+
+// Create a spinner
+export function spinner(text: string): Ora {
+  return ora({
+    text,
+    color: 'cyan',
+  }).start();
+}
+
+// Success message
+export function success(message: string): void {
+  console.log(chalk.green('✓') + ' ' + message);
+}
+
+// Warning message
+export function warning(message: string): void {
+  console.log(chalk.yellow('!') + ' ' + message);
+}
+
+// Error message
+export function error(message: string): void {
+  console.log(chalk.red('✗') + ' ' + message);
+}
+
+// Info message
+export function info(message: string): void {
+  console.log(chalk.blue('i') + ' ' + message);
+}
+
+// Debug message (only in verbose mode)
+export function debug(message: string, verbose: boolean = false): void {
+  if (verbose) {
+    console.log(chalk.dim('  ' + message));
+  }
+}
+
+// Header
+export function header(text: string): void {
+  console.log('');
+  console.log(chalk.bold(text));
+  console.log(chalk.dim('─'.repeat(text.length)));
+}
+
+// Newline
+export function newline(): void {
+  console.log('');
+}
+
+// Divider
+export function divider(): void {
+  console.log(chalk.dim('─'.repeat(50)));
+}
+
+// List item
+export function listItem(text: string, indent: number = 0): void {
+  const prefix = '  '.repeat(indent) + chalk.dim('•') + ' ';
+  console.log(prefix + text);
+}
+
+// Key-value pair
+export function keyValue(key: string, value: string, indent: number = 0): void {
+  const prefix = '  '.repeat(indent);
+  console.log(prefix + chalk.dim(key + ':') + ' ' + value);
+}
+
+// Progress bar (simple)
+export function progress(current: number, total: number, label: string): void {
+  const percent = Math.round((current / total) * 100);
+  const filled = Math.round(percent / 5);
+  const empty = 20 - filled;
+  const bar = chalk.green('█'.repeat(filled)) + chalk.dim('░'.repeat(empty));
+  process.stdout.write(`\r${bar} ${percent}% ${label}`);
+  if (current === total) {
+    console.log('');
+  }
+}
+
+// Coverage stats interface
+export interface CoverageStats {
+  aligned: number;
+  drifting: number;
+  untracked: number;
+  total: number;
+}
+
+// Coverage grid symbols
+const SYMBOLS = {
+  filled: '⛁',   // Aligned
+  partial: '⛀',  // Drifting
+  empty: '⛶',    // Untracked/empty
+};
+
+const GRID_COLS = 10;
+const GRID_ROWS = 10;
+const TOTAL_SLOTS = GRID_COLS * GRID_ROWS;
+
+// Render the coverage grid with legend
+export function coverageGrid(stats: CoverageStats): void {
+  const { aligned, drifting, untracked, total } = stats;
+
+  // Calculate percentages
+  const alignedPct = total > 0 ? Math.round((aligned / total) * 100) : 0;
+  const driftingPct = total > 0 ? Math.round((drifting / total) * 100) : 0;
+  const untrackedPct = total > 0 ? Math.round((untracked / total) * 100) : 0;
+
+  // Scale to grid slots
+  const scale = total > 0 ? TOTAL_SLOTS / total : 0;
+  const alignedSlots = Math.round(aligned * scale);
+  const driftingSlots = Math.round(drifting * scale);
+  const untrackedSlots = TOTAL_SLOTS - alignedSlots - driftingSlots;
+
+  // Build the grid array
+  const grid: string[] = [];
+  for (let i = 0; i < alignedSlots; i++) {
+    grid.push(chalk.green(SYMBOLS.filled));
+  }
+  for (let i = 0; i < driftingSlots; i++) {
+    grid.push(chalk.yellow(SYMBOLS.partial));
+  }
+  for (let i = 0; i < untrackedSlots; i++) {
+    grid.push(chalk.dim(SYMBOLS.empty));
+  }
+
+  // Pad to TOTAL_SLOTS if needed
+  while (grid.length < TOTAL_SLOTS) {
+    grid.push(chalk.dim(SYMBOLS.empty));
+  }
+
+  // Build legend lines
+  const summaryLine = `${aligned}/${total} components · ${alignedPct}% aligned`;
+  const legendLines = [
+    '',
+    '',
+    `${chalk.green(SYMBOLS.filled)} Aligned: ${aligned} (${alignedPct}%)`,
+    `${chalk.yellow(SYMBOLS.partial)} Drifting: ${drifting} (${driftingPct}%)`,
+    `${chalk.dim(SYMBOLS.empty)} Untracked: ${untracked} (${untrackedPct}%)`,
+    '',
+    '',
+    '',
+    '',
+    '',
+  ];
+
+  // Print header
+  console.log('');
+  console.log(chalk.bold('Component Alignment'));
+  console.log('');
+
+  // Print grid with legend
+  for (let row = 0; row < GRID_ROWS; row++) {
+    const start = row * GRID_COLS;
+    const rowSymbols = grid.slice(start, start + GRID_COLS).join(' ');
+    const legend = row === 0 ? `   ${summaryLine}` : (legendLines[row] ? `   ${legendLines[row]}` : '');
+    console.log(rowSymbols + legend);
+  }
+  console.log('');
+}

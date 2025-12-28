@@ -1,0 +1,40 @@
+{
+  "name": "@buoy/scanners",
+  "version": "0.0.1",
+  "description": "Source scanners for Buoy (React, Figma, Storybook)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./git": {
+      "types": "./dist/git/index.d.ts",
+      "import": "./dist/git/index.js"
+    },
+    "./figma": {
+      "types": "./dist/figma/index.d.ts",
+      "import": "./dist/figma/index.js"
+    },
+    "./storybook": {
+      "types": "./dist/storybook/index.d.ts",
+      "import": "./dist/storybook/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@buoy/core": "workspace:*",
+    "glob": "^11.0.0",
+    "typescript": "^5.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  }
+}
