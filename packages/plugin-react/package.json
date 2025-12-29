@@ -1,5 +1,5 @@
 {
-  "name": "@buoy/plugin-react",
+  "name": "@buoy-design/plugin-react",
   "version": "0.0.1",
   "description": "Buoy plugin for React and Next.js component scanning",
   "type": "module",
@@ -21,13 +21,13 @@
   "keywords": ["buoy", "plugin", "react", "design-system", "drift"],
   "license": "MIT",
   "peerDependencies": {
-    "@buoy/core": "workspace:*"
+    "@buoy-design/core": "workspace:*"
   },
   "dependencies": {
-    "@buoy/scanners": "workspace:*"
+    "@buoy-design/scanners": "workspace:*"
   },
   "devDependencies": {
-    "@buoy/core": "workspace:*",
+    "@buoy-design/core": "workspace:*",
     "typescript": "^5.0.0"
   }
 }

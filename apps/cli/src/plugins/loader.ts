@@ -1,10 +1,10 @@
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import type { BuoyPlugin, PluginFactory } from '@buoy/core';
+import type { BuoyPlugin, PluginFactory } from '@buoy-design/core';
 import { registry } from './registry.js';
 
-const PLUGIN_PREFIX = '@buoy/plugin-';
+const PLUGIN_PREFIX = '@buoy-design/plugin-';
 
 // Security: Only allow safe characters in plugin names to prevent arbitrary package imports
 const VALID_SIMPLE_NAME = /^[a-z0-9-]+$/;
@@ -39,7 +39,7 @@ export async function loadPlugin(nameOrPath: string): Promise<BuoyPlugin> {
   // Security: Validate plugin name before dynamic import
   validatePluginName(nameOrPath);
 
-  // Handle shorthand: "react" -> "@buoy/plugin-react"
+  // Handle shorthand: "react" -> "@buoy-design/plugin-react"
   const moduleName = nameOrPath.startsWith('@')
     ? nameOrPath
     : `${PLUGIN_PREFIX}${nameOrPath}`;

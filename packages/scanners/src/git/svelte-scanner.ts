@@ -1,6 +1,6 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
-import type { Component, PropDefinition, SvelteSource } from '@buoy/core';
-import { createComponentId } from '@buoy/core';
+import type { Component, PropDefinition, SvelteSource } from '@buoy-design/core';
+import { createComponentId } from '@buoy-design/core';
 import { glob } from 'glob';
 import { readFile } from 'fs/promises';
 import { relative, basename } from 'path';

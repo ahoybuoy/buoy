@@ -1,6 +1,6 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
-import type { Component, PropDefinition, ReactSource, HardcodedValue } from '@buoy/core';
-import { createComponentId } from '@buoy/core';
+import type { Component, PropDefinition, ReactSource, HardcodedValue } from '@buoy-design/core';
+import { createComponentId } from '@buoy-design/core';
 import * as ts from 'typescript';
 import { glob } from 'glob';
 import { readFile } from 'fs/promises';

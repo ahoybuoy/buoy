@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
 import type { BuoyConfig } from '../../config/schema.js';
-import type { Component, DesignToken } from '@buoy/core';
+import type { Component, DesignToken } from '@buoy-design/core';
 
 // Mock modules before importing the command
 vi.mock('../../config/loader.js', () => ({
@@ -17,7 +17,7 @@ vi.mock('../../plugins/index.js', () => ({
   },
 }));
 
-vi.mock('@buoy/scanners/git', () => ({
+vi.mock('@buoy-design/scanners/git', () => ({
   ReactComponentScanner: vi.fn(),
   VueComponentScanner: vi.fn(),
   SvelteComponentScanner: vi.fn(),
@@ -52,7 +52,7 @@ vi.mock('../../output/formatters.js', () => ({
 import { createScanCommand } from '../scan.js';
 import { loadConfig, getConfigPath } from '../../config/loader.js';
 import { loadDiscoveredPlugins, registry } from '../../plugins/index.js';
-import * as scanners from '@buoy/scanners/git';
+import * as scanners from '@buoy-design/scanners/git';
 import * as reporters from '../../output/reporters.js';
 import * as formatters from '../../output/formatters.js';
 

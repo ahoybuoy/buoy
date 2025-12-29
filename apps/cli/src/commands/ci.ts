@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { loadConfig, getConfigPath } from '../config/loader.js';
 import { loadDiscoveredPlugins, registry } from '../plugins/index.js';
 import { setJsonMode } from '../output/reporters.js';
-import type { DriftSignal, Severity } from '@buoy/core';
+import type { DriftSignal, Severity } from '@buoy-design/core';
 
 export interface CIOutput {
   version: string;
@@ -130,8 +130,8 @@ export function createCICommand(): Command {
         log('Scanning for drift...');
 
         // Import analysis modules
-        const { ReactComponentScanner } = await import('@buoy/scanners/git');
-        const { SemanticDiffEngine } = await import('@buoy/core/analysis');
+        const { ReactComponentScanner } = await import('@buoy-design/scanners/git');
+        const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
 
         // Scan components
         const components: Awaited<ReturnType<typeof ReactComponentScanner.prototype.scan>>['items'] = [];
@@ -204,7 +204,7 @@ export function createCICommand(): Command {
         // Post to GitHub if configured (using pre-validated values)
         if (github.token && github.repo && github.pr) {
           try {
-            const githubPlugin = registry.get('@buoy/plugin-github');
+            const githubPlugin = registry.get('@buoy-design/plugin-github');
             if (githubPlugin && githubPlugin.report) {
               log('Posting to GitHub PR...');
 

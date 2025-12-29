@@ -1,5 +1,5 @@
 {
-  "name": "@buoy/db",
+  "name": "@buoy-design/db",
   "version": "0.0.1",
   "description": "Database layer for Buoy",
   "type": "module",
@@ -21,7 +21,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@buoy/core": "workspace:*",
+    "@buoy-design/core": "workspace:*",
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.38.3"
   },

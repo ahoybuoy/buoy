@@ -96,7 +96,7 @@ export function createScanCommand(): Command {
           WebComponentScanner,
           TemplateScanner,
           TokenScanner,
-        } = await import('@buoy/scanners/git');
+        } = await import('@buoy-design/scanners/git');
 
         const results: {
           components: Awaited<ReturnType<typeof ReactComponentScanner.prototype.scan>>['items'];

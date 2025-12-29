@@ -1,5 +1,5 @@
 // packages/plugin-github/src/formatter.ts
-import type { DriftResult } from '@buoy/core';
+import type { DriftResult } from '@buoy-design/core';
 
 // Hidden marker to identify Buoy comments for updates
 export const COMMENT_MARKER = '<!-- buoy-drift-report -->';

@@ -1,11 +1,11 @@
 // packages/plugin-github/src/index.ts
-import type { BuoyPlugin, DriftResult, ReportContext } from '@buoy/core';
+import type { BuoyPlugin, DriftResult, ReportContext } from '@buoy-design/core';
 import { formatPRComment } from './formatter.js';
 import { GitHubClient, parseRepoString } from './github.js';
 
 const plugin: BuoyPlugin = {
   metadata: {
-    name: '@buoy/plugin-github',
+    name: '@buoy-design/plugin-github',
     version: '0.0.1',
     description: 'GitHub PR comment integration for Buoy',
   },

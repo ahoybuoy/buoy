@@ -1,6 +1,6 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
-import type { Component, StorybookSource } from '@buoy/core';
-import { createComponentId } from '@buoy/core';
+import type { Component, StorybookSource } from '@buoy-design/core';
+import { createComponentId } from '@buoy-design/core';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';

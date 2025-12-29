@@ -11,7 +11,7 @@ import {
   type CoverageStats,
 } from '../output/reporters.js';
 import { ProjectDetector } from '../detect/project-detector.js';
-import type { DriftSignal } from '@buoy/core';
+import type { DriftSignal } from '@buoy-design/core';
 
 export function createStatusCommand(): Command {
   const cmd = new Command('status')
@@ -46,8 +46,8 @@ export function createStatusCommand(): Command {
           AngularComponentScanner,
           WebComponentScanner,
           TemplateScanner,
-        } = await import('@buoy/scanners/git');
-        const { SemanticDiffEngine } = await import('@buoy/core/analysis');
+        } = await import('@buoy-design/scanners/git');
+        const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
 
         // Scan components from all sources
         type ComponentItem = Awaited<ReturnType<typeof ReactComponentScanner.prototype.scan>>['items'][number];

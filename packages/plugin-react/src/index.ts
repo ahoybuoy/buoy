@@ -1,10 +1,10 @@
 // packages/plugin-react/src/index.ts
-import type { BuoyPlugin, ScanContext, ScanResult } from '@buoy/core';
-import { ReactComponentScanner } from '@buoy/scanners/git';
+import type { BuoyPlugin, ScanContext, ScanResult } from '@buoy-design/core';
+import { ReactComponentScanner } from '@buoy-design/scanners/git';
 
 const plugin: BuoyPlugin = {
   metadata: {
-    name: '@buoy/plugin-react',
+    name: '@buoy-design/plugin-react',
     version: '0.0.1',
     description: 'React and Next.js component scanner',
     detects: ['react', 'next', 'remix', 'gatsby'],

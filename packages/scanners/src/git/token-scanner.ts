@@ -5,8 +5,8 @@ import type {
   TokenValue,
   JsonTokenSource,
   CssTokenSource,
-} from '@buoy/core';
-import { createTokenId } from '@buoy/core';
+} from '@buoy-design/core';
+import { createTokenId } from '@buoy-design/core';
 import { glob } from 'glob';
 import { readFile } from 'fs/promises';
 import { relative, extname } from 'path';

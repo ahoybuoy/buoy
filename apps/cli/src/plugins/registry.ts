@@ -1,4 +1,4 @@
-import type { BuoyPlugin, PluginMetadata } from '@buoy/core';
+import type { BuoyPlugin, PluginMetadata } from '@buoy-design/core';
 
 export class PluginRegistry {
   private plugins: Map<string, BuoyPlugin> = new Map();

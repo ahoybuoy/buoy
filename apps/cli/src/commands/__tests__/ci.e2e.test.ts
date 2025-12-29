@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
 import type { BuoyConfig } from '../../config/schema.js';
-import type { Component, DriftSignal, BuoyPlugin } from '@buoy/core';
+import type { Component, DriftSignal, BuoyPlugin } from '@buoy-design/core';
 
 // Use a shared mocks object so vi.mock closures can access mutable state
 const mocks = {
@@ -27,7 +27,7 @@ vi.mock('../../plugins/index.js', () => ({
 }));
 
 // Mock with class-like constructors - reference mocks object
-vi.mock('@buoy/scanners/git', () => ({
+vi.mock('@buoy-design/scanners/git', () => ({
   ReactComponentScanner: vi.fn().mockImplementation(function() {
     return {
       scan: (...args: unknown[]) => mocks.scannerScan(...args),
@@ -35,7 +35,7 @@ vi.mock('@buoy/scanners/git', () => ({
   }),
 }));
 
-vi.mock('@buoy/core/analysis', () => ({
+vi.mock('@buoy-design/core/analysis', () => ({
   SemanticDiffEngine: vi.fn().mockImplementation(function() {
     return {
       analyzeComponents: (...args: unknown[]) => mocks.engineAnalyze(...args),
@@ -320,7 +320,7 @@ describe('CI command E2E tests', () => {
 
       const mockReport = vi.fn().mockResolvedValue(undefined);
       mockRegistry.get.mockReturnValue({
-        metadata: { name: '@buoy/plugin-github', version: '0.0.1' },
+        metadata: { name: '@buoy-design/plugin-github', version: '0.0.1' },
         report: mockReport,
       });
 
@@ -369,7 +369,7 @@ describe('CI command E2E tests', () => {
 
       const mockReport = vi.fn().mockResolvedValue(undefined);
       mockRegistry.get.mockReturnValue({
-        metadata: { name: '@buoy/plugin-github', version: '0.0.1' },
+        metadata: { name: '@buoy-design/plugin-github', version: '0.0.1' },
         report: mockReport,
       });
 
@@ -400,7 +400,7 @@ describe('CI command E2E tests', () => {
 
       const mockReport = vi.fn().mockRejectedValue(new Error('API rate limit exceeded'));
       mockRegistry.get.mockReturnValue({
-        metadata: { name: '@buoy/plugin-github', version: '0.0.1' },
+        metadata: { name: '@buoy-design/plugin-github', version: '0.0.1' },
         report: mockReport,
       });
 

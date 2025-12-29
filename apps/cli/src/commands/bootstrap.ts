@@ -221,7 +221,7 @@ async function extractFromComponents(
     ReactComponentScanner,
     VueComponentScanner,
     SvelteComponentScanner,
-  } = await import('@buoy/scanners/git');
+  } = await import('@buoy-design/scanners/git');
 
   // Scan React components
   if (config.sources.react?.enabled) {

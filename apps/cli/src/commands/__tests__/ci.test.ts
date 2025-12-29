@@ -1,7 +1,7 @@
 // apps/cli/src/commands/__tests__/ci.test.ts
 import { describe, it, expect } from 'vitest';
 import { buildCIResult, calculateExitCode } from '../ci.logic.js';
-import type { DriftSignal } from '@buoy/core';
+import type { DriftSignal } from '@buoy-design/core';
 
 describe('CI command logic', () => {
   describe('calculateExitCode', () => {

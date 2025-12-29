@@ -1,5 +1,5 @@
 {
-  "name": "@buoy/cli",
+  "name": "@buoy-design/cli",
   "version": "0.0.1",
   "description": "Buoy CLI - Design drift detection for the AI era",
   "type": "module",
@@ -18,9 +18,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@buoy/core": "workspace:*",
-    "@buoy/db": "workspace:*",
-    "@buoy/scanners": "workspace:*",
+    "@buoy-design/core": "workspace:*",
+    "@buoy-design/db": "workspace:*",
+    "@buoy-design/scanners": "workspace:*",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.5",
     "commander": "^12.1.0",

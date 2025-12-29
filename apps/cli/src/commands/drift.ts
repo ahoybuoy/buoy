@@ -17,7 +17,7 @@ import {
   formatJson,
   formatMarkdown,
 } from '../output/formatters.js';
-import type { DriftSignal, Severity } from '@buoy/core';
+import type { DriftSignal, Severity } from '@buoy-design/core';
 
 export function createDriftCommand(): Command {
   const cmd = new Command('drift')
@@ -45,8 +45,8 @@ export function createDriftCommand(): Command {
         spin.text = 'Scanning for drift...';
 
         // Import required modules
-        const { ReactComponentScanner } = await import('@buoy/scanners/git');
-        const { SemanticDiffEngine } = await import('@buoy/core/analysis');
+        const { ReactComponentScanner } = await import('@buoy-design/scanners/git');
+        const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
 
         // First, scan components
         const sourceComponents: Awaited<ReturnType<typeof ReactComponentScanner.prototype.scan>>['items'] = [];
@@ -163,7 +163,7 @@ export function createDriftCommand(): Command {
   //    - git show <hash>^:<file>  → previous version of the code
   //    - git log -p -L <line>,<line>:<file>  → full history of this line
   // 3. Try to find associated PR (GitHub API or parse commit message for #123)
-  // 4. Build context object matching GitContext schema in @buoy/core
+  // 4. Build context object matching GitContext schema in @buoy-design/core
   // 5. Send to Claude API with structured prompt:
   //    - Drift type and severity
   //    - Current vs expected code

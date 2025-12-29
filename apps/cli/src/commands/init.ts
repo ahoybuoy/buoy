@@ -12,7 +12,7 @@ import { discoverPlugins } from '../plugins/index.js';
 function generateConfig(project: DetectedProject): string {
   const lines: string[] = [];
 
-  lines.push(`/** @type {import('@buoy/cli').BuoyConfig} */`);
+  lines.push(`/** @type {import('@buoy-design/cli').BuoyConfig} */`);
   lines.push(`export default {`);
   lines.push(`  project: {`);
   lines.push(`    name: '${project.name}',`);
@@ -429,7 +429,7 @@ export function createInitCommand(): Command {
         for (const fw of detectedFrameworks) {
           const installed = installedPlugins.some((p) => p.includes(fw.plugin));
           const pluginInfo = PLUGIN_INFO[fw.plugin];
-          const pluginName = pluginInfo?.name || `@buoy/plugin-${fw.plugin}`;
+          const pluginName = pluginInfo?.name || `@buoy-design/plugin-${fw.plugin}`;
 
           // Plugin header with status
           const statusText = installed

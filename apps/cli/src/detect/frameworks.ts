@@ -20,55 +20,55 @@ export interface PluginInfo {
 
 export const PLUGIN_INFO: Record<string, PluginInfo> = {
   react: {
-    name: '@buoy/plugin-react',
+    name: '@buoy-design/plugin-react',
     description: 'Scans React/JSX components for inline styles, deprecated components, and design system inconsistencies.',
     detects: 'React components',
     examples: ['Hardcoded colors in style props', 'Deprecated component usage', 'Missing design tokens'],
   },
   vue: {
-    name: '@buoy/plugin-vue',
+    name: '@buoy-design/plugin-vue',
     description: 'Scans Vue single-file components for hardcoded styles and design drift.',
     detects: 'Vue components',
     examples: ['Inline styles in <style> blocks', 'Hardcoded values in templates'],
   },
   svelte: {
-    name: '@buoy/plugin-svelte',
+    name: '@buoy-design/plugin-svelte',
     description: 'Scans Svelte components for hardcoded styles and design inconsistencies.',
     detects: 'Svelte components',
     examples: ['Hardcoded CSS values', 'Inline style attributes'],
   },
   angular: {
-    name: '@buoy/plugin-angular',
+    name: '@buoy-design/plugin-angular',
     description: 'Scans Angular components for hardcoded styles in templates and component styles.',
     detects: 'Angular components',
     examples: ['Inline styles', 'Hardcoded values in .component.css'],
   },
   webcomponents: {
-    name: '@buoy/plugin-webcomponents',
+    name: '@buoy-design/plugin-webcomponents',
     description: 'Scans Lit/Stencil web components for hardcoded styles and design drift.',
     detects: 'Web Components (Lit, Stencil)',
     examples: ['Hardcoded CSS in shadow DOM', 'Static style values'],
   },
   css: {
-    name: '@buoy/plugin-css',
+    name: '@buoy-design/plugin-css',
     description: 'Scans CSS for hardcoded colors, spacing, and fonts that should use design tokens.',
     detects: 'CSS files with potential design tokens',
     examples: ['#ff6b6b instead of var(--color-error)', '16px instead of var(--spacing-md)'],
   },
   tailwind: {
-    name: '@buoy/plugin-tailwind',
+    name: '@buoy-design/plugin-tailwind',
     description: 'Analyzes Tailwind config and usage for design token consistency.',
     detects: 'Tailwind CSS configuration',
     examples: ['Custom colors not in design system', 'Arbitrary values like [#ff6b6b]'],
   },
   figma: {
-    name: '@buoy/plugin-figma',
+    name: '@buoy-design/plugin-figma',
     description: 'Connects to Figma to compare design tokens and components with your codebase.',
     detects: 'Figma configuration',
     examples: ['Token value drift between Figma and code', 'Missing component implementations'],
   },
   storybook: {
-    name: '@buoy/plugin-storybook',
+    name: '@buoy-design/plugin-storybook',
     description: 'Scans Storybook stories to verify component coverage and documentation.',
     detects: 'Storybook configuration',
     examples: ['Components without stories', 'Undocumented variants'],
@@ -197,7 +197,7 @@ export function detectPackageManager(projectRoot: string = process.cwd()): 'pnpm
 }
 
 export function getPluginInstallCommand(plugins: string[], projectRoot: string = process.cwd()): string {
-  const fullNames = plugins.map((p) => `@buoy/plugin-${p}`);
+  const fullNames = plugins.map((p) => `@buoy-design/plugin-${p}`);
   const pm = detectPackageManager(projectRoot);
 
   switch (pm) {

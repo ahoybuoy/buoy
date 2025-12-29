@@ -1,6 +1,6 @@
 import chalk, { type ChalkInstance } from 'chalk';
 import Table from 'cli-table3';
-import type { Component, DesignToken, DriftSignal, Severity } from '@buoy/core';
+import type { Component, DesignToken, DriftSignal, Severity } from '@buoy-design/core';
 
 // Severity colors
 export function getSeverityColor(severity: Severity): ChalkInstance {

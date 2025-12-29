@@ -1,5 +1,5 @@
 {
-  "name": "@buoy/plugin-github",
+  "name": "@buoy-design/plugin-github",
   "version": "0.0.1",
   "description": "Buoy plugin for GitHub PR comments",
   "type": "module",
@@ -23,13 +23,13 @@
   "keywords": ["buoy", "plugin", "github", "pr", "comments"],
   "license": "MIT",
   "peerDependencies": {
-    "@buoy/core": "workspace:*"
+    "@buoy-design/core": "workspace:*"
   },
   "dependencies": {
     "@octokit/rest": "^20.0.0"
   },
   "devDependencies": {
-    "@buoy/core": "workspace:*",
+    "@buoy-design/core": "workspace:*",
     "typescript": "^5.0.0"
   }
 }

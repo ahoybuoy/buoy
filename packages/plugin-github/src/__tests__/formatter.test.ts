@@ -1,7 +1,7 @@
 // packages/plugin-github/src/__tests__/formatter.test.ts
 import { describe, it, expect } from 'vitest';
 import { formatPRComment, COMMENT_MARKER } from '../formatter.js';
-import type { DriftResult } from '@buoy/core';
+import type { DriftResult } from '@buoy-design/core';
 
 describe('GitHub formatter', () => {
   describe('formatPRComment', () => {

@@ -1,6 +1,6 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
-import type { Component } from '@buoy/core';
-import { createComponentId } from '@buoy/core';
+import type { Component } from '@buoy-design/core';
+import { createComponentId } from '@buoy-design/core';
 import { glob } from 'glob';
 import { readFileSync } from 'fs';
 import { relative, basename } from 'path';

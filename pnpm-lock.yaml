@@ -32,13 +32,13 @@ importers:
 
   apps/cli:
     dependencies:
-      '@buoy/core':
+      '@buoy-design/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@buoy/db':
+      '@buoy-design/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@buoy/scanners':
+      '@buoy-design/scanners':
         specifier: workspace:*
         version: link:../../packages/scanners
       chalk:
@@ -79,7 +79,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@buoy/core':
+      '@buoy-design/core':
         specifier: workspace:*
         version: link:../core
       better-sqlite3:
@@ -105,7 +105,7 @@ importers:
         specifier: ^20.0.0
         version: 20.1.2
     devDependencies:
-      '@buoy/core':
+      '@buoy-design/core':
         specifier: workspace:*
         version: link:../core
       typescript:
@@ -114,11 +114,11 @@ importers:
 
   packages/plugin-react:
     dependencies:
-      '@buoy/scanners':
+      '@buoy-design/scanners':
         specifier: workspace:*
         version: link:../scanners
     devDependencies:
-      '@buoy/core':
+      '@buoy-design/core':
         specifier: workspace:*
         version: link:../core
       typescript:
@@ -127,7 +127,7 @@ importers:
 
   packages/scanners:
     dependencies:
-      '@buoy/core':
+      '@buoy-design/core':
         specifier: workspace:*
         version: link:../core
       glob:
