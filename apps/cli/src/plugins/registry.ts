@@ -32,6 +32,14 @@ export class PluginRegistry {
   list(): PluginMetadata[] {
     return this.getAll().map((p) => p.metadata);
   }
+
+  unregister(name: string): boolean {
+    return this.plugins.delete(name);
+  }
+
+  clear(): void {
+    this.plugins.clear();
+  }
 }
 
 export const registry = new PluginRegistry();

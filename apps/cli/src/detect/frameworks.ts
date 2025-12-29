@@ -59,7 +59,11 @@ export async function detectFrameworks(projectRoot: string): Promise<DetectedFra
   let pkgJson: PackageJson = {};
 
   if (existsSync(pkgPath)) {
-    pkgJson = JSON.parse(await readFile(pkgPath, 'utf-8'));
+    try {
+      pkgJson = JSON.parse(await readFile(pkgPath, 'utf-8'));
+    } catch {
+      // Invalid JSON, continue with empty dependencies
+    }
   }
 
   const allDeps = {
@@ -116,7 +120,26 @@ function confidenceRank(c: 'high' | 'medium' | 'low'): number {
   return c === 'high' ? 3 : c === 'medium' ? 2 : 1;
 }
 
-export function getPluginInstallCommand(plugins: string[]): string {
+export function detectPackageManager(projectRoot: string = process.cwd()): 'pnpm' | 'yarn' | 'npm' {
+  if (existsSync(resolve(projectRoot, 'pnpm-lock.yaml'))) {
+    return 'pnpm';
+  }
+  if (existsSync(resolve(projectRoot, 'yarn.lock'))) {
+    return 'yarn';
+  }
+  return 'npm';
+}
+
+export function getPluginInstallCommand(plugins: string[], projectRoot: string = process.cwd()): string {
   const fullNames = plugins.map((p) => `@buoy/plugin-${p}`);
-  return `npm install --save-dev ${fullNames.join(' ')}`;
+  const pm = detectPackageManager(projectRoot);
+
+  switch (pm) {
+    case 'pnpm':
+      return `pnpm add -D ${fullNames.join(' ')}`;
+    case 'yarn':
+      return `yarn add -D ${fullNames.join(' ')}`;
+    default:
+      return `npm install --save-dev ${fullNames.join(' ')}`;
+  }
 }

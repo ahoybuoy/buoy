@@ -11,24 +11,29 @@ export function createPluginsCommand(): Command {
     .command('list')
     .description('List installed plugins')
     .action(async () => {
-      const plugins = await loadDiscoveredPlugins();
+      try {
+        const plugins = await loadDiscoveredPlugins();
 
-      if (plugins.length === 0) {
-        console.log(chalk.yellow('No plugins installed.'));
-        console.log('\nRun `buoy init` to detect your project and get plugin recommendations.');
-        return;
-      }
+        if (plugins.length === 0) {
+          console.log(chalk.yellow('No plugins installed.'));
+          console.log('\nRun `buoy init` to detect your project and get plugin recommendations.');
+          return;
+        }
 
-      console.log(chalk.bold('Installed plugins:\n'));
-      for (const plugin of plugins) {
-        console.log(`  ${chalk.cyan(plugin.metadata.name)} ${chalk.dim(`v${plugin.metadata.version}`)}`);
-        if (plugin.metadata.description) {
-          console.log(`    ${chalk.dim(plugin.metadata.description)}`);
+        console.log(chalk.bold('Installed plugins:\n'));
+        for (const plugin of plugins) {
+          console.log(`  ${chalk.cyan(plugin.metadata.name)} ${chalk.dim(`v${plugin.metadata.version}`)}`);
+          if (plugin.metadata.description) {
+            console.log(`    ${chalk.dim(plugin.metadata.description)}`);
+          }
+          if (plugin.metadata.detects?.length) {
+            console.log(`    Detects: ${plugin.metadata.detects.join(', ')}`);
+          }
+          console.log();
         }
-        if (plugin.metadata.detects?.length) {
-          console.log(`    Detects: ${plugin.metadata.detects.join(', ')}`);
-        }
-        console.log();
+      } catch (err) {
+        console.error(chalk.red(`Failed to load plugins: ${err instanceof Error ? err.message : String(err)}`));
+        process.exit(1);
       }
     });
 
@@ -36,32 +41,37 @@ export function createPluginsCommand(): Command {
     .command('suggest')
     .description('Suggest plugins based on detected frameworks')
     .action(async () => {
-      const detected = await detectFrameworks(process.cwd());
-      const installed = await discoverPlugins();
+      try {
+        const detected = await detectFrameworks(process.cwd());
+        const installed = await discoverPlugins();
 
-      if (detected.length === 0) {
-        console.log(chalk.yellow('No frameworks detected.'));
-        return;
-      }
+        if (detected.length === 0) {
+          console.log(chalk.yellow('No frameworks detected.'));
+          return;
+        }
 
-      console.log(chalk.bold('Detected frameworks:\n'));
-      for (const fw of detected) {
-        const isInstalled = installed.some((p) => p.includes(fw.plugin));
-        const status = isInstalled
-          ? chalk.green('(installed)')
-          : chalk.yellow('(not installed)');
-        console.log(`  ${fw.name} ${chalk.dim(`(${fw.confidence})`)} ${status}`);
-        console.log(`    ${chalk.dim(fw.evidence)}`);
-      }
+        console.log(chalk.bold('Detected frameworks:\n'));
+        for (const fw of detected) {
+          const isInstalled = installed.some((p) => p.includes(fw.plugin));
+          const status = isInstalled
+            ? chalk.green('(installed)')
+            : chalk.yellow('(not installed)');
+          console.log(`  ${fw.name} ${chalk.dim(`(${fw.confidence})`)} ${status}`);
+          console.log(`    ${chalk.dim(fw.evidence)}`);
+        }
 
-      const missing = detected
-        .map((fw) => fw.plugin)
-        .filter((p, i, arr) => arr.indexOf(p) === i) // dedupe
-        .filter((plugin) => !installed.some((p) => p.includes(plugin)));
+        const missing = detected
+          .map((fw) => fw.plugin)
+          .filter((p, i, arr) => arr.indexOf(p) === i) // dedupe
+          .filter((plugin) => !installed.some((p) => p.includes(plugin)));
 
-      if (missing.length > 0) {
-        console.log('\n' + chalk.bold('Install missing plugins:'));
-        console.log(`  ${chalk.cyan(getPluginInstallCommand(missing))}`);
+        if (missing.length > 0) {
+          console.log('\n' + chalk.bold('Install missing plugins:'));
+          console.log(`  ${chalk.cyan(getPluginInstallCommand(missing))}`);
+        }
+      } catch (err) {
+        console.error(chalk.red(`Failed to detect frameworks: ${err instanceof Error ? err.message : String(err)}`));
+        process.exit(1);
       }
     });
 
