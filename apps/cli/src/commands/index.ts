@@ -5,3 +5,4 @@ export { createStatusCommand } from './status.js';
 export { createBootstrapCommand } from './bootstrap.js';
 export { createBuildCommand } from './build.js';
 export { createPluginsCommand } from './plugins.js';
+export { createCICommand } from './ci.js';
