@@ -200,16 +200,28 @@ function buildCIOutput(drifts: DriftSignal[], options: { failOn: string; top: st
 }
 
 function printSummary(output: CIOutput): void {
-  console.log(`Drift Summary: ${output.summary.total} issues found`);
+  const icon = output.exitCode === 0 ? '✓' : '✗';
+  const status = output.exitCode === 0 ? 'PASS' : 'FAIL';
+
+  console.log(`${icon} Buoy Drift Check: ${status}`);
+  console.log('');
+  console.log(`  Total:    ${output.summary.total}`);
   console.log(`  Critical: ${output.summary.critical}`);
-  console.log(`  Warning: ${output.summary.warning}`);
-  console.log(`  Info: ${output.summary.info}`);
+  console.log(`  Warning:  ${output.summary.warning}`);
+  console.log(`  Info:     ${output.summary.info}`);
 
   if (output.topIssues.length > 0) {
     console.log('');
     console.log('Top issues:');
-    for (const issue of output.topIssues) {
-      console.log(`  [${issue.severity}] ${issue.component}: ${issue.message}`);
+    for (const issue of output.topIssues.slice(0, 5)) {
+      const sev = issue.severity === 'critical' ? '!' :
+                  issue.severity === 'warning' ? '~' : 'i';
+      const loc = issue.file ? ` (${issue.file}${issue.line ? `:${issue.line}` : ''})` : '';
+      console.log(`  [${sev}] ${issue.component}: ${issue.message}${loc}`);
+    }
+
+    if (output.topIssues.length > 5) {
+      console.log(`  ... and ${output.topIssues.length - 5} more`);
     }
   }
 }
