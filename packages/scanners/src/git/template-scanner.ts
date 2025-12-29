@@ -191,78 +191,22 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
 
   private isLikelyComponent(filePath: string, _content: string): boolean {
     const lowerPath = filePath.toLowerCase();
-    const fileName = basename(filePath).toLowerCase();
-
-    // Extract the base name without extensions for checking
-    const baseName = fileName
-      .replace(/\.(blade\.php|html\.erb|html\.twig|cshtml|php|html|njk)$/i, '')
-      .replace(/^_/, '');
-
-    // Obvious page/view names to exclude (not reusable components)
-    const pageNames = [
-      'index', 'home', 'about', 'contact', 'login', 'register', 'signup',
-      'dashboard', 'profile', 'settings', 'admin', 'error', 'notfound',
-      '404', '500', '403', '401', 'privacy', 'terms', 'faq', 'help',
-      'checkout', 'cart', 'search', 'detail', 'details', 'list', 'show',
-      'edit', 'create', 'new', 'delete', 'update', 'view', 'display',
-      'functions', 'cache', 'retreatdetail', // specific to feelholy
-    ];
-
-    // Check if it's an obvious page name
-    if (pageNames.includes(baseName.toLowerCase())) {
-      return false;
-    }
-
-    // Include paths that suggest components
-    const componentIndicators = [
-      'component',
-      'partial',
-      'shared',
-      '_includes',
-      'includes',
-      'partials',
-      'ui',
-      'atoms',
-      'molecules',
-      'organisms',
-      'widgets',
-      'blocks',
-      'elements',
-    ];
-
-    // Exclude paths that suggest layouts/pages/views
-    const layoutIndicators = [
-      'layout',
-      'master',
-      'base',
-      'page',
-      'pages',
-      'email',
-      'mail',
-      'views',  // ASP.NET/Rails views folder
-      'areas',  // ASP.NET areas
-    ];
-
     const pathParts = lowerPath.split('/');
 
-    // Check for layout indicators in path (but allow shared partials within views)
-    for (const indicator of layoutIndicators) {
-      if (pathParts.some(p => p === indicator)) {
-        // Exception: allow if path also contains a component indicator
-        const hasComponentIndicator = componentIndicators.some(ci =>
-          pathParts.some(p => p.includes(ci))
-        );
-        if (!hasComponentIndicator) {
-          return false;
-        }
-      }
-    }
+    // Paths that indicate reusable components
+    const componentIndicators = [
+      'component', 'components',
+      'partial', 'partials',
+      'shared',
+      '_includes', 'includes',
+      'ui',
+      'atoms', 'molecules', 'organisms',
+      'widgets', 'blocks', 'elements',
+    ];
 
     // Check for component indicators in path
-    for (const indicator of componentIndicators) {
-      if (pathParts.some(p => p.includes(indicator))) {
-        return true;
-      }
+    if (componentIndicators.some(ci => pathParts.some(p => p.includes(ci)))) {
+      return true;
     }
 
     // Check for partial prefix (Rails convention: _partial.html.erb)
@@ -270,8 +214,20 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
       return true;
     }
 
-    // Default: don't include - require explicit component indicators
-    // This prevents random HTML files from being detected as components
+    // Paths that indicate pages/layouts (not reusable components)
+    const pageIndicators = [
+      'layout', 'layouts',
+      'page', 'pages',
+      'views',  // ASP.NET/Rails views folder
+      'areas',  // ASP.NET areas
+      'email', 'mail', 'emails',
+    ];
+
+    if (pageIndicators.some(pi => pathParts.some(p => p === pi))) {
+      return false;
+    }
+
+    // Default: don't include without explicit component indicators
     return false;
   }
 
