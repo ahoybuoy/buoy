@@ -7,6 +7,7 @@ import {
   error,
   info,
   coverageGrid,
+  setJsonMode,
   type CoverageStats,
 } from '../output/reporters.js';
 import { ProjectDetector } from '../detect/project-detector.js';
@@ -18,6 +19,10 @@ export function createStatusCommand(): Command {
     .option('--json', 'Output as JSON')
     .option('-v, --verbose', 'Verbose output')
     .action(async (options) => {
+      // Set JSON mode before creating spinner to redirect spinner to stderr
+      if (options.json) {
+        setJsonMode(true);
+      }
       const spin = spinner('Analyzing design system coverage...');
 
       try {

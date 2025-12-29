@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { loadConfig, getConfigPath } from '../config/loader.js';
-import { spinner, success, error, info, warning, header, keyValue, newline } from '../output/reporters.js';
+import { spinner, success, error, info, warning, header, keyValue, newline, setJsonMode } from '../output/reporters.js';
 import { loadDiscoveredPlugins, registry } from '../plugins/index.js';
 import { formatComponentTable, formatTokenTable } from '../output/formatters.js';
 
@@ -12,6 +12,10 @@ export function createScanCommand(): Command {
     .option('--json', 'Output as JSON')
     .option('-v, --verbose', 'Verbose output')
     .action(async (options) => {
+      // Set JSON mode before creating spinner to redirect spinner to stderr
+      if (options.json) {
+        setJsonMode(true);
+      }
       const spin = spinner('Loading configuration...');
 
       try {

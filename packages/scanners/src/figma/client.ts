@@ -72,24 +72,38 @@ export type FigmaVariableValue =
 export class FigmaClient {
   private accessToken: string;
   private baseUrl = 'https://api.figma.com/v1';
+  private timeoutMs = 30000; // 30 seconds
 
   constructor(accessToken: string) {
     this.accessToken = accessToken;
   }
 
   private async fetch<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      headers: {
-        'X-Figma-Token': this.accessToken,
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Figma API error: ${response.status} ${response.statusText} - ${text}`);
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        headers: {
+          'X-Figma-Token': this.accessToken,
+        },
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Figma API error: ${response.status} ${response.statusText} - ${text}`);
+      }
+
+      return response.json() as Promise<T>;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`Figma API request timed out after ${this.timeoutMs / 1000}s`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return response.json() as Promise<T>;
   }
 
   async getFile(fileKey: string): Promise<FigmaFile> {

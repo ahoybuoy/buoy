@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { loadConfig, getConfigPath } from '../config/loader.js';
 import { loadDiscoveredPlugins, registry } from '../plugins/index.js';
+import { setJsonMode } from '../output/reporters.js';
 import type { DriftSignal, Severity } from '@buoy/core';
 
 export interface CIOutput {
@@ -31,6 +32,61 @@ const SEVERITY_ORDER: Record<Severity, number> = {
   critical: 2,
 };
 
+interface GitHubOptions {
+  token?: string;
+  repo?: string;
+  pr?: number;
+}
+
+function validateGitHubOptions(options: {
+  githubToken?: string;
+  githubRepo?: string;
+  githubPr?: string;
+}): GitHubOptions {
+  const token = options.githubToken || process.env.GITHUB_TOKEN;
+  const repo = options.githubRepo || process.env.GITHUB_REPOSITORY;
+  const prInput = options.githubPr || process.env.GITHUB_PR_NUMBER;
+
+  // Validate token: must be non-empty if provided
+  if (token !== undefined && token.trim() === '') {
+    throw new Error('Invalid GitHub token: must be non-empty if provided.');
+  }
+
+  // Validate repo format: must be "owner/repo" with non-empty parts
+  if (repo !== undefined) {
+    const repoPattern = /^[^/]+\/[^/]+$/;
+    if (!repoPattern.test(repo)) {
+      throw new Error(
+        `Invalid GitHub repo format: '${repo}'. Must be in 'owner/repo' format (e.g., 'facebook/react').`
+      );
+    }
+    const [owner, repoName] = repo.split('/');
+    if (!owner || owner.trim() === '' || !repoName || repoName.trim() === '') {
+      throw new Error(
+        `Invalid GitHub repo format: '${repo}'. Both owner and repo parts must be non-empty.`
+      );
+    }
+  }
+
+  // Validate PR number: must be a positive integer
+  let pr: number | undefined;
+  if (prInput !== undefined) {
+    const parsed = parseInt(prInput, 10);
+    if (isNaN(parsed) || parsed <= 0 || !Number.isInteger(parsed) || String(parsed) !== prInput.trim()) {
+      throw new Error(
+        `Invalid PR number: '${prInput}'. Must be a positive integer.`
+      );
+    }
+    pr = parsed;
+  }
+
+  return {
+    token: token?.trim(),
+    repo: repo?.trim(),
+    pr,
+  };
+}
+
 export function createCICommand(): Command {
   const cmd = new Command('ci')
     .description('Run drift detection for CI environments')
@@ -42,9 +98,16 @@ export function createCICommand(): Command {
     .option('--github-repo <repo>', 'GitHub repo in owner/repo format (or use GITHUB_REPOSITORY env)')
     .option('--github-pr <number>', 'PR number to comment on (or use GITHUB_PR_NUMBER env)')
     .action(async (options) => {
+      // Set JSON mode to ensure any reporter output goes to stderr
+      if (options.format === 'json') {
+        setJsonMode(true);
+      }
       const log = options.quiet ? () => {} : console.error.bind(console);
 
       try {
+        // Validate GitHub options early, before any scanning
+        const github = validateGitHubOptions(options);
+
         // Check for config
         if (!getConfigPath()) {
           const output: CIOutput = {
@@ -138,12 +201,8 @@ export function createCICommand(): Command {
         // Build output
         const output = buildCIOutput(drifts, options);
 
-        // Post to GitHub if configured
-        const githubToken = options.githubToken || process.env.GITHUB_TOKEN;
-        const githubRepo = options.githubRepo || process.env.GITHUB_REPOSITORY;
-        const githubPr = options.githubPr || process.env.GITHUB_PR_NUMBER;
-
-        if (githubToken && githubRepo && githubPr) {
+        // Post to GitHub if configured (using pre-validated values)
+        if (github.token && github.repo && github.pr) {
           try {
             const githubPlugin = registry.get('@buoy/plugin-github');
             if (githubPlugin && githubPlugin.report) {
@@ -173,9 +232,9 @@ export function createCICommand(): Command {
                 ci: true,
                 format: 'markdown',
                 github: {
-                  token: githubToken,
-                  repo: githubRepo,
-                  pr: parseInt(githubPr, 10),
+                  token: github.token,
+                  repo: github.repo,
+                  pr: github.pr,
                 },
               });
 

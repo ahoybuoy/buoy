@@ -1,11 +1,25 @@
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 
+// Output configuration for JSON mode
+// When set to true, all non-JSON output is suppressed or redirected to stderr
+let jsonMode = false;
+
+export function setJsonMode(enabled: boolean): void {
+  jsonMode = enabled;
+}
+
+export function isJsonMode(): boolean {
+  return jsonMode;
+}
+
 // Create a spinner
+// In JSON mode, spinner output goes to stderr to keep stdout clean for JSON
 export function spinner(text: string): Ora {
   return ora({
     text,
     color: 'cyan',
+    stream: jsonMode ? process.stderr : process.stdout,
   }).start();
 }
 
@@ -66,14 +80,19 @@ export function keyValue(key: string, value: string, indent: number = 0): void {
 }
 
 // Progress bar (simple)
+// Always writes to stderr to avoid corrupting JSON output on stdout
 export function progress(current: number, total: number, label: string): void {
+  // In JSON mode, suppress progress output entirely
+  if (jsonMode) {
+    return;
+  }
   const percent = Math.round((current / total) * 100);
   const filled = Math.round(percent / 5);
   const empty = 20 - filled;
   const bar = chalk.green('█'.repeat(filled)) + chalk.dim('░'.repeat(empty));
-  process.stdout.write(`\r${bar} ${percent}% ${label}`);
+  process.stderr.write(`\r${bar} ${percent}% ${label}`);
   if (current === total) {
-    console.log('');
+    process.stderr.write('\n');
   }
 }
 

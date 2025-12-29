@@ -9,6 +9,7 @@ import {
   header,
   keyValue,
   newline,
+  setJsonMode,
 } from '../output/reporters.js';
 import {
   formatDriftTable,
@@ -33,6 +34,10 @@ export function createDriftCommand(): Command {
     .option('--compact', 'Compact table output (less detail)')
     .option('-v, --verbose', 'Verbose output')
     .action(async (options) => {
+      // Set JSON mode before creating spinner to redirect spinner to stderr
+      if (options.json) {
+        setJsonMode(true);
+      }
       const spin = spinner('Loading configuration...');
 
       try {
@@ -148,13 +153,38 @@ export function createDriftCommand(): Command {
     });
 
   // drift explain
+  // TODO: Implement AI-powered drift explanation with git forensics
+  //
+  // Implementation steps:
+  // 1. Load the drift signal by ID from scan results or cache
+  // 2. Fetch git context for the affected file/line:
+  //    - git blame -L <line>,<line> <file>  → who changed it, when, commit hash
+  //    - git log -1 --format="%s%n%n%b" <hash>  → commit message
+  //    - git show <hash>^:<file>  → previous version of the code
+  //    - git log -p -L <line>,<line>:<file>  → full history of this line
+  // 3. Try to find associated PR (GitHub API or parse commit message for #123)
+  // 4. Build context object matching GitContext schema in @buoy/core
+  // 5. Send to Claude API with structured prompt:
+  //    - Drift type and severity
+  //    - Current vs expected code
+  //    - Git blame info (who, when, why)
+  //    - Previous code before drift
+  //    - Ask for: root cause, impact, fix, prevention
+  // 6. Display formatted explanation with actionable next steps
+  //
+  // See: packages/core/src/models/drift.ts → GitContextSchema
   cmd
     .command('explain <driftId>')
-    .description('Get detailed explanation for a drift signal')
+    .description('Get detailed explanation for a drift signal (uses AI + git history)')
     .action(async (driftId) => {
       info('Claude integration not yet implemented.');
       info(`To explain drift: ${driftId}`);
       info('Enable Claude in buoy.config.ts and ensure ANTHROPIC_API_KEY is set.');
+      info('');
+      info('When implemented, this will:');
+      info('  • Analyze git blame to find who introduced the drift');
+      info('  • Check commit history for context on why');
+      info('  • Use Claude to explain impact and suggest fixes');
     });
 
   // drift resolve

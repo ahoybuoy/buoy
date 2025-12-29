@@ -2,6 +2,8 @@
 import { Octokit } from '@octokit/rest';
 import { COMMENT_MARKER } from './formatter.js';
 
+const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+
 export interface GitHubContext {
   token: string;
   owner: string;
@@ -15,7 +17,12 @@ export class GitHubClient {
 
   constructor(context: GitHubContext) {
     this.context = context;
-    this.octokit = new Octokit({ auth: context.token });
+    this.octokit = new Octokit({
+      auth: context.token,
+      request: {
+        timeout: REQUEST_TIMEOUT_MS,
+      },
+    });
   }
 
   async findExistingComment(): Promise<number | null> {
