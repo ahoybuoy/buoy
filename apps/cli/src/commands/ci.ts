@@ -38,6 +38,9 @@ export function createCICommand(): Command {
     .option('--format <format>', 'Output format: json, summary', 'json')
     .option('--quiet', 'Suppress non-essential output')
     .option('--top <n>', 'Number of top issues to include', '10')
+    .option('--github-token <token>', 'GitHub token for PR comments (or use GITHUB_TOKEN env)')
+    .option('--github-repo <repo>', 'GitHub repo in owner/repo format (or use GITHUB_REPOSITORY env)')
+    .option('--github-pr <number>', 'PR number to comment on (or use GITHUB_PR_NUMBER env)')
     .action(async (options) => {
       const log = options.quiet ? () => {} : console.error.bind(console);
 
@@ -134,6 +137,57 @@ export function createCICommand(): Command {
 
         // Build output
         const output = buildCIOutput(drifts, options);
+
+        // Post to GitHub if configured
+        const githubToken = options.githubToken || process.env.GITHUB_TOKEN;
+        const githubRepo = options.githubRepo || process.env.GITHUB_REPOSITORY;
+        const githubPr = options.githubPr || process.env.GITHUB_PR_NUMBER;
+
+        if (githubToken && githubRepo && githubPr) {
+          try {
+            const githubPlugin = registry.get('@buoy/plugin-github');
+            if (githubPlugin && githubPlugin.report) {
+              log('Posting to GitHub PR...');
+
+              const driftResult = {
+                signals: drifts.map(d => ({
+                  type: d.type,
+                  severity: d.severity,
+                  message: d.message,
+                  component: d.source.entityName,
+                  file: d.source.location?.split(':')[0],
+                  line: d.source.location?.includes(':')
+                    ? parseInt(d.source.location.split(':')[1] || '0', 10)
+                    : undefined,
+                  suggestion: d.details.suggestions?.[0],
+                })),
+                summary: {
+                  total: drifts.length,
+                  critical: drifts.filter(d => d.severity === 'critical').length,
+                  warning: drifts.filter(d => d.severity === 'warning').length,
+                  info: drifts.filter(d => d.severity === 'info').length,
+                },
+              };
+
+              await githubPlugin.report(driftResult, {
+                ci: true,
+                format: 'markdown',
+                github: {
+                  token: githubToken,
+                  repo: githubRepo,
+                  pr: parseInt(githubPr, 10),
+                },
+              });
+
+              log('Posted PR comment');
+            } else {
+              log('GitHub plugin not installed, skipping PR comment');
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log(`Failed to post GitHub comment: ${msg}`);
+          }
+        }
 
         if (options.format === 'json') {
           console.log(JSON.stringify(output, null, 2));
