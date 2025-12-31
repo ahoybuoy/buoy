@@ -3,6 +3,18 @@ import { describe, it, expect } from 'vitest';
 import { generateTokens } from './generator.js';
 import type { ExtractedValue } from '../extraction/css-parser.js';
 
+// Helper function for calculating lightness from hex color
+function getHexLightness(hex: string): number {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
+  const r = parseInt(hex.slice(0, 2), 16) / 255;
+  const g = parseInt(hex.slice(2, 4), 16) / 255;
+  const b = parseInt(hex.slice(4, 6), 16) / 255;
+  return (r + g + b) / 3;
+}
+
 describe('generateTokens', () => {
   describe('clustering', () => {
     it('never clusters 0 with non-zero spacing values', () => {
@@ -165,6 +177,47 @@ describe('generateTokens', () => {
 
       // Legitimate sizing should still be there
       expect(sizingTokens.some(t => t.value === '200px')).toBe(true);
+    });
+  });
+
+  describe('neutral color scale', () => {
+    it('generates neutral scale from light to dark (50=lightest, 950=darkest)', () => {
+      const values: ExtractedValue[] = [
+        { property: 'color', value: '#ffffff', rawValue: '#ffffff', category: 'color', context: 'color' },
+        { property: 'color', value: '#f5f5f5', rawValue: '#f5f5f5', category: 'color', context: 'color' },
+        { property: 'color', value: '#cccccc', rawValue: '#cccccc', category: 'color', context: 'color' },
+        { property: 'color', value: '#999999', rawValue: '#999999', category: 'color', context: 'color' },
+        { property: 'color', value: '#666666', rawValue: '#666666', category: 'color', context: 'color' },
+        { property: 'color', value: '#333333', rawValue: '#333333', category: 'color', context: 'color' },
+        { property: 'color', value: '#000000', rawValue: '#000000', category: 'color', context: 'color' },
+      ];
+
+      const result = generateTokens(values);
+      const neutralTokens = result.tokens
+        .filter(t => t.name.startsWith('color-neutral-'))
+        .sort((a, b) => {
+          const numA = parseInt(a.name.replace('color-neutral-', ''));
+          const numB = parseInt(b.name.replace('color-neutral-', ''));
+          return numA - numB;
+        });
+
+      // Verify lightness decreases as number increases
+      for (let i = 0; i < neutralTokens.length - 1; i++) {
+        const current = neutralTokens[i]!;
+        const next = neutralTokens[i + 1]!;
+
+        const currentLightness = getHexLightness(current.value);
+        const nextLightness = getHexLightness(next.value);
+
+        // Each subsequent token should be darker (lower lightness) or equal
+        expect(currentLightness).toBeGreaterThanOrEqual(nextLightness);
+      }
+
+      // Specific check: neutral-50 should be white/near-white
+      const neutral50 = neutralTokens.find(t => t.name === 'color-neutral-50');
+      if (neutral50) {
+        expect(getHexLightness(neutral50.value)).toBeGreaterThan(0.9);
+      }
     });
   });
 });
