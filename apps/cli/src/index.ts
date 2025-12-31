@@ -10,6 +10,7 @@ import {
   createCICommand,
   createCheckCommand,
   createExtractCommand,
+  createTokenizeCommand,
   createBaselineCommand,
 } from "./commands/index.js";
 
@@ -32,6 +33,7 @@ export function createCli(): Command {
   program.addCommand(createCICommand());
   program.addCommand(createCheckCommand());
   program.addCommand(createExtractCommand());
+  program.addCommand(createTokenizeCommand());
   program.addCommand(createBaselineCommand());
 
   return program;

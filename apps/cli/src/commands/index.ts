@@ -8,6 +8,7 @@ export { createPluginsCommand } from "./plugins.js";
 export { createCICommand } from "./ci.js";
 export { createCheckCommand } from "./check.js";
 export { createExtractCommand } from "./extract.js";
+export { createTokenizeCommand } from "./tokenize.js";
 export {
   createBaselineCommand,
   loadBaseline,
