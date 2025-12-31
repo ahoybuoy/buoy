@@ -618,12 +618,16 @@ function generateSizingTokens(values: ExtractedValue[], threshold: number): Cate
 function generateFontSizeTokens(values: ExtractedValue[], threshold: number): CategoryResult {
   const inputCount = values.length;
 
+  // Minimum realistic font size (smaller values are likely border-width or other noise)
+  const MIN_FONT_SIZE_PX = 8;
+
   // Similar to spacing, but with font-size naming
   const pxCounts = new Map<number, { count: number; sources: string[] }>();
 
   for (const v of values) {
     const px = spacingToPx(v.value);
-    if (px === null || px <= 0) continue;
+    // Filter out unrealistic font sizes
+    if (px === null || px < MIN_FONT_SIZE_PX) continue;
 
     const rounded = Math.round(px);
     const existing = pxCounts.get(rounded);

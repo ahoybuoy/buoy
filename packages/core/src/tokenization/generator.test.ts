@@ -104,6 +104,40 @@ describe('generateTokens', () => {
     });
   });
 
+  describe('font-size tokens', () => {
+    it('filters out unrealistically small font sizes (< 8px)', () => {
+      const values: ExtractedValue[] = [
+        // These should be filtered out
+        { property: 'font-size', value: '1px', rawValue: '1px', category: 'font-size', context: 'typography' },
+        { property: 'font-size', value: '2px', rawValue: '2px', category: 'font-size', context: 'typography' },
+        { property: 'font-size', value: '6px', rawValue: '6px', category: 'font-size', context: 'typography' },
+        // These should be kept
+        { property: 'font-size', value: '12px', rawValue: '12px', category: 'font-size', context: 'typography' },
+        { property: 'font-size', value: '16px', rawValue: '16px', category: 'font-size', context: 'typography' },
+      ];
+
+      const result = generateTokens(values);
+      const fontTokens = result.tokens.filter(t => t.category === 'font-size');
+
+      // Should not have any tokens with value < 8px
+      for (const token of fontTokens) {
+        const px = parseInt(token.value);
+        expect(px).toBeGreaterThanOrEqual(8);
+      }
+
+      // Should have at least one font-size token from the valid values
+      expect(fontTokens.length).toBeGreaterThan(0);
+
+      // Check sources to verify 12px and 16px were included, but 1px, 2px, 6px were not
+      const allSources = fontTokens.flatMap(t => t.sources);
+      expect(allSources).toContain('12px');
+      expect(allSources).toContain('16px');
+      expect(allSources).not.toContain('1px');
+      expect(allSources).not.toContain('2px');
+      expect(allSources).not.toContain('6px');
+    });
+  });
+
   describe('breakpoint deduplication', () => {
     it('excludes breakpoint values from sizing tokens', () => {
       const values: ExtractedValue[] = [
