@@ -552,4 +552,475 @@ describe("ArbitraryValueDetector", () => {
       expect(values.length).toBeGreaterThanOrEqual(1);
     });
   });
+
+  describe("border-radius arbitrary values", () => {
+    it("detects rounded with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Rounded.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="rounded-[2px] rounded-t-[4px] rounded-bl-[8px]">
+          Rounded corners
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(3);
+      expect(values.every((v) => v.type === "border")).toBe(true);
+      expect(values.map((v) => v.fullClass)).toContain("rounded-[2px]");
+    });
+  });
+
+  describe("aspect ratio arbitrary values", () => {
+    it("detects aspect with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Aspect.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="aspect-[2/0.5] aspect-[16/9]">
+          Aspect ratios
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "layout")).toBe(true);
+    });
+  });
+
+  describe("transform arbitrary values", () => {
+    it("detects translate with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Transform.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="translate-x-[10px] translate-y-[50%] -translate-x-[20px]">
+          Translations
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(3);
+      expect(values.every((v) => v.type === "transform")).toBe(true);
+    });
+
+    it("detects rotate with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Rotate.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="rotate-[45deg] -rotate-[90deg]">
+          Rotations
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "transform")).toBe(true);
+    });
+
+    it("detects scale with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Scale.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="scale-[1.1] scale-x-[0.9] scale-y-[1.2]">
+          Scales
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(3);
+      expect(values.every((v) => v.type === "transform")).toBe(true);
+    });
+
+    it("detects skew with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Skew.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="skew-x-[12deg] skew-y-[6deg]">
+          Skews
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "transform")).toBe(true);
+    });
+  });
+
+  describe("filter arbitrary values", () => {
+    it("detects blur with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Blur.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="blur-[2px] blur-[0.5rem]">
+          Blurs
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "filter")).toBe(true);
+    });
+
+    it("detects brightness and contrast with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/BrightnessContrast.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="brightness-[1.25] contrast-[1.1]">
+          Brightness and contrast
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "filter")).toBe(true);
+    });
+
+    it("detects saturate and hue-rotate with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SaturateHue.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="saturate-[1.2] hue-rotate-[90deg]">
+          Saturate and hue rotate
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // Filter for filter-type values specifically
+      const filterValues = values.filter((v) => v.type === "filter");
+      expect(filterValues).toHaveLength(2);
+      expect(filterValues.map((v) => v.fullClass)).toContain("saturate-[1.2]");
+      expect(filterValues.map((v) => v.fullClass)).toContain("hue-rotate-[90deg]");
+    });
+
+    it("detects invert and sepia with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/InvertSepia.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="invert-[0.5] sepia-[0.75]">
+          Invert and sepia
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "filter")).toBe(true);
+    });
+  });
+
+  describe("backdrop filter arbitrary values", () => {
+    it("detects backdrop-blur and backdrop-brightness with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Backdrop.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="backdrop-blur-[4px] backdrop-brightness-[0.5] backdrop-contrast-[1.2]">
+          Backdrop filters
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // Filter for filter-type values specifically (both regular and backdrop filters are 'filter' type)
+      const filterValues = values.filter((v) => v.type === "filter");
+      expect(filterValues).toHaveLength(3);
+      expect(filterValues.map((v) => v.fullClass)).toContain("backdrop-blur-[4px]");
+      expect(filterValues.map((v) => v.fullClass)).toContain("backdrop-brightness-[0.5]");
+      expect(filterValues.map((v) => v.fullClass)).toContain("backdrop-contrast-[1.2]");
+    });
+  });
+
+  describe("z-index arbitrary values", () => {
+    it("detects z with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/ZIndex.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="z-[100] z-[9999] -z-[1]">
+          Z-indices
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(3);
+      expect(values.every((v) => v.type === "layout")).toBe(true);
+    });
+  });
+
+  describe("opacity arbitrary values", () => {
+    it("detects opacity with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Opacity.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="opacity-[0.85] opacity-[.5] opacity-[33%]">
+          Opacities
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(3);
+      expect(values.every((v) => v.type === "visual")).toBe(true);
+    });
+  });
+
+  describe("typography arbitrary values", () => {
+    it("detects leading (line-height) with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Leading.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="leading-[1.5] leading-[24px]">
+          Line heights
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "typography")).toBe(true);
+    });
+
+    it("detects tracking (letter-spacing) with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Tracking.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="tracking-[0.02em] tracking-[-0.5px]">
+          Letter spacing
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "typography")).toBe(true);
+    });
+
+    it("detects font-weight with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/FontWeight.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="font-[500] font-[450]">
+          Font weights
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "typography")).toBe(true);
+    });
+  });
+
+  describe("flex/layout arbitrary values", () => {
+    it("detects basis with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Basis.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="basis-[25%] basis-[200px]">
+          Flex basis
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "layout")).toBe(true);
+    });
+
+    it("detects grow and shrink with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/GrowShrink.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="grow-[2] shrink-[0]">
+          Flex grow/shrink
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // Filter for layout-type values specifically
+      const layoutValues = values.filter((v) => v.type === "layout");
+      expect(layoutValues).toHaveLength(2);
+      expect(layoutValues.map((v) => v.fullClass)).toContain("grow-[2]");
+      expect(layoutValues.map((v) => v.fullClass)).toContain("shrink-[0]");
+    });
+
+    it("detects order with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Order.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="order-[13] -order-[1]">
+          Order
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "layout")).toBe(true);
+    });
+
+    it("detects columns with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Columns.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="columns-[3] columns-[200px]">
+          Columns
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "layout")).toBe(true);
+    });
+  });
+
+  describe("ring width arbitrary values", () => {
+    it("detects ring width with arbitrary values (not ring color)", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Ring.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="ring-[3px] ring-[0.5rem]">
+          Ring widths
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // ring-[3px] is a width value, not a color
+      const nonColorValues = values.filter((v) => v.type !== "color");
+      expect(nonColorValues).toHaveLength(2);
+      expect(nonColorValues.every((v) => v.type === "border")).toBe(true);
+    });
+  });
+
+  describe("divide arbitrary values", () => {
+    it("detects divide width with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Divide.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="divide-x-[3px] divide-y-[2px]">
+          Divide widths
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "border")).toBe(true);
+    });
+  });
+
+  describe("outline arbitrary values", () => {
+    it("detects outline width and offset with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Outline.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="outline-[3px] outline-offset-[4px]">
+          Outline
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(2);
+      expect(values.every((v) => v.type === "border")).toBe(true);
+    });
+  });
+
+  describe("scroll arbitrary values", () => {
+    it("detects scroll margin and padding with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Scroll.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="scroll-m-[10px] scroll-p-[20px] scroll-mt-[5px]">
+          Scroll spacing
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values).toHaveLength(3);
+      expect(values.every((v) => v.type === "spacing")).toBe(true);
+    });
+  });
 });
