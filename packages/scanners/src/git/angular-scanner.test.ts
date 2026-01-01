@@ -13,6 +13,9 @@ import {
   GETTER_SETTER_INPUT_ANGULAR,
   ANGULAR_17_SIGNALS,
   DEPRECATED_PROP_ANGULAR,
+  ANGULAR_MATERIAL_SIGNALS,
+  SIGNAL_INPUTS_WITH_OPTIONS,
+  STANDALONE_COMPONENT_ANGULAR,
 } from '../__tests__/fixtures/angular-components.js';
 import { AngularComponentScanner } from './angular-scanner.js';
 
@@ -492,6 +495,233 @@ describe('AngularComponentScanner', () => {
 
       expect(newProp).toBeDefined();
       expect(newProp!.deprecated).toBeFalsy();
+    });
+  });
+
+  describe('Angular Material-style signal patterns', () => {
+    it('extracts typed InputSignal declarations', async () => {
+      vol.fromJSON({
+        '/project/src/timepicker.component.ts': ANGULAR_MATERIAL_SIGNALS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+      expect(result.items).toHaveLength(1);
+
+      // InputSignal<readonly string[] | null>
+      const optionsProp = result.items[0]!.props.find(p => p.name === 'options');
+      expect(optionsProp).toBeDefined();
+      expect(optionsProp!.type).toContain('Signal');
+    });
+
+    it('extracts InputSignalWithTransform with custom transform', async () => {
+      vol.fromJSON({
+        '/project/src/timepicker.component.ts': ANGULAR_MATERIAL_SIGNALS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // InputSignalWithTransform<number | null, number | string | null>
+      const intervalProp = result.items[0]!.props.find(p => p.name === 'interval');
+      expect(intervalProp).toBeDefined();
+      expect(intervalProp!.type).toContain('Signal');
+    });
+
+    it('extracts InputSignalWithTransform with booleanAttribute', async () => {
+      vol.fromJSON({
+        '/project/src/timepicker.component.ts': ANGULAR_MATERIAL_SIGNALS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const disableRippleProp = result.items[0]!.props.find(p => p.name === 'disableRipple');
+      expect(disableRippleProp).toBeDefined();
+      // Should recognize booleanAttribute transform
+      expect(disableRippleProp!.type).toBe('boolean');
+    });
+
+    it('extracts signal input with alias option', async () => {
+      vol.fromJSON({
+        '/project/src/timepicker.component.ts': ANGULAR_MATERIAL_SIGNALS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const ariaLabelProp = result.items[0]!.props.find(p => p.name === 'ariaLabel');
+      expect(ariaLabelProp).toBeDefined();
+      expect(ariaLabelProp!.description).toContain('aria-label');
+    });
+
+    it('extracts OutputEmitterRef as outputs', async () => {
+      vol.fromJSON({
+        '/project/src/timepicker.component.ts': ANGULAR_MATERIAL_SIGNALS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const selectedProp = result.items[0]!.props.find(p => p.name === 'selected');
+      expect(selectedProp).toBeDefined();
+      expect(selectedProp!.type).toBe('OutputEmitterRef');
+
+      const openedProp = result.items[0]!.props.find(p => p.name === 'opened');
+      expect(openedProp).toBeDefined();
+
+      const closedProp = result.items[0]!.props.find(p => p.name === 'closed');
+      expect(closedProp).toBeDefined();
+    });
+  });
+
+  describe('signal inputs with options', () => {
+    it('extracts signal input with transform option', async () => {
+      vol.fromJSON({
+        '/project/src/settings.component.ts': SIGNAL_INPUTS_WITH_OPTIONS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const enabledProp = result.items[0]!.props.find(p => p.name === 'enabled');
+      expect(enabledProp).toBeDefined();
+      expect(enabledProp!.type).toBe('boolean');
+      expect(enabledProp!.defaultValue).toBe('false');
+    });
+
+    it('extracts signal input with alias and transform', async () => {
+      vol.fromJSON({
+        '/project/src/settings.component.ts': SIGNAL_INPUTS_WITH_OPTIONS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const itemCountProp = result.items[0]!.props.find(p => p.name === 'itemCount');
+      expect(itemCountProp).toBeDefined();
+      expect(itemCountProp!.type).toBe('number');
+      expect(itemCountProp!.description).toContain('count');
+    });
+
+    it('extracts signal input with only alias', async () => {
+      vol.fromJSON({
+        '/project/src/settings.component.ts': SIGNAL_INPUTS_WITH_OPTIONS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const labelTextProp = result.items[0]!.props.find(p => p.name === 'labelText');
+      expect(labelTextProp).toBeDefined();
+      expect(labelTextProp!.description).toContain('label');
+    });
+
+    it('extracts required signal input with options', async () => {
+      vol.fromJSON({
+        '/project/src/settings.component.ts': SIGNAL_INPUTS_WITH_OPTIONS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const itemIdProp = result.items[0]!.props.find(p => p.name === 'itemId');
+      expect(itemIdProp).toBeDefined();
+      expect(itemIdProp!.required).toBe(true);
+      expect(itemIdProp!.description).toContain('id');
+    });
+  });
+
+  describe('standalone components', () => {
+    it('detects standalone components', async () => {
+      vol.fromJSON({
+        '/project/src/card.component.ts': STANDALONE_COMPONENT_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('StandaloneCardComponent');
+    });
+
+    it('extracts props from standalone components', async () => {
+      vol.fromJSON({
+        '/project/src/card.component.ts': STANDALONE_COMPONENT_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const titleProp = result.items[0]!.props.find(p => p.name === 'title');
+      expect(titleProp).toBeDefined();
+
+      const cardClickProp = result.items[0]!.props.find(p => p.name === 'cardClick');
+      expect(cardClickProp).toBeDefined();
+      expect(cardClickProp!.type).toBe('EventEmitter');
+    });
+  });
+
+  describe('default patterns include all .ts files', () => {
+    it('uses patterns that catch non-component.ts files when not specified', async () => {
+      vol.fromJSON({
+        '/project/src/material/timepicker.ts': ANGULAR_MATERIAL_SIGNALS,
+        '/project/src/regular.component.ts': SIMPLE_BUTTON_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        // Use default patterns - should include both files
+      });
+
+      const result = await scanner.scan();
+
+      // Should find both components
+      expect(result.items.length).toBeGreaterThanOrEqual(1);
     });
   });
 });

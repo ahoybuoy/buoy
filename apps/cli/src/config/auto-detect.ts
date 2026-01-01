@@ -210,11 +210,13 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
       }
 
       case 'angular': {
-        const baseInclude = ['src/**/*.component.ts'];
+        // Use **/*.ts to catch Angular Material-style naming (e.g., button.ts, tab.ts)
+        // as well as standard *.component.ts files
+        const baseInclude = ['src/**/*.ts'];
         config.sources.angular = {
           enabled: true,
           include: monorepo ? expandForMonorepo(baseInclude, monorepo) : baseInclude,
-          exclude: ['**/*.spec.*', '**/node_modules/**'],
+          exclude: ['**/*.spec.*', '**/*.test.*', '**/node_modules/**'],
         };
         break;
       }

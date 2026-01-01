@@ -24,8 +24,10 @@ export const SvelteConfigSchema = ComponentSourceConfigSchema.extend({
 });
 
 // Angular source config
+// Note: Defaults to **/*.ts to catch Angular Material-style naming (e.g., button.ts, tab.ts)
+// as well as standard *.component.ts files
 export const AngularConfigSchema = ComponentSourceConfigSchema.extend({
-  include: z.array(z.string()).default(['src/**/*.component.ts']),
+  include: z.array(z.string()).default(['src/**/*.ts']),
 });
 
 // Web component source config (Lit, Stencil)

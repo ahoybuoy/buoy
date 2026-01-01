@@ -26,8 +26,12 @@ export class AngularComponentScanner extends Scanner<
   Component,
   AngularScannerConfig
 > {
-  /** Default file patterns for Angular components */
-  private static readonly DEFAULT_PATTERNS = ["**/*.component.ts"];
+  /**
+   * Default file patterns for Angular components.
+   * Includes both standard *.component.ts and any *.ts files to catch
+   * Angular Material-style naming (e.g., button.ts, tab.ts)
+   */
+  private static readonly DEFAULT_PATTERNS = ["**/*.ts"];
 
   async scan(): Promise<ScanResult<Component>> {
     return this.runScan(
@@ -341,32 +345,70 @@ export class AngularComponentScanner extends Scanner<
       if (member.initializer && ts.isCallExpression(member.initializer)) {
         const callExpr = member.initializer.expression;
 
-        // input<T>() or input.required<T>()
+        // input<T>() or input(defaultValue) or input(defaultValue, { options })
         if (ts.isIdentifier(callExpr) && callExpr.text === "input") {
           const propName = member.name.getText(sourceFile);
-          const typeArgs = member.initializer.typeArguments;
-          const firstTypeArg = typeArgs?.[0];
-          const signalType = firstTypeArg
-            ? `Signal<${firstTypeArg.getText(sourceFile)}>`
-            : "Signal";
-
-          // Check for default value
           const args = member.initializer.arguments;
+
+          // Extract signal input options (transform, alias)
+          const signalOptions = this.extractSignalInputOptions(
+            args,
+            sourceFile,
+          );
+
+          // Determine type from explicit type annotation on member, type args, or transform
+          let signalType: string;
+          if (signalOptions.transform === "booleanAttribute") {
+            signalType = "boolean";
+          } else if (signalOptions.transform === "numberAttribute") {
+            signalType = "number";
+          } else if (member.type) {
+            // Check for InputSignal<T> or InputSignalWithTransform<T, U> type annotations
+            const typeText = member.type.getText(sourceFile);
+            if (typeText.startsWith("InputSignalWithTransform<")) {
+              // Extract first type param from InputSignalWithTransform<T, U>
+              const match = typeText.match(/InputSignalWithTransform<([^,>]+)/);
+              signalType = match?.[1] ? `Signal<${match[1].trim()}>` : "Signal";
+            } else if (typeText.startsWith("InputSignal<")) {
+              // Extract type param from InputSignal<T>
+              const match = typeText.match(/InputSignal<(.+)>/);
+              signalType = match?.[1] ? `Signal<${match[1].trim()}>` : "Signal";
+            } else {
+              signalType = typeText;
+            }
+          } else {
+            const typeArgs = member.initializer.typeArguments;
+            const firstTypeArg = typeArgs?.[0];
+            signalType = firstTypeArg
+              ? `Signal<${firstTypeArg.getText(sourceFile)}>`
+              : "Signal";
+          }
+
+          // Get default value (first non-options argument)
           const hasDefault = args.length > 0;
           const defaultArg = args[0];
+          const isDefaultArgOptions =
+            defaultArg && ts.isObjectLiteralExpression(defaultArg);
 
-          inputs.push({
+          const prop: ExtendedPropDefinition = {
             name: propName,
             type: signalType,
             required: false,
             defaultValue:
-              hasDefault && defaultArg
+              hasDefault && defaultArg && !isDefaultArgOptions
                 ? defaultArg.getText(sourceFile)
                 : undefined,
-          });
+          };
+
+          // Add alias info if present
+          if (signalOptions.alias) {
+            prop.description = `Alias: ${signalOptions.alias}`;
+          }
+
+          inputs.push(prop);
         }
 
-        // input.required<T>()
+        // input.required<T>() or input.required<T>({ options })
         if (
           ts.isPropertyAccessExpression(callExpr) &&
           ts.isIdentifier(callExpr.expression) &&
@@ -374,22 +416,81 @@ export class AngularComponentScanner extends Scanner<
           callExpr.name.text === "required"
         ) {
           const propName = member.name.getText(sourceFile);
-          const typeArgs = member.initializer.typeArguments;
-          const firstTypeArg = typeArgs?.[0];
-          const signalType = firstTypeArg
-            ? `Signal<${firstTypeArg.getText(sourceFile)}>`
-            : "Signal";
+          const args = member.initializer.arguments;
 
-          inputs.push({
+          // Extract signal input options (alias)
+          const signalOptions = this.extractSignalInputOptions(
+            args,
+            sourceFile,
+          );
+
+          // Determine type
+          let signalType: string;
+          if (member.type) {
+            const typeText = member.type.getText(sourceFile);
+            if (typeText.startsWith("InputSignal<")) {
+              const match = typeText.match(/InputSignal<(.+)>/);
+              signalType = match?.[1] ? `Signal<${match[1].trim()}>` : "Signal";
+            } else {
+              signalType = typeText;
+            }
+          } else {
+            const typeArgs = member.initializer.typeArguments;
+            const firstTypeArg = typeArgs?.[0];
+            signalType = firstTypeArg
+              ? `Signal<${firstTypeArg.getText(sourceFile)}>`
+              : "Signal";
+          }
+
+          const prop: ExtendedPropDefinition = {
             name: propName,
             type: signalType,
             required: true,
-          });
+          };
+
+          // Add alias info if present
+          if (signalOptions.alias) {
+            prop.description = `Alias: ${signalOptions.alias}`;
+          }
+
+          inputs.push(prop);
         }
       }
     }
 
     return inputs;
+  }
+
+  /**
+   * Extract options from signal input() calls like input(default, { alias, transform })
+   */
+  private extractSignalInputOptions(
+    args: ts.NodeArray<ts.Expression>,
+    sourceFile: ts.SourceFile,
+  ): { alias?: string; transform?: string } {
+    const result: { alias?: string; transform?: string } = {};
+
+    // Options can be in the second argument (input(default, { options }))
+    // or the first argument if no default (input({ options }))
+    for (const arg of args) {
+      if (ts.isObjectLiteralExpression(arg)) {
+        for (const prop of arg.properties) {
+          if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+            const propName = prop.name.text;
+
+            if (propName === "alias" && ts.isStringLiteral(prop.initializer)) {
+              result.alias = prop.initializer.text;
+            } else if (propName === "transform") {
+              if (ts.isIdentifier(prop.initializer)) {
+                result.transform = prop.initializer.getText(sourceFile);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return result;
   }
 
   private extractOutputs(
@@ -437,9 +538,19 @@ export class AngularComponentScanner extends Scanner<
         const callExpr = member.initializer.expression;
         if (ts.isIdentifier(callExpr) && callExpr.text === "output") {
           const propName = member.name.getText(sourceFile);
+
+          // Check for OutputEmitterRef type annotation
+          let outputType = "OutputSignal";
+          if (member.type) {
+            const typeText = member.type.getText(sourceFile);
+            if (typeText.startsWith("OutputEmitterRef<")) {
+              outputType = "OutputEmitterRef";
+            }
+          }
+
           outputs.push({
             name: propName,
-            type: "OutputSignal",
+            type: outputType,
             required: false,
           });
         }

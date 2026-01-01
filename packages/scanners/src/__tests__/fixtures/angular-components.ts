@@ -200,3 +200,99 @@ export class DeprecatedPropsComponent {
   @Input() containerStyleClass: string = '';
 }
 `;
+
+// Angular Material-style signal inputs with typed annotations (Angular 17+)
+export const ANGULAR_MATERIAL_SIGNALS = `
+import {
+  Component,
+  input,
+  output,
+  InputSignal,
+  InputSignalWithTransform,
+  OutputEmitterRef,
+  booleanAttribute,
+} from '@angular/core';
+
+function parseInterval(value: number | string | null): number | null {
+  if (typeof value === 'string') return parseInt(value, 10);
+  return value;
+}
+
+@Component({
+  selector: 'mat-timepicker',
+  template: '<div>Timepicker</div>'
+})
+export class MatTimepicker<D> {
+  // InputSignalWithTransform with custom transform
+  readonly interval: InputSignalWithTransform<number | null, number | string | null> = input(
+    null,
+    { transform: parseInterval }
+  );
+
+  // InputSignal with generic type
+  readonly options: InputSignal<readonly string[] | null> = input<readonly string[] | null>(null);
+
+  // InputSignalWithTransform with booleanAttribute
+  readonly disableRipple: InputSignalWithTransform<boolean, unknown> = input(
+    false,
+    { transform: booleanAttribute }
+  );
+
+  // Signal input with alias
+  readonly ariaLabel: InputSignal<string | null> = input<string | null>(null, {
+    alias: 'aria-label',
+  });
+
+  // OutputEmitterRef
+  readonly selected: OutputEmitterRef<{ value: D }> = output();
+  readonly opened: OutputEmitterRef<void> = output();
+  readonly closed: OutputEmitterRef<void> = output();
+}
+`;
+
+// Signal inputs with complex options including alias and transform
+export const SIGNAL_INPUTS_WITH_OPTIONS = `
+import { Component, input, output, booleanAttribute, numberAttribute } from '@angular/core';
+
+@Component({
+  selector: 'app-settings',
+  template: '<div>Settings</div>'
+})
+export class SettingsComponent {
+  // Signal input with transform option
+  readonly enabled = input(false, { transform: booleanAttribute });
+
+  // Signal input with both alias and transform
+  readonly itemCount = input(0, {
+    alias: 'count',
+    transform: numberAttribute,
+  });
+
+  // Signal input with just alias
+  readonly labelText = input<string>('', { alias: 'label' });
+
+  // Required signal input (input.required)
+  readonly userId = input.required<string>();
+
+  // Required signal input with options
+  readonly itemId = input.required<string>({ alias: 'id' });
+}
+`;
+
+// Standalone components (Angular 14+)
+export const STANDALONE_COMPONENT_ANGULAR = `
+import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { CommonModule } from '@angular/common';
+
+@Component({
+  selector: 'app-standalone-card',
+  standalone: true,
+  imports: [CommonModule],
+  template: '<div class="card">{{title}}</div>'
+})
+export class StandaloneCardComponent {
+  @Input() title: string = '';
+  @Input() description?: string;
+  @Output() cardClick = new EventEmitter<void>();
+}
+`;
