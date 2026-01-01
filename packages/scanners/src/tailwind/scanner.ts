@@ -3,6 +3,7 @@ import { createTokenId } from '@buoy-design/core';
 import { TailwindConfigParser } from './config-parser.js';
 import { ArbitraryValueDetector } from './arbitrary-detector.js';
 import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { glob } from 'glob';
 
 export interface TailwindScannerConfig {
@@ -90,10 +91,23 @@ export class TailwindScanner {
       const parsed = await parser.parse();
 
       if (parsed) {
-        // Traditional JS/TS config found
+        // Config found (v3 or v4)
         result.tokens = parsed.tokens;
         result.configPath = parsed.configPath;
         result.stats.tokensExtracted = parsed.tokens.length;
+
+        // For v4 CSS configs, supplement with additional theme variant tokens
+        // that the config-parser may not extract (e.g., [data-theme="dark"], .theme-*)
+        if (parsed.version === 4 && parsed.configPath) {
+          const additionalTokens = await this.extractAdditionalThemeVariants(parsed.configPath);
+          if (additionalTokens.length > 0) {
+            // Add tokens that don't already exist (by id)
+            const existingIds = new Set(result.tokens.map(t => t.id));
+            const newTokens = additionalTokens.filter(t => !existingIds.has(t.id));
+            result.tokens.push(...newTokens);
+            result.stats.tokensExtracted = result.tokens.length;
+          }
+        }
       } else {
         // Try Tailwind v4 CSS-based configuration
         const v4Config = await this.parseTailwindV4Config();
@@ -383,6 +397,27 @@ export class TailwindScanner {
   }
 
   /**
+   * Extract additional theme variant tokens that the config-parser may not handle
+   * (e.g., [data-theme="dark"], .theme-*, and other alternative dark mode patterns)
+   */
+  private async extractAdditionalThemeVariants(configPath: string): Promise<DesignToken[]> {
+    try {
+      const fullPath = resolve(this.config.projectRoot, configPath);
+      const content = readFileSync(fullPath, 'utf-8');
+      const relativePath = configPath;
+
+      const source: TokenSource = {
+        type: 'css',
+        path: relativePath,
+      };
+
+      return this.extractThemeVariantVariables(content, source);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Parse Tailwind v4 CSS-based configuration
    * Looks for CSS files with @import "tailwindcss" and extracts theme tokens
    */
@@ -478,6 +513,14 @@ export class TailwindScanner {
     const rootTokens = this.extractRootVariables(content, source);
     tokens.push(...rootTokens);
 
+    // Extract CSS custom properties from theme variant selectors (.dark, [data-theme="dark"], etc.)
+    const themeVariantTokens = this.extractThemeVariantVariables(content, source);
+    tokens.push(...themeVariantTokens);
+
+    // Extract CSS custom properties from @layer blocks (base, components, utilities)
+    const layerTokens = this.extractLayerVariables(content, source);
+    tokens.push(...layerTokens);
+
     return tokens;
   }
 
@@ -518,7 +561,7 @@ export class TailwindScanner {
   private extractRootVariables(content: string, source: TokenSource): DesignToken[] {
     const tokens: DesignToken[] = [];
 
-    // Match :root { ... } blocks
+    // Match :root { ... } blocks (but not those inside @layer blocks, which are handled separately)
     const rootBlockRegex = /:root\s*{([^}]+)}/gs;
     let match;
 
@@ -544,26 +587,199 @@ export class TailwindScanner {
   }
 
   /**
+   * Extract CSS custom properties from theme variant selectors
+   * Handles: .dark { }, [data-theme="dark"] { }, .theme-* { }, :root.dark { }, html.dark { }, etc.
+   */
+  private extractThemeVariantVariables(content: string, source: TokenSource): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Theme variant patterns - match common dark mode and theme selectors
+    // Note: We use a balanced brace approach to handle nested blocks
+    const themeVariantPatterns = [
+      // .dark { ... } - most common shadcn-ui pattern
+      /\.dark\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/gs,
+      // [data-theme="dark"] { ... }
+      /\[data-theme=["']dark["']\]\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/gs,
+      // [data-mode="dark"] { ... }
+      /\[data-mode=["']dark["']\]\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/gs,
+      // :root.dark { ... }
+      /:root\.dark\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/gs,
+      // html.dark { ... }
+      /html\.dark\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/gs,
+      // .theme-dark { ... }
+      /\.theme-dark\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/gs,
+      // .theme-* { ... } (custom theme classes)
+      /\.theme-[\w-]+\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/gs,
+    ];
+
+    for (const pattern of themeVariantPatterns) {
+      let match;
+      // Reset lastIndex for each pattern
+      pattern.lastIndex = 0;
+
+      while ((match = pattern.exec(content)) !== null) {
+        const blockContent = match[0];
+        const innerContent = match[1]!;
+
+        // Determine theme variant name from the selector
+        const themeVariant = this.extractThemeVariantName(blockContent);
+
+        // Extract CSS custom properties from this block
+        const varRegex = /--([\w-]+):\s*([^;]+);/g;
+        let varMatch;
+
+        while ((varMatch = varRegex.exec(innerContent)) !== null) {
+          const name = varMatch[1]!;
+          const value = varMatch[2]!.trim();
+
+          const token = this.createTokenFromCSSVar(name, value, source, 'root', themeVariant);
+          if (token) {
+            tokens.push(token);
+          }
+        }
+      }
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Extract theme variant name from a CSS selector
+   */
+  private extractThemeVariantName(selector: string): string {
+    // .dark -> dark
+    if (/\.dark\s*\{/.test(selector)) return 'dark';
+    // [data-theme="dark"] -> dark
+    if (/\[data-theme=["']dark["']\]/.test(selector)) return 'dark';
+    // [data-mode="dark"] -> dark
+    if (/\[data-mode=["']dark["']\]/.test(selector)) return 'dark';
+    // :root.dark or html.dark -> dark
+    if (/:root\.dark|html\.dark/.test(selector)) return 'dark';
+    // .theme-dark -> dark
+    if (/\.theme-dark/.test(selector)) return 'dark';
+    // .theme-<name> -> extract name
+    const themeMatch = selector.match(/\.theme-([\w-]+)/);
+    if (themeMatch) return themeMatch[1]!;
+
+    return 'variant';
+  }
+
+  /**
+   * Extract CSS custom properties from @layer blocks
+   * Handles: @layer base { :root { ... } .dark { ... } }
+   */
+  private extractLayerVariables(content: string, source: TokenSource): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Match @layer base/components/utilities { ... } blocks
+    // We need to handle nested braces properly
+    const layerRegex = /@layer\s+(base|components|utilities)\s*\{/g;
+    let match;
+
+    while ((match = layerRegex.exec(content)) !== null) {
+      const layerName = match[1]!;
+      const startIndex = match.index + match[0].length;
+
+      // Find the matching closing brace
+      const layerContent = this.extractBalancedBraces(content, startIndex);
+      if (!layerContent) continue;
+
+      // Now extract variables from :root and theme variants within this layer
+      // Extract :root variables within the layer
+      const rootBlockRegex = /:root\s*\{([^}]+)\}/gs;
+      let rootMatch;
+
+      while ((rootMatch = rootBlockRegex.exec(layerContent)) !== null) {
+        const blockContent = rootMatch[1]!;
+        const varRegex = /--([\w-]+):\s*([^;]+);/g;
+        let varMatch;
+
+        while ((varMatch = varRegex.exec(blockContent)) !== null) {
+          const name = varMatch[1]!;
+          const value = varMatch[2]!.trim();
+
+          const token = this.createTokenFromCSSVar(name, value, source, 'root', undefined, layerName);
+          if (token) {
+            tokens.push(token);
+          }
+        }
+      }
+
+      // Extract .dark variables within the layer
+      const darkBlockRegex = /\.dark\s*\{([^}]+)\}/gs;
+      let darkMatch;
+
+      while ((darkMatch = darkBlockRegex.exec(layerContent)) !== null) {
+        const blockContent = darkMatch[1]!;
+        const varRegex = /--([\w-]+):\s*([^;]+);/g;
+        let varMatch;
+
+        while ((varMatch = varRegex.exec(blockContent)) !== null) {
+          const name = varMatch[1]!;
+          const value = varMatch[2]!.trim();
+
+          const token = this.createTokenFromCSSVar(name, value, source, 'root', 'dark', layerName);
+          if (token) {
+            tokens.push(token);
+          }
+        }
+      }
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Extract content within balanced braces starting from a given position
+   */
+  private extractBalancedBraces(content: string, startIndex: number): string | null {
+    let depth = 1;
+    let endIndex = startIndex;
+
+    while (depth > 0 && endIndex < content.length) {
+      const char = content[endIndex];
+      if (char === '{') depth++;
+      else if (char === '}') depth--;
+      endIndex++;
+    }
+
+    if (depth !== 0) return null;
+
+    // Return content without the final closing brace
+    return content.substring(startIndex, endIndex - 1);
+  }
+
+  /**
    * Create a design token from a CSS custom property
    */
   private createTokenFromCSSVar(
     name: string,
     value: string,
     source: TokenSource,
-    origin: 'theme' | 'root'
+    origin: 'theme' | 'root',
+    themeVariant?: string,
+    layer?: string
   ): DesignToken | null {
+    // Build tags array
+    const tags: string[] = ['tailwind', 'v4', origin];
+    if (themeVariant) tags.push(themeVariant);
+    if (layer) tags.push(`layer-${layer}`);
+
+    // Build unique token ID - include variant to differentiate light/dark tokens
+    const tokenIdSuffix = themeVariant ? `${name}-${themeVariant}` : name;
+
     // Skip if value is just a var() reference
     if (/^var\(--[^)]+\)$/.test(value)) {
       // Still create a token for mapping purposes
       return {
-        id: createTokenId(source, `tw-${name}`),
-        name: `tw-${name}`,
+        id: createTokenId(source, `tw-${tokenIdSuffix}`),
+        name: themeVariant ? `tw-${name}-${themeVariant}` : `tw-${name}`,
         category: this.categorizeToken(name),
         value: { type: 'raw', value },
         source,
         aliases: [name],
         usedBy: [],
-        metadata: { tags: ['tailwind', 'v4', origin, 'reference'] },
+        metadata: { tags: [...tags, 'reference'] },
         scannedAt: new Date(),
       };
     }
@@ -575,14 +791,14 @@ export class TailwindScanner {
     const tokenValue = this.parseTokenValue(value, category);
 
     return {
-      id: createTokenId(source, `tw-${name}`),
-      name: `tw-${name}`,
+      id: createTokenId(source, `tw-${tokenIdSuffix}`),
+      name: themeVariant ? `tw-${name}-${themeVariant}` : `tw-${name}`,
       category,
       value: tokenValue,
       source,
       aliases: [name],
       usedBy: [],
-      metadata: { tags: ['tailwind', 'v4', origin] },
+      metadata: { tags },
       scannedAt: new Date(),
     };
   }

@@ -288,6 +288,160 @@ module.exports = {
       // Should use traditional config path
       expect(result.configPath).toContain('tailwind.config');
     });
+
+    it('extracts CSS custom properties from .dark {} theme variant selector', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue(['/test/project/app/globals.css']);
+
+      // Real shadcn-ui v4 pattern with .dark {} theme variant
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+}
+      `);
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+      });
+
+      const result = await scanner.scan();
+
+      // Should extract tokens from both :root and .dark
+      expect(result.tokens.length).toBeGreaterThan(4);
+
+      // Should have dark mode variants
+      const darkTokens = result.tokens.filter(t =>
+        t.metadata?.tags?.includes('dark') || t.name.includes('dark-')
+      );
+      expect(darkTokens.length).toBeGreaterThan(0);
+    });
+
+    it('extracts CSS custom properties from [data-theme="dark"] selector', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue(['/test/project/src/styles.css']);
+
+      // Alternative dark mode pattern
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+}
+
+[data-theme="dark"] {
+  --background: #000000;
+  --foreground: #ffffff;
+}
+
+.theme-custom {
+  --background: #f5f5f5;
+  --primary: #0066cc;
+}
+      `);
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+      });
+
+      const result = await scanner.scan();
+
+      // Should extract from all theme selectors
+      expect(result.tokens.length).toBeGreaterThan(2);
+    });
+
+    it('extracts CSS variables from @layer base {} blocks', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue(['/test/project/src/globals.css']);
+
+      // Real pattern from headlessui and other Tailwind v4 projects
+      // Use semantic variable names that the parser recognizes
+      const cssContent = `
+@import 'tailwindcss';
+
+@layer base {
+  * {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  :root {
+    --radius: 0.5rem;
+    --primary: #ff6b6b;
+    --background: #ffffff;
+  }
+}
+      `;
+      vi.mocked(fs.readFileSync).mockReturnValue(cssContent);
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect it's a Tailwind v4 config
+      expect(result.configPath).toBeTruthy();
+
+      // Should extract tokens from within @layer base (semantic names recognized by parser)
+      const semanticTokens = result.tokens.filter(t =>
+        t.name.includes('primary') || t.name.includes('background') || t.name.includes('radius')
+      );
+      expect(semanticTokens.length).toBeGreaterThan(0);
+    });
+
+    it('handles nested @layer blocks with :root selectors', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue(['/test/project/styles/theme.css']);
+
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    --primary: hsl(222.2 47.4% 11.2%);
+    --primary-foreground: hsl(210 40% 98%);
+  }
+
+  .dark {
+    --primary: hsl(210 40% 98%);
+    --primary-foreground: hsl(222.2 47.4% 11.2%);
+  }
+}
+
+@layer components {
+  .btn-primary {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+}
+      `);
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+      });
+
+      const result = await scanner.scan();
+
+      // Should extract both light and dark tokens
+      const primaryTokens = result.tokens.filter(t => t.name.includes('primary'));
+      expect(primaryTokens.length).toBeGreaterThan(0);
+
+      // Should have tokens from both :root and .dark within @layer
+      expect(result.tokens.length).toBeGreaterThanOrEqual(3);
+    });
   });
 
   describe('semantic token extraction from class usage', () => {
