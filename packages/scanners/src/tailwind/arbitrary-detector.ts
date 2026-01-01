@@ -20,7 +20,8 @@ export interface ArbitraryDetectorConfig {
 
 // Common modifiers that can prefix arbitrary value classes
 // Handles: dark:, before:, after:, hover:, focus:, lg:, sm:, @md:, @min-[28rem]:, has-[>svg]:, etc.
-const MODIFIER_PREFIX = '(?:(?:@(?:min|max)-\\[[^\\]]+\\]|@[a-z]+|[a-z-]+|has-\\[[^\\]]+\\]):)*';
+// Also handles arbitrary variant selectors like [&>svg]:, [&_pre]:, [&>div]:
+const MODIFIER_PREFIX = '(?:(?:@(?:min|max)-\\[[^\\]]+\\]|@[a-z]+|[a-z-]+|has-\\[[^\\]]+\\]|\\[&[^\\]]+\\]):)*';
 
 // Negative prefix for classes like -translate-x-[20px], -z-[1], -order-[1]
 const NEGATIVE_PREFIX = '-?';
@@ -90,6 +91,13 @@ const ARBITRARY_PATTERNS = {
   leading: new RegExp(`${MODIFIER_PREFIX}leading-\\[([^\\]]+)\\]`, 'g'),
   tracking: new RegExp(`${MODIFIER_PREFIX}tracking-\\[([^\\]]+)\\]`, 'g'),
   fontWeight: new RegExp(`${MODIFIER_PREFIX}font-\\[(\\d+)\\]`, 'g'),
+
+  // Line clamp: line-clamp-[3], line-clamp-[5]
+  lineClamp: new RegExp(`${MODIFIER_PREFIX}line-clamp-\\[([^\\]]+)\\]`, 'g'),
+
+  // Box shadow: shadow-[0_0_0_1px_hsl(...)], shadow-[0_35px_60px_-15px_rgba(...)]
+  // Matches arbitrary box-shadow values (not color-only patterns)
+  boxShadow: new RegExp(`${MODIFIER_PREFIX}shadow-\\[(\\d[^\\]]+)\\]`, 'g'),
 
   // Arbitrary CSS properties: [--custom-prop:value], [color:red]
   cssProperty: /\[(-{0,2}[\w-]+:[^\]]+)\]/g,
@@ -519,6 +527,40 @@ export class ArbitraryValueDetector {
           seen.add(key);
           values.push({
             type: 'typography',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for line-clamp arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.lineClamp)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'typography',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for box-shadow arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.boxShadow)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'visual',
             value: match[1]!,
             fullClass,
             file: relativePath,

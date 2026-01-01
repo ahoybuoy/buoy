@@ -1023,4 +1023,128 @@ describe("ArbitraryValueDetector", () => {
       expect(values.every((v) => v.type === "spacing")).toBe(true);
     });
   });
+
+  describe("arbitrary variant selectors with values", () => {
+    it("detects size values inside arbitrary variant selectors", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/ArbitraryVariant.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[&>svg]:h-[0.9rem] [&>svg]:w-[0.9rem] [&>div]:h-[137px] [&_pre]:max-h-[650px]">
+          Arbitrary variant sizes
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const sizeValues = values.filter((v) => v.type === "size");
+      expect(sizeValues.length).toBeGreaterThanOrEqual(4);
+      expect(sizeValues.map((v) => v.fullClass)).toContain("[&>svg]:h-[0.9rem]");
+      expect(sizeValues.map((v) => v.fullClass)).toContain("[&>div]:h-[137px]");
+      expect(sizeValues.map((v) => v.fullClass)).toContain("[&_pre]:max-h-[650px]");
+    });
+
+    it("detects spacing values inside arbitrary variant selectors", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/ArbitraryVariantSpacing.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[&>div]:p-[20px] [&_pre]:pb-[100px]">
+          Arbitrary variant spacing
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const spacingValues = values.filter((v) => v.type === "spacing");
+      expect(spacingValues.length).toBeGreaterThanOrEqual(2);
+      expect(spacingValues.map((v) => v.fullClass)).toContain("[&>div]:p-[20px]");
+      expect(spacingValues.map((v) => v.fullClass)).toContain("[&_pre]:pb-[100px]");
+    });
+
+    it("detects border values inside arbitrary variant selectors", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/ArbitraryVariantBorder.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[&>kbd]:rounded-[calc(var(--radius)-5px)] [&_button]:rounded-[4px]">
+          Arbitrary variant borders
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const borderValues = values.filter((v) => v.type === "border");
+      expect(borderValues.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe("arbitrary box-shadow values", () => {
+    it("detects shadow with complex arbitrary values (not colors)", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Shadow.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)]">
+          Box shadows
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // Shadow values should be detected - NOT as colors
+      expect(values.length).toBeGreaterThanOrEqual(1);
+      // The shadow-[...] patterns that contain HSL/rgba should be detected
+      expect(values.some((v) => v.fullClass.includes("shadow-[0_0_0_1px_hsl"))).toBe(true);
+    });
+  });
+
+  describe("line-clamp arbitrary values", () => {
+    it("detects line-clamp with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/LineClamp.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <span className="line-clamp-[3] [&>span]:line-clamp-[2]">
+          Line clamp
+        </span>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(2);
+      expect(values.some((v) => v.fullClass.includes("line-clamp-[3]"))).toBe(true);
+    });
+  });
+
+  describe("text-[size] distinct from text-[color]", () => {
+    it("detects text-[1.05rem] as size, not color", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/TextSize.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <p className="text-[1.05rem] text-[15px] text-[0.875em]">
+          Text sizes
+        </p>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const sizeValues = values.filter((v) => v.type === "size");
+      expect(sizeValues.length).toBeGreaterThanOrEqual(3);
+      expect(sizeValues.map((v) => v.value)).toContain("1.05rem");
+    });
+  });
 });
