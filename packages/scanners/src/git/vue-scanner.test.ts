@@ -20,6 +20,12 @@ import {
   COMPOUND_COMPONENT_VUE,
   GENERIC_COMPONENT_VUE,
   EMITS_VALIDATION_VUE,
+  ELEMENT_PLUS_COMPONENT_VUE,
+  ELEMENT_PLUS_PROPS_TS,
+  PRIMEVUE_CHILD_VUE,
+  PRIMEVUE_BASE_VUE,
+  MULTIPLE_SCRIPT_BLOCKS_VUE,
+  RUNTIME_PROPS_OBJECT_VUE,
 } from '../__tests__/fixtures/vue-components.js';
 import { VueComponentScanner } from './vue-scanner.js';
 
@@ -476,6 +482,97 @@ describe('VueComponentScanner', () => {
       expect(result.items[0]!.metadata.emits).toContain('click');
       expect(result.items[0]!.metadata.emits).toContain('update:modelValue');
       expect(result.items[0]!.metadata.emits).toContain('focus');
+    });
+
+    it('resolves props from external TypeScript file (Element Plus pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/rate/rate.vue': ELEMENT_PLUS_COMPONENT_VUE,
+        '/project/src/rate/rate.ts': ELEMENT_PLUS_PROPS_TS,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('ElRate');
+
+      // Should resolve props from external file
+      expect(result.items[0]!.props.length).toBeGreaterThan(0);
+
+      const modelValueProp = result.items[0]!.props.find(p => p.name === 'modelValue');
+      expect(modelValueProp).toBeDefined();
+      expect(modelValueProp!.type).toBe('number');
+
+      const maxProp = result.items[0]!.props.find(p => p.name === 'max');
+      expect(maxProp).toBeDefined();
+
+      const sizeProp = result.items[0]!.props.find(p => p.name === 'size');
+      expect(sizeProp).toBeDefined();
+
+      const disabledProp = result.items[0]!.props.find(p => p.name === 'disabled');
+      expect(disabledProp).toBeDefined();
+
+      const allowHalfProp = result.items[0]!.props.find(p => p.name === 'allowHalf');
+      expect(allowHalfProp).toBeDefined();
+    });
+
+    it('extracts props from multiple script blocks (Vuetify docs pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/TooltipBtn.vue': MULTIPLE_SCRIPT_BLOCKS_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+
+      // Props should be extracted from script setup
+      const iconProp = result.items[0]!.props.find(p => p.name === 'icon');
+      expect(iconProp).toBeDefined();
+
+      const pathProp = result.items[0]!.props.find(p => p.name === 'path');
+      expect(pathProp).toBeDefined();
+
+      const variantProp = result.items[0]!.props.find(p => p.name === 'variant');
+      expect(variantProp).toBeDefined();
+    });
+
+    it('extracts props from runtime defineProps object syntax', async () => {
+      vol.fromJSON({
+        '/project/src/Card.vue': RUNTIME_PROPS_OBJECT_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(4);
+
+      const titleProp = result.items[0]!.props.find(p => p.name === 'title');
+      expect(titleProp).toBeDefined();
+      expect(titleProp!.required).toBe(true);
+
+      const countProp = result.items[0]!.props.find(p => p.name === 'count');
+      expect(countProp).toBeDefined();
+      expect(countProp!.type).toBe('number');
+
+      const itemsProp = result.items[0]!.props.find(p => p.name === 'items');
+      expect(itemsProp).toBeDefined();
+
+      const onClickProp = result.items[0]!.props.find(p => p.name === 'onClick');
+      expect(onClickProp).toBeDefined();
     });
   });
 });

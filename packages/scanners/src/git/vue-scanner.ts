@@ -2,8 +2,9 @@ import { Scanner, ScanResult, ScannerConfig } from "../base/scanner.js";
 import type { Component, PropDefinition, VueSource } from "@buoy-design/core";
 import { createComponentId } from "@buoy-design/core";
 import { readFile } from "fs/promises";
-import { relative, basename } from "path";
+import { relative, basename, dirname, resolve } from "path";
 import { extractBalancedBraces } from "../utils/parser-utils.js";
+import { existsSync } from "fs";
 
 export interface VueScannerConfig extends ScannerConfig {
   designSystemPackage?: string;
@@ -59,7 +60,16 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     const scriptContent = scriptSetupMatch?.[2] || scriptMatch?.[2] || "";
     const isSetup = !!scriptSetupMatch;
 
-    const props = this.extractProps(scriptContent, isSetup);
+    let props = this.extractProps(scriptContent, isSetup);
+
+    // If no props found inline, try to resolve from external file (Element Plus pattern)
+    if (props.length === 0 && isSetup) {
+      const externalProps = await this.resolveExternalProps(scriptContent, filePath);
+      if (externalProps.length > 0) {
+        props = externalProps;
+      }
+    }
+
     const dependencies = this.extractDependencies(content);
     const metadata = this.extractMetadata(scriptContent, content, isSetup, scriptAttrs, props);
 
@@ -412,6 +422,164 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     }
 
     return props;
+  }
+
+  /**
+   * Resolve props from external TypeScript file (Element Plus pattern)
+   * Handles: defineProps(variableName) where variableName is imported from a .ts file
+   */
+  private async resolveExternalProps(
+    scriptContent: string,
+    vueFilePath: string,
+  ): Promise<PropDefinition[]> {
+    // Match defineProps(identifier) but not defineProps({ or defineProps<
+    const externalPropsMatch = scriptContent.match(
+      /defineProps\s*\(\s*([a-zA-Z_]\w*)\s*\)/,
+    );
+    if (!externalPropsMatch?.[1]) {
+      return [];
+    }
+
+    const propsVarName = externalPropsMatch[1];
+
+    // Find the import statement for this variable
+    // Match: import { rateProps } from './rate' or import { rateProps } from "./rate"
+    const importRegex = new RegExp(
+      `import\\s*\\{[^}]*\\b${propsVarName}\\b[^}]*\\}\\s*from\\s*['"]([^'"]+)['"]`,
+    );
+    const importMatch = scriptContent.match(importRegex);
+    if (!importMatch?.[1]) {
+      return [];
+    }
+
+    const importPath = importMatch[1];
+
+    // Resolve the TypeScript file path
+    const vueDir = dirname(vueFilePath);
+    let tsFilePath = resolve(vueDir, importPath);
+
+    // Handle relative imports without extension
+    if (!tsFilePath.endsWith('.ts') && !tsFilePath.endsWith('.js')) {
+      // Try .ts first, then .js
+      if (existsSync(tsFilePath + '.ts')) {
+        tsFilePath = tsFilePath + '.ts';
+      } else if (existsSync(tsFilePath + '.js')) {
+        tsFilePath = tsFilePath + '.js';
+      } else {
+        return [];
+      }
+    }
+
+    // Check if file exists
+    if (!existsSync(tsFilePath)) {
+      return [];
+    }
+
+    try {
+      const tsContent = await readFile(tsFilePath, "utf-8");
+      return this.parseExternalPropsFile(tsContent, propsVarName);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Parse props from an external TypeScript file (Element Plus buildProps pattern)
+   * Handles patterns like:
+   *   export const rateProps = buildProps({ ... })
+   *   export const rateProps = { ... }
+   */
+  private parseExternalPropsFile(
+    content: string,
+    propsVarName: string,
+  ): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    // Match: export const rateProps = buildProps({ ... }) or export const rateProps = { ... }
+    // We need to find the props object definition
+    const propsDefRegex = new RegExp(
+      `(?:export\\s+)?const\\s+${propsVarName}\\s*=\\s*(?:buildProps\\s*)?\\(\\s*\\{`,
+    );
+    const match = content.match(propsDefRegex);
+    if (!match || match.index === undefined) {
+      return [];
+    }
+
+    // Find the opening brace position
+    const braceStart = content.indexOf('{', match.index);
+    if (braceStart === -1) {
+      return [];
+    }
+
+    // Extract the balanced braces content
+    const propsContent = extractBalancedBraces(content, braceStart);
+    if (!propsContent) {
+      return [];
+    }
+
+    // Parse the props from the object
+    this.parseElementPlusProps(propsContent, props);
+
+    return props;
+  }
+
+  /**
+   * Parse Element Plus style props object
+   * Handles patterns like:
+   *   modelValue: { type: Number, default: 0 }
+   *   disabled: { type: Boolean, default: undefined }
+   *   allowHalf: Boolean
+   */
+  private parseElementPlusProps(propsStr: string, props: PropDefinition[]): void {
+    const seenProps = new Set<string>();
+
+    // First pass: Match complex props with object definition
+    // propName: { type: Type, ... }
+    const complexRegex = /(\w+):\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g;
+    for (const m of propsStr.matchAll(complexRegex)) {
+      if (m[1] && m[2]) {
+        const propName = m[1];
+        const propContent = m[2];
+
+        // Skip if prop name is 'type' (nested definition)
+        if (propName === 'type') continue;
+
+        // Extract type from the prop definition
+        const typeMatch = propContent.match(/type:\s*(\w+)/);
+        if (typeMatch?.[1]) {
+          const isRequired = /required:\s*true/.test(propContent);
+
+          if (!seenProps.has(propName)) {
+            seenProps.add(propName);
+            props.push({
+              name: propName,
+              type: typeMatch[1].toLowerCase(),
+              required: isRequired,
+            });
+          }
+        }
+      }
+    }
+
+    // Second pass: Match shorthand props (propName: Type)
+    // allowHalf: Boolean, showText: Boolean
+    const simpleRegex = /(\w+):\s*(String|Number|Boolean|Array|Object|Function)(?:\s*,|\s*$|\s*\n)/g;
+    for (const m of propsStr.matchAll(simpleRegex)) {
+      if (m[1] && m[2]) {
+        const propName = m[1];
+        // Skip 'type' keyword
+        if (propName === 'type') continue;
+
+        if (!seenProps.has(propName)) {
+          seenProps.add(propName);
+          props.push({
+            name: propName,
+            type: m[2].toLowerCase(),
+            required: false,
+          });
+        }
+      }
+    }
   }
 
   private parseObjectProps(propsStr: string, props: PropDefinition[]): void {

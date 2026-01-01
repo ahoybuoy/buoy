@@ -340,3 +340,177 @@ const emit = defineEmits<{
 const handleClick = (e: MouseEvent) => emit('click', e);
 </script>
 `;
+
+// Element Plus pattern: external props file (the Vue component)
+export const ELEMENT_PLUS_COMPONENT_VUE = `
+<template>
+  <div :class="ns.b()">
+    <span>{{ text }}</span>
+  </div>
+</template>
+
+<script lang="ts" setup>
+import { computed } from 'vue'
+import { rateProps } from './rate'
+
+defineOptions({
+  name: 'ElRate',
+})
+
+const props = defineProps(rateProps)
+</script>
+`;
+
+// Element Plus pattern: external props file (the TypeScript props definition)
+export const ELEMENT_PLUS_PROPS_TS = `
+import { buildProps, definePropType } from '@element-plus/utils'
+import type { ExtractPropTypes } from 'vue'
+
+export const rateProps = buildProps({
+  modelValue: {
+    type: Number,
+    default: 0,
+  },
+  max: {
+    type: Number,
+    default: 5,
+  },
+  size: {
+    type: String,
+    default: '',
+  },
+  disabled: {
+    type: Boolean,
+    default: undefined,
+  },
+  allowHalf: Boolean,
+  lowThreshold: {
+    type: Number,
+    default: 2,
+  },
+  highThreshold: {
+    type: Number,
+    default: 4,
+  },
+  colors: {
+    type: definePropType<string[]>([Array, Object]),
+    default: () => [],
+  },
+} as const)
+
+export type RateProps = ExtractPropTypes<typeof rateProps>
+`;
+
+// PrimeVue pattern: Options API component that extends a base
+export const PRIMEVUE_CHILD_VUE = `
+<template>
+  <div :class="cx('root')">
+    <slot></slot>
+  </div>
+</template>
+
+<script>
+import BaseTabs from './BaseTabs.vue';
+
+export default {
+  name: 'Tabs',
+  extends: BaseTabs,
+  inheritAttrs: false,
+  emits: ['update:value'],
+  methods: {
+    updateValue(newValue) {
+      this.$emit('update:value', newValue);
+    }
+  }
+};
+</script>
+`;
+
+// PrimeVue pattern: Base component with props
+export const PRIMEVUE_BASE_VUE = `
+<script>
+import BaseComponent from '@primevue/core/basecomponent';
+
+export default {
+  name: 'BaseTabs',
+  extends: BaseComponent,
+  props: {
+    value: {
+      type: [String, Number],
+      default: undefined
+    },
+    lazy: {
+      type: Boolean,
+      default: false
+    },
+    scrollable: {
+      type: Boolean,
+      default: false
+    },
+    showNavigators: {
+      type: Boolean,
+      default: true
+    },
+    tabindex: {
+      type: Number,
+      default: 0
+    }
+  }
+};
+</script>
+`;
+
+// Multiple script blocks pattern (Vuetify docs style)
+export const MULTIPLE_SCRIPT_BLOCKS_VUE = `
+<template>
+  <span class="tooltip-btn">
+    <v-btn :variant="variant" v-bind="$attrs" icon>
+      <v-icon :icon="icon" />
+    </v-btn>
+  </span>
+</template>
+
+<script setup lang="ts">
+import type { PropType } from 'vue'
+
+defineProps({
+  icon: String,
+  path: String,
+  variant: {
+    type: String as PropType<'text' | 'outlined' | 'flat'>,
+    default: 'text',
+  },
+})
+</script>
+
+<script lang="ts">
+export default {
+  inheritAttrs: false,
+}
+</script>
+`;
+
+// defineProps with runtime object syntax (common pattern)
+export const RUNTIME_PROPS_OBJECT_VUE = `
+<template>
+  <div>{{ title }}</div>
+</template>
+
+<script setup lang="ts">
+defineProps({
+  title: {
+    type: String,
+    required: true
+  },
+  count: {
+    type: Number,
+    default: 0
+  },
+  items: {
+    type: Array,
+    default: () => []
+  },
+  onClick: Function
+})
+</script>
+`;
