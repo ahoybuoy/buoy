@@ -20,18 +20,20 @@ export function extractHtmlStyleAttributes(content: string): StyleMatch[] {
 
   // Track line/column positions
   const lines = content.split('\n');
-  let currentPos = 0;
 
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const line = lines[lineNum]!;
 
-    // Match style="..." or style='...'
-    const styleRegex = /style\s*=\s*["']([^"']+)["']/gi;
+    // Match style="..." with double quotes
+    // Use negative lookbehind to avoid matching data-style, ng-style, v-bind:style, :style, etc.
+    // Handle both double and single quoted values separately to support nested quotes
+    const doubleQuoteRegex = /(?<![:\w-])style\s*=\s*"([^"]*)"/gi;
     let match;
 
-    while ((match = styleRegex.exec(line)) !== null) {
+    while ((match = doubleQuoteRegex.exec(line)) !== null) {
       const css = match[1];
-      if (css) {
+      // Skip empty or whitespace-only values
+      if (css && css.trim()) {
         matches.push({
           css,
           line: lineNum + 1,
@@ -41,7 +43,20 @@ export function extractHtmlStyleAttributes(content: string): StyleMatch[] {
       }
     }
 
-    currentPos += line.length + 1; // +1 for newline
+    // Match style='...' with single quotes (allows nested double quotes)
+    const singleQuoteRegex = /(?<![:\w-])style\s*=\s*'([^']*)'/gi;
+    while ((match = singleQuoteRegex.exec(line)) !== null) {
+      const css = match[1];
+      // Skip empty or whitespace-only values
+      if (css && css.trim()) {
+        matches.push({
+          css,
+          line: lineNum + 1,
+          column: match.index + 1,
+          context: 'inline',
+        });
+      }
+    }
   }
 
   return matches;

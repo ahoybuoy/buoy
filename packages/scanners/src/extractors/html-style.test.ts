@@ -1,0 +1,395 @@
+/**
+ * Tests for HTML Style Extractor
+ * Covers inline style="" attributes and <style> blocks extraction
+ */
+
+import { describe, it, expect } from 'vitest';
+import {
+  extractHtmlStyleAttributes,
+  extractStyleBlocks,
+  extractAllHtmlStyles,
+} from './html-style.js';
+
+describe('extractHtmlStyleAttributes', () => {
+  describe('basic inline styles', () => {
+    it('extracts simple style attribute with double quotes', () => {
+      const content = `<div style="color: red"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: red');
+      expect(result[0]!.line).toBe(1);
+      expect(result[0]!.context).toBe('inline');
+    });
+
+    it('extracts simple style attribute with single quotes', () => {
+      const content = `<div style='color: blue'></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: blue');
+    });
+
+    it('extracts multiple style attributes in same line', () => {
+      const content = `<div style="color: red"></div><span style="padding: 10px"></span>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(2);
+      expect(result[0]!.css).toBe('color: red');
+      expect(result[1]!.css).toBe('padding: 10px');
+    });
+
+    it('extracts style with multiple properties', () => {
+      const content = `<div style="color: red; padding: 16px; margin: 8px"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: red; padding: 16px; margin: 8px');
+    });
+  });
+
+  describe('complex CSS values', () => {
+    it('extracts style with CSS variables', () => {
+      const content = `<div style="color: var(--primary-color)"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: var(--primary-color)');
+    });
+
+    it('extracts style with CSS custom property definition', () => {
+      const content = `<div style="--custom-width: 100px; width: var(--custom-width)"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('--custom-width: 100px; width: var(--custom-width)');
+    });
+
+    it('extracts style with calc() function', () => {
+      const content = `<div style="width: calc(100% - 20px)"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('width: calc(100% - 20px)');
+    });
+
+    it('extracts style with complex clip-path', () => {
+      const content = `<div style="clip-path: inset(0 calc(100% - var(--progress)) 0 0 round 9px)"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('clip-path: inset(0 calc(100% - var(--progress)) 0 0 round 9px)');
+    });
+
+    it('extracts style with rgb/rgba functions', () => {
+      const content = `<div style="background: rgba(255, 128, 0, 0.5)"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('background: rgba(255, 128, 0, 0.5)');
+    });
+
+    it('extracts style with linear-gradient', () => {
+      const content = `<div style="background: linear-gradient(90deg, red, blue)"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('background: linear-gradient(90deg, red, blue)');
+    });
+
+    it('extracts style with url() containing quotes', () => {
+      const content = `<div style="background: url('image.png')"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('url');
+    });
+  });
+
+  describe('whitespace handling', () => {
+    it('extracts style with spaces around equals', () => {
+      const content = `<div style = "color: red"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: red');
+    });
+
+    it('extracts style with extra whitespace in value', () => {
+      const content = `<div style="  color:   red  "></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('  color:   red  ');
+    });
+  });
+
+  describe('line number tracking', () => {
+    it('returns correct line number for multiline content', () => {
+      const content = `<html>
+<head></head>
+<body>
+  <div style="color: red"></div>
+</body>
+</html>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.line).toBe(4);
+    });
+
+    it('returns correct line numbers for multiple styles', () => {
+      const content = `<div style="color: red"></div>
+<div>no style</div>
+<div style="color: blue"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(2);
+      expect(result[0]!.line).toBe(1);
+      expect(result[1]!.line).toBe(3);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('ignores empty style attribute', () => {
+      const content = `<div style=""></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(0);
+    });
+
+    it('ignores whitespace-only style attribute', () => {
+      const content = `<div style="   "></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(0);
+    });
+
+    it('handles self-closing tags', () => {
+      const content = `<img style="width: 100px" />`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('width: 100px');
+    });
+
+    it('handles case-insensitive STYLE attribute', () => {
+      const content = `<div STYLE="color: red"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: red');
+    });
+
+    it('does not match data-style or other similar attributes', () => {
+      const content = `<div data-style="not-css" ng-style="obj"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(0);
+    });
+
+    it('handles nested quotes in single-quoted attribute', () => {
+      const content = `<div style='content: "hello"'></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('content: "hello"');
+    });
+  });
+
+  describe('template syntax handling', () => {
+    it('handles ERB syntax in style value', () => {
+      const content = `<div style="color: <%= @color %>"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('<%= @color %>');
+    });
+
+    it('handles Blade syntax in style value', () => {
+      const content = `<div style="color: {{ $color }}"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('{{ $color }}');
+    });
+
+    it('handles Twig syntax in style value', () => {
+      const content = `<div style="color: {{ color }}"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('{{ color }}');
+    });
+
+    it('handles Jinja/Django syntax in style value', () => {
+      const content = `<div style="color: {{ theme.primary }}"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('{{ theme.primary }}');
+    });
+
+    it('handles PHP syntax in style value', () => {
+      const content = `<div style="color: <?php echo $color; ?>"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('<?php');
+    });
+  });
+});
+
+describe('extractStyleBlocks', () => {
+  describe('basic style blocks', () => {
+    it('extracts simple style block', () => {
+      const content = `<style>
+  .container { color: red; }
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('.container');
+      expect(result[0]!.context).toBe('style-block');
+    });
+
+    it('extracts multiple style blocks', () => {
+      const content = `<style>.a { color: red; }</style>
+<div></div>
+<style>.b { color: blue; }</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(2);
+    });
+
+    it('returns correct line number for style block', () => {
+      const content = `<html>
+<head>
+  <style>
+    .container { color: red; }
+  </style>
+</head>
+</html>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.line).toBe(3);
+    });
+  });
+
+  describe('style blocks with attributes', () => {
+    it('extracts style block with lang="sass"', () => {
+      const content = `<style lang="sass">
+.container
+  color: red
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('.container');
+    });
+
+    it('extracts style block with lang="scss"', () => {
+      const content = `<style lang="scss">
+.container {
+  color: red;
+  .nested { padding: 10px; }
+}
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('.container');
+      expect(result[0]!.css).toContain('.nested');
+    });
+
+    it('extracts style block with scoped attribute', () => {
+      const content = `<style scoped>
+.container { color: red; }
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('.container');
+    });
+
+    it('extracts style block with both lang and scoped', () => {
+      const content = `<style lang="sass" scoped>
+.container
+  color: red
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+    });
+
+    it('extracts style block with type="text/css"', () => {
+      const content = `<style type="text/css">
+.container { color: red; }
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+    });
+
+    it('extracts style block with module attribute (Vue CSS modules)', () => {
+      const content = `<style module>
+.container { color: red; }
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('ignores empty style block', () => {
+      const content = `<style></style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(0);
+    });
+
+    it('ignores whitespace-only style block', () => {
+      const content = `<style>
+
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(0);
+    });
+
+    it('handles STYLE tag case-insensitively', () => {
+      const content = `<STYLE>.container { color: red; }</STYLE>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+    });
+
+    it('handles style block with comments', () => {
+      const content = `<style>
+/* Comment */
+.container { color: red; }
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('/* Comment */');
+    });
+
+    it('handles style block with newlines in content', () => {
+      const content = `<style>
+.a {
+  color: red;
+}
+
+.b {
+  padding: 10px;
+}
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('.a');
+      expect(result[0]!.css).toContain('.b');
+    });
+  });
+});
+
+describe('extractAllHtmlStyles', () => {
+  it('combines inline styles and style blocks', () => {
+    const content = `<style>.a { color: red; }</style>
+<div style="padding: 10px"></div>`;
+    const result = extractAllHtmlStyles(content);
+    expect(result).toHaveLength(2);
+
+    const inlineResult = result.find(r => r.context === 'inline');
+    const blockResult = result.find(r => r.context === 'style-block');
+
+    expect(inlineResult).toBeDefined();
+    expect(inlineResult!.css).toBe('padding: 10px');
+
+    expect(blockResult).toBeDefined();
+    expect(blockResult!.css).toContain('.a');
+  });
+
+  it('handles content with only inline styles', () => {
+    const content = `<div style="color: red"></div>`;
+    const result = extractAllHtmlStyles(content);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.context).toBe('inline');
+  });
+
+  it('handles content with only style blocks', () => {
+    const content = `<style>.a { color: red; }</style>`;
+    const result = extractAllHtmlStyles(content);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.context).toBe('style-block');
+  });
+
+  it('handles content with no styles', () => {
+    const content = `<div class="container">Hello</div>`;
+    const result = extractAllHtmlStyles(content);
+    expect(result).toHaveLength(0);
+  });
+});
