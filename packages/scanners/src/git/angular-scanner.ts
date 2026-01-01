@@ -20,6 +20,7 @@ interface AngularSource {
   exportName: string;
   selector: string;
   line: number;
+  exportAs?: string;
 }
 
 export class AngularComponentScanner extends Scanner<
@@ -58,13 +59,13 @@ export class AngularComponentScanner extends Scanner<
     const relativePath = relative(this.config.projectRoot, filePath);
 
     const visit = (node: ts.Node) => {
-      // Find classes with @Component decorator
+      // Find classes with @Component or @Directive decorator
       if (ts.isClassDeclaration(node) && node.name) {
-        const componentDecorator = this.findComponentDecorator(node);
-        if (componentDecorator) {
+        const decorator = this.findAngularDecorator(node);
+        if (decorator) {
           const comp = this.extractComponent(
             node,
-            componentDecorator,
+            decorator,
             sourceFile,
             relativePath,
           );
@@ -79,7 +80,10 @@ export class AngularComponentScanner extends Scanner<
     return components;
   }
 
-  private findComponentDecorator(
+  /**
+   * Find @Component or @Directive decorator on a class
+   */
+  private findAngularDecorator(
     node: ts.ClassDeclaration,
   ): ts.Decorator | undefined {
     const modifiers = ts.getDecorators(node);
@@ -88,7 +92,10 @@ export class AngularComponentScanner extends Scanner<
     return modifiers.find((decorator) => {
       if (ts.isCallExpression(decorator.expression)) {
         const expr = decorator.expression.expression;
-        return ts.isIdentifier(expr) && expr.text === "Component";
+        return (
+          ts.isIdentifier(expr) &&
+          (expr.text === "Component" || expr.text === "Directive")
+        );
       }
       return false;
     });
@@ -104,6 +111,7 @@ export class AngularComponentScanner extends Scanner<
 
     const name = node.name.getText(sourceFile);
     const selector = this.extractSelector(decorator, sourceFile);
+    const exportAs = this.extractExportAs(decorator, sourceFile);
     const line =
       sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line +
       1;
@@ -114,20 +122,30 @@ export class AngularComponentScanner extends Scanner<
       exportName: name,
       selector: selector || name.replace("Component", "").toLowerCase(),
       line,
+      exportAs,
     };
 
+    // Extract inputs from @Input decorators and class members
     const props = this.extractInputs(node, sourceFile);
+    // Extract inputs defined in decorator metadata (inputs: [...])
+    const metadataInputs = this.extractDecoratorMetadataInputs(
+      decorator,
+      sourceFile,
+    );
     const outputs = this.extractOutputs(node, sourceFile);
     const modelSignals = this.extractModelSignals(node, sourceFile);
+
+    // Extract hostDirectives as dependencies
+    const hostDirectives = this.extractHostDirectives(decorator, sourceFile);
 
     return {
       id: createComponentId(source as any, name),
       name,
       source: source as any,
-      props: [...props, ...outputs, ...modelSignals],
+      props: [...props, ...metadataInputs, ...outputs, ...modelSignals],
       variants: [],
       tokens: [],
-      dependencies: [],
+      dependencies: hostDirectives,
       metadata: {
         deprecated: this.hasDeprecatedDecorator(node),
         tags: [],
@@ -160,6 +178,160 @@ export class AngularComponentScanner extends Scanner<
     }
 
     return null;
+  }
+
+  /**
+   * Extract exportAs from decorator metadata
+   */
+  private extractExportAs(
+    decorator: ts.Decorator,
+    _sourceFile: ts.SourceFile,
+  ): string | undefined {
+    if (!ts.isCallExpression(decorator.expression)) return undefined;
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return undefined;
+
+    const config = args[0];
+    if (!config || !ts.isObjectLiteralExpression(config)) return undefined;
+
+    for (const prop of config.properties) {
+      if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+        if (
+          prop.name.text === "exportAs" &&
+          ts.isStringLiteral(prop.initializer)
+        ) {
+          return prop.initializer.text;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Extract inputs defined in decorator metadata: inputs: ['name', { name: 'x', alias: 'y' }]
+   */
+  private extractDecoratorMetadataInputs(
+    decorator: ts.Decorator,
+    _sourceFile: ts.SourceFile,
+  ): ExtendedPropDefinition[] {
+    const inputs: ExtendedPropDefinition[] = [];
+
+    if (!ts.isCallExpression(decorator.expression)) return inputs;
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return inputs;
+
+    const config = args[0];
+    if (!config || !ts.isObjectLiteralExpression(config)) return inputs;
+
+    for (const prop of config.properties) {
+      if (
+        ts.isPropertyAssignment(prop) &&
+        ts.isIdentifier(prop.name) &&
+        prop.name.text === "inputs" &&
+        ts.isArrayLiteralExpression(prop.initializer)
+      ) {
+        for (const element of prop.initializer.elements) {
+          // String form: 'inputName'
+          if (ts.isStringLiteral(element)) {
+            inputs.push({
+              name: element.text,
+              type: "unknown",
+              required: false,
+            });
+          }
+          // Object form: { name: 'inputName', alias: 'aliasName' }
+          else if (ts.isObjectLiteralExpression(element)) {
+            let inputName: string | undefined;
+            let alias: string | undefined;
+
+            for (const objProp of element.properties) {
+              if (
+                ts.isPropertyAssignment(objProp) &&
+                ts.isIdentifier(objProp.name)
+              ) {
+                if (
+                  objProp.name.text === "name" &&
+                  ts.isStringLiteral(objProp.initializer)
+                ) {
+                  inputName = objProp.initializer.text;
+                } else if (
+                  objProp.name.text === "alias" &&
+                  ts.isStringLiteral(objProp.initializer)
+                ) {
+                  alias = objProp.initializer.text;
+                }
+              }
+            }
+
+            if (inputName) {
+              const inputProp: ExtendedPropDefinition = {
+                name: inputName,
+                type: "unknown",
+                required: false,
+              };
+              if (alias) {
+                inputProp.description = `Alias: ${alias}`;
+              }
+              inputs.push(inputProp);
+            }
+          }
+        }
+      }
+    }
+
+    return inputs;
+  }
+
+  /**
+   * Extract hostDirectives from decorator metadata as dependencies
+   */
+  private extractHostDirectives(
+    decorator: ts.Decorator,
+    _sourceFile: ts.SourceFile,
+  ): string[] {
+    const dependencies: string[] = [];
+
+    if (!ts.isCallExpression(decorator.expression)) return dependencies;
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return dependencies;
+
+    const config = args[0];
+    if (!config || !ts.isObjectLiteralExpression(config)) return dependencies;
+
+    for (const prop of config.properties) {
+      if (
+        ts.isPropertyAssignment(prop) &&
+        ts.isIdentifier(prop.name) &&
+        prop.name.text === "hostDirectives" &&
+        ts.isArrayLiteralExpression(prop.initializer)
+      ) {
+        for (const element of prop.initializer.elements) {
+          // Simple reference: Bind
+          if (ts.isIdentifier(element)) {
+            dependencies.push(element.text);
+          }
+          // Complex form: { directive: SomeDirective, inputs: [...], outputs: [...] }
+          else if (ts.isObjectLiteralExpression(element)) {
+            for (const objProp of element.properties) {
+              if (
+                ts.isPropertyAssignment(objProp) &&
+                ts.isIdentifier(objProp.name) &&
+                objProp.name.text === "directive" &&
+                ts.isIdentifier(objProp.initializer)
+              ) {
+                dependencies.push(objProp.initializer.text);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return dependencies;
   }
 
   /**

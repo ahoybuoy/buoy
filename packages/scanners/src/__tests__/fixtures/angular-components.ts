@@ -296,3 +296,94 @@ export class StandaloneCardComponent {
   @Output() cardClick = new EventEmitter<void>();
 }
 `;
+
+// Simple directive (Angular Material-style)
+export const SIMPLE_DIRECTIVE_ANGULAR = `
+import { Directive, Input } from '@angular/core';
+
+@Directive({
+  selector: '[matTooltip]',
+})
+export class MatTooltip {
+  @Input('matTooltip') message: string = '';
+  @Input() matTooltipPosition: 'above' | 'below' | 'left' | 'right' = 'below';
+}
+`;
+
+// Directive with inputs defined in decorator metadata
+export const DIRECTIVE_WITH_METADATA_INPUTS = `
+import { Directive } from '@angular/core';
+import { CdkTreeNodeToggle } from '@angular/cdk/tree';
+
+@Directive({
+  selector: '[matTreeNodeToggle]',
+  providers: [{provide: CdkTreeNodeToggle, useExisting: MatTreeNodeToggle}],
+  inputs: [{name: 'recursive', alias: 'matTreeNodeToggleRecursive'}],
+})
+export class MatTreeNodeToggle<T, K = T> extends CdkTreeNodeToggle<T, K> {}
+`;
+
+// Directive with hostDirectives (Angular 15+)
+export const DIRECTIVE_WITH_HOST_DIRECTIVES = `
+import { Directive, Input, input } from '@angular/core';
+import { Bind } from 'primeng/bind';
+import { BaseComponent, PARENT_INSTANCE } from 'primeng/basecomponent';
+import { ButtonStyle } from './style/buttonstyle';
+
+@Directive({
+  selector: '[pButton]',
+  standalone: true,
+  providers: [ButtonStyle, { provide: PARENT_INSTANCE, useExisting: ButtonDirective }],
+  host: {
+    '[class.p-button-icon-only]': 'isIconOnly()',
+  },
+  hostDirectives: [Bind],
+})
+export class ButtonDirective extends BaseComponent {
+  @Input() hostName: string = '';
+  readonly fluid = input(false);
+}
+`;
+
+// Complex directive with multiple features
+export const COMPLEX_DIRECTIVE_ANGULAR = `
+import { Directive, Input, Output, EventEmitter, input, output, booleanAttribute } from '@angular/core';
+import { Bind } from 'primeng/bind';
+
+@Directive({
+  selector: 'input[matSliderThumb]',
+  exportAs: 'matSliderThumb',
+  standalone: true,
+  host: {
+    'class': 'mdc-slider__input',
+    'type': 'range',
+    '(change)': '_onChange()',
+  },
+  inputs: ['min', 'max', 'step'],
+  hostDirectives: [
+    Bind,
+    { directive: SomeOtherDirective, inputs: ['someInput'], outputs: ['someOutput'] }
+  ],
+})
+export class MatSliderThumb {
+  @Input({ transform: booleanAttribute }) disabled: boolean = false;
+  @Output() valueChange = new EventEmitter<number>();
+  readonly dragStart = output<void>();
+}
+`;
+
+// Directive with string inputs in decorator (simple form)
+export const DIRECTIVE_WITH_STRING_INPUTS = `
+import { Directive } from '@angular/core';
+
+@Directive({
+  selector: '[matSort]',
+  inputs: ['matSortActive', 'matSortDirection', 'matSortDisableClear'],
+  outputs: ['matSortChange'],
+})
+export class MatSort {
+  matSortActive: string = '';
+  matSortDirection: 'asc' | 'desc' | '' = '';
+  matSortDisableClear: boolean = false;
+}
+`;

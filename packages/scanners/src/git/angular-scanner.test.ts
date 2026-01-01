@@ -16,6 +16,11 @@ import {
   ANGULAR_MATERIAL_SIGNALS,
   SIGNAL_INPUTS_WITH_OPTIONS,
   STANDALONE_COMPONENT_ANGULAR,
+  SIMPLE_DIRECTIVE_ANGULAR,
+  DIRECTIVE_WITH_METADATA_INPUTS,
+  DIRECTIVE_WITH_HOST_DIRECTIVES,
+  COMPLEX_DIRECTIVE_ANGULAR,
+  DIRECTIVE_WITH_STRING_INPUTS,
 } from '../__tests__/fixtures/angular-components.js';
 import { AngularComponentScanner } from './angular-scanner.js';
 
@@ -722,6 +727,192 @@ describe('AngularComponentScanner', () => {
 
       // Should find both components
       expect(result.items.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('@Directive detection', () => {
+    it('detects Angular directives with @Directive decorator', async () => {
+      vol.fromJSON({
+        '/project/src/tooltip.directive.ts': SIMPLE_DIRECTIVE_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('MatTooltip');
+      expect(result.items[0]!.source.type).toBe('angular');
+    });
+
+    it('extracts selector from directive decorator', async () => {
+      vol.fromJSON({
+        '/project/src/tooltip.directive.ts': SIMPLE_DIRECTIVE_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const source = result.items[0]!.source as { selector: string };
+      expect(source.selector).toBe('[matTooltip]');
+    });
+
+    it('extracts @Input props from directives', async () => {
+      vol.fromJSON({
+        '/project/src/tooltip.directive.ts': SIMPLE_DIRECTIVE_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const messageProp = result.items[0]!.props.find(p => p.name === 'message');
+      expect(messageProp).toBeDefined();
+      expect(messageProp!.description).toContain('matTooltip');
+
+      const positionProp = result.items[0]!.props.find(p => p.name === 'matTooltipPosition');
+      expect(positionProp).toBeDefined();
+    });
+
+    it('detects both components and directives in the same scan', async () => {
+      vol.fromJSON({
+        '/project/src/button.component.ts': SIMPLE_BUTTON_ANGULAR,
+        '/project/src/tooltip.directive.ts': SIMPLE_DIRECTIVE_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(2);
+      const names = result.items.map(c => c.name);
+      expect(names).toContain('ButtonComponent');
+      expect(names).toContain('MatTooltip');
+    });
+  });
+
+  describe('decorator metadata inputs array', () => {
+    it('extracts inputs defined in decorator metadata as object array', async () => {
+      vol.fromJSON({
+        '/project/src/tree-toggle.directive.ts': DIRECTIVE_WITH_METADATA_INPUTS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      const recursiveProp = result.items[0]!.props.find(p => p.name === 'recursive');
+      expect(recursiveProp).toBeDefined();
+      expect(recursiveProp!.description).toContain('matTreeNodeToggleRecursive');
+    });
+
+    it('extracts inputs defined in decorator metadata as string array', async () => {
+      vol.fromJSON({
+        '/project/src/sort.directive.ts': DIRECTIVE_WITH_STRING_INPUTS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      const activeProp = result.items[0]!.props.find(p => p.name === 'matSortActive');
+      expect(activeProp).toBeDefined();
+
+      const directionProp = result.items[0]!.props.find(p => p.name === 'matSortDirection');
+      expect(directionProp).toBeDefined();
+    });
+
+    it('combines decorator metadata inputs with @Input decorator inputs', async () => {
+      vol.fromJSON({
+        '/project/src/slider.directive.ts': COMPLEX_DIRECTIVE_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Should have both decorator metadata inputs (min, max, step) and @Input (disabled)
+      const propNames = result.items[0]!.props.map(p => p.name);
+      expect(propNames).toContain('min');
+      expect(propNames).toContain('max');
+      expect(propNames).toContain('step');
+      expect(propNames).toContain('disabled');
+    });
+  });
+
+  describe('hostDirectives extraction', () => {
+    it('extracts hostDirectives as dependencies', async () => {
+      vol.fromJSON({
+        '/project/src/button.directive.ts': DIRECTIVE_WITH_HOST_DIRECTIVES,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.dependencies).toContain('Bind');
+    });
+
+    it('extracts complex hostDirectives with input/output forwarding', async () => {
+      vol.fromJSON({
+        '/project/src/slider.directive.ts': COMPLEX_DIRECTIVE_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items[0]!.dependencies).toContain('Bind');
+      expect(result.items[0]!.dependencies).toContain('SomeOtherDirective');
+    });
+  });
+
+  describe('directive exportAs extraction', () => {
+    it('extracts exportAs from directive metadata', async () => {
+      vol.fromJSON({
+        '/project/src/slider.directive.ts': COMPLEX_DIRECTIVE_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const source = result.items[0]!.source as { exportAs?: string };
+      expect(source.exportAs).toBe('matSliderThumb');
     });
   });
 });
