@@ -514,3 +514,41 @@ defineProps({
 })
 </script>
 `;
+
+// withDefaults with complex inline types including nested objects and callbacks
+export const WITH_DEFAULTS_COMPLEX_VUE = `
+<template>
+  <div>{{ data.items.length }}</div>
+</template>
+
+<script setup lang="ts">
+interface Props {
+  data: { items: string[]; meta: { total: number } };
+  onChange?: (value: string) => void;
+  options?: { label: string; value: number }[];
+  loading?: boolean;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  options: () => [],
+  loading: false
+});
+</script>
+`;
+
+// defineProps with interface type reference (type-only import pattern)
+export const TYPED_INTERFACE_PROPS_VUE = `
+<template>
+  <div :class="variant">{{ title }}</div>
+</template>
+
+<script setup lang="ts">
+interface CardProps {
+  title: string;
+  variant?: 'default' | 'outlined' | 'elevated';
+  loading?: boolean;
+}
+
+const props = defineProps<CardProps>();
+</script>
+`;

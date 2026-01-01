@@ -32,10 +32,41 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
   private static readonly DEFAULT_PATTERNS = ["**/*.vue"];
 
   async scan(): Promise<ScanResult<Component>> {
-    return this.runScan(
+    const result = await this.runScan(
       (file) => this.parseFile(file),
       VueComponentScanner.DEFAULT_PATTERNS,
     );
+
+    // Post-process: resolve extends inheritance
+    this.resolveExtendsInheritance(result.items);
+
+    return result;
+  }
+
+  /**
+   * Resolve props inheritance from extends pattern (PrimeVue).
+   * Components that use `extends: BaseComponent` inherit props from the base.
+   */
+  private resolveExtendsInheritance(components: Component[]): void {
+    // Build a map of component names to their props for quick lookup
+    const componentMap = new Map<string, Component>();
+    for (const comp of components) {
+      componentMap.set(comp.name, comp);
+    }
+
+    // Find components that extend others and merge props
+    for (const comp of components) {
+      // Cast metadata to VueMetadata to access Vue-specific fields
+      const metadata = comp.metadata as VueMetadata;
+      const extendsName = metadata.extendsComponent;
+      if (extendsName && comp.props.length === 0) {
+        const baseComponent = componentMap.get(extendsName);
+        if (baseComponent && baseComponent.props.length > 0) {
+          // Inherit props from base component
+          comp.props = [...baseComponent.props];
+        }
+      }
+    }
   }
 
   getSourceType(): string {
@@ -318,6 +349,33 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     return props;
   }
 
+  /**
+   * Extract props from an inline interface definition.
+   * Handles nested types with balanced braces.
+   */
+  private extractInterfaceProps(scriptContent: string, interfaceName: string): PropDefinition[] {
+    // Find the interface definition start
+    const interfaceRegex = new RegExp(`interface\\s+${interfaceName}\\s*\\{`);
+    const match = scriptContent.match(interfaceRegex);
+    if (!match || match.index === undefined) {
+      return [];
+    }
+
+    // Find the opening brace position
+    const braceStart = scriptContent.indexOf("{", match.index);
+    if (braceStart === -1) {
+      return [];
+    }
+
+    // Extract balanced braces content
+    const propsContent = extractBalancedBraces(scriptContent, braceStart);
+    if (!propsContent) {
+      return [];
+    }
+
+    return this.parseTypeProps(propsContent);
+  }
+
   private extractProps(
     scriptContent: string,
     isSetup: boolean,
@@ -331,13 +389,10 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
         /withDefaults\s*\(\s*defineProps<(\w+)>\s*\(\s*\)/,
       );
       if (withDefaultsMatch?.[1]) {
-        // Look for the interface definition
+        // Look for the interface definition with balanced braces (handles nested types)
         const interfaceName = withDefaultsMatch[1];
-        const interfaceMatch = scriptContent.match(
-          new RegExp(`interface\\s+${interfaceName}\\s*\\{([^}]+)\\}`),
-        );
-        if (interfaceMatch?.[1]) {
-          const parsedProps = this.parseTypeProps(interfaceMatch[1]);
+        const parsedProps = this.extractInterfaceProps(scriptContent, interfaceName);
+        if (parsedProps.length > 0) {
           props.push(...parsedProps);
         }
       }
@@ -355,6 +410,20 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
           );
           if (propsContent) {
             const parsedProps = this.parseTypeProps(propsContent);
+            props.push(...parsedProps);
+          }
+        }
+      }
+
+      // defineProps<InterfaceName>() where InterfaceName is defined inline
+      if (props.length === 0) {
+        const interfacePropsMatch = scriptContent.match(
+          /defineProps<(\w+)>\s*\(\s*\)/,
+        );
+        if (interfacePropsMatch?.[1]) {
+          const interfaceName = interfacePropsMatch[1];
+          const parsedProps = this.extractInterfaceProps(scriptContent, interfaceName);
+          if (parsedProps.length > 0) {
             props.push(...parsedProps);
           }
         }
@@ -599,15 +668,28 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
         if (propName === 'type') continue;
 
         // Extract type from the prop definition
+        // Handle single type: type: String
+        // Handle array type: type: [String, Number]
         const typeMatch = propContent.match(/type:\s*(\w+)/);
-        if (typeMatch?.[1]) {
+        const arrayTypeMatch = propContent.match(/type:\s*\[([^\]]+)\]/);
+
+        let typeStr: string | undefined;
+        if (arrayTypeMatch?.[1]) {
+          // Array type like [String, Number] - take the first type or join them
+          const types = arrayTypeMatch[1].split(',').map(t => t.trim().toLowerCase());
+          typeStr = types.join(' | ');
+        } else if (typeMatch?.[1]) {
+          typeStr = typeMatch[1].toLowerCase();
+        }
+
+        if (typeStr) {
           const isRequired = /required:\s*true/.test(propContent);
 
           if (!seenProps.has(propName)) {
             seenProps.add(propName);
             props.push({
               name: propName,
-              type: typeMatch[1].toLowerCase(),
+              type: typeStr,
               required: isRequired,
             });
           }

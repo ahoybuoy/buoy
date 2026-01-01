@@ -26,6 +26,8 @@ import {
   PRIMEVUE_BASE_VUE,
   MULTIPLE_SCRIPT_BLOCKS_VUE,
   RUNTIME_PROPS_OBJECT_VUE,
+  WITH_DEFAULTS_COMPLEX_VUE,
+  TYPED_INTERFACE_PROPS_VUE,
 } from '../__tests__/fixtures/vue-components.js';
 import { VueComponentScanner } from './vue-scanner.js';
 
@@ -573,6 +575,93 @@ describe('VueComponentScanner', () => {
 
       const onClickProp = result.items[0]!.props.find(p => p.name === 'onClick');
       expect(onClickProp).toBeDefined();
+    });
+
+    it('resolves inherited props from extends pattern (PrimeVue)', async () => {
+      vol.fromJSON({
+        '/project/src/tabs/Tabs.vue': PRIMEVUE_CHILD_VUE,
+        '/project/src/tabs/BaseTabs.vue': PRIMEVUE_BASE_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      // Should find both components
+      expect(result.items).toHaveLength(2);
+
+      const tabsComponent = result.items.find(c => c.name === 'Tabs');
+      expect(tabsComponent).toBeDefined();
+
+      // Should have extends metadata
+      expect(tabsComponent!.metadata.extendsComponent).toBe('BaseTabs');
+
+      // Should inherit props from BaseTabs
+      expect(tabsComponent!.props.length).toBeGreaterThan(0);
+
+      const valueProp = tabsComponent!.props.find(p => p.name === 'value');
+      expect(valueProp).toBeDefined();
+
+      const lazyProp = tabsComponent!.props.find(p => p.name === 'lazy');
+      expect(lazyProp).toBeDefined();
+      expect(lazyProp!.type).toBe('boolean');
+
+      const scrollableProp = tabsComponent!.props.find(p => p.name === 'scrollable');
+      expect(scrollableProp).toBeDefined();
+    });
+
+    it('handles withDefaults with complex inline types', async () => {
+      vol.fromJSON({
+        '/project/src/DataList.vue': WITH_DEFAULTS_COMPLEX_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(4);
+
+      const dataProp = result.items[0]!.props.find(p => p.name === 'data');
+      expect(dataProp).toBeDefined();
+      expect(dataProp!.type).toContain('items');
+
+      const onChangeProp = result.items[0]!.props.find(p => p.name === 'onChange');
+      expect(onChangeProp).toBeDefined();
+
+      const optionsProp = result.items[0]!.props.find(p => p.name === 'options');
+      expect(optionsProp).toBeDefined();
+    });
+
+    it('extracts props from defineProps with type reference to interface', async () => {
+      vol.fromJSON({
+        '/project/src/TypedCard.vue': TYPED_INTERFACE_PROPS_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(3);
+
+      const titleProp = result.items[0]!.props.find(p => p.name === 'title');
+      expect(titleProp).toBeDefined();
+      expect(titleProp!.type).toBe('string');
+      expect(titleProp!.required).toBe(true);
+
+      const variantProp = result.items[0]!.props.find(p => p.name === 'variant');
+      expect(variantProp).toBeDefined();
+      expect(variantProp!.required).toBe(false);
     });
   });
 });
