@@ -220,7 +220,26 @@ describe('TemplateScanner - Astro', () => {
 
       const result = await scanner.scan();
 
-      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(4);
+      // Should extract exactly 8 top-level props, NOT nested object members
+      expect(result.items[0]!.props).toHaveLength(8);
+
+      const propNames = result.items[0]!.props.map(p => p.name);
+      expect(propNames).toContain('title');
+      expect(propNames).toContain('subtitle');
+      expect(propNames).toContain('variant');
+      expect(propNames).toContain('size');
+      expect(propNames).toContain('disabled');
+      expect(propNames).toContain('onClick');
+      expect(propNames).toContain('items');
+      expect(propNames).toContain('config');
+
+      // Should NOT extract nested object members as top-level props
+      expect(propNames).not.toContain('id');
+      expect(propNames).not.toContain('label');
+      expect(propNames).not.toContain('icon');
+      expect(propNames).not.toContain('showHeader');
+      expect(propNames).not.toContain('showFooter');
+      expect(propNames).not.toContain('theme');
 
       const titleProp = result.items[0]!.props.find(p => p.name === 'title');
       expect(titleProp).toBeDefined();
@@ -233,6 +252,20 @@ describe('TemplateScanner - Astro', () => {
       const disabledProp = result.items[0]!.props.find(p => p.name === 'disabled');
       expect(disabledProp).toBeDefined();
       expect(disabledProp!.required).toBe(false);
+
+      // Should capture nested type properly
+      const itemsProp = result.items[0]!.props.find(p => p.name === 'items');
+      expect(itemsProp).toBeDefined();
+      expect(itemsProp!.required).toBe(true);
+      expect(itemsProp!.type).toContain('Array');
+      expect(itemsProp!.type).toContain('id');
+      expect(itemsProp!.type).toContain('label');
+
+      // config prop should be extracted (comes after nested Array<{...}>)
+      const configProp = result.items[0]!.props.find(p => p.name === 'config');
+      expect(configProp).toBeDefined();
+      expect(configProp!.required).toBe(true);
+      expect(configProp!.type).toContain('showHeader');
     });
 
     it('extracts props with external type references', async () => {

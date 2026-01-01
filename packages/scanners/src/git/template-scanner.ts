@@ -546,31 +546,130 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
 
     const frontmatter = frontmatterMatch[1];
 
-    // Try to match `interface Props { ... }` or `type Props = { ... }`
-    const interfaceMatch = frontmatter.match(/(?:interface|type)\s+Props\s*(?:=\s*)?\{([^}]+)\}/);
-    if (!interfaceMatch || !interfaceMatch[1]) return props;
+    // Find the start of Props definition
+    const propsStart = frontmatter.match(/(?:interface|type)\s+Props\s*(?:=\s*)?\{/);
+    if (!propsStart || propsStart.index === undefined) return props;
 
-    const propsBlock = interfaceMatch[1];
+    // Extract the Props block with balanced brace matching
+    const startIndex = propsStart.index + propsStart[0].length;
+    const propsBlock = this.extractBalancedBraces(frontmatter, startIndex);
+    if (!propsBlock) return props;
 
-    // Parse individual prop definitions
-    // Matches: propName: type; or propName?: type;
-    const propPattern = /(\w+)(\?)?:\s*([^;,\n]+)/g;
-    let match;
+    // Parse top-level prop definitions only
+    return this.parseTopLevelProps(propsBlock);
+  }
 
-    while ((match = propPattern.exec(propsBlock)) !== null) {
-      const propName = match[1]!;
-      const isOptional = match[2] === '?';
-      const propType = match[3]!.trim();
+  /**
+   * Extract content within balanced braces starting from a given index
+   */
+  private extractBalancedBraces(text: string, startIndex: number): string | null {
+    let depth = 1;
+    let index = startIndex;
+
+    while (index < text.length && depth > 0) {
+      const char = text[index];
+      if (char === '{') depth++;
+      else if (char === '}') depth--;
+      index++;
+    }
+
+    if (depth !== 0) return null;
+
+    // Return content excluding the final closing brace
+    return text.slice(startIndex, index - 1);
+  }
+
+  /**
+   * Parse only top-level props from a Props block, ignoring nested object members
+   */
+  private parseTopLevelProps(propsBlock: string): PropDefinition[] {
+    const props: PropDefinition[] = [];
+    let index = 0;
+    const length = propsBlock.length;
+
+    while (index < length) {
+      // Skip whitespace
+      while (index < length && /\s/.test(propsBlock[index]!)) index++;
+      if (index >= length) break;
+
+      // Parse prop name
+      const nameMatch = propsBlock.slice(index).match(/^(\w+)(\?)?:\s*/);
+      if (!nameMatch) {
+        // Not a prop definition, skip to next line
+        while (index < length && propsBlock[index] !== '\n') index++;
+        index++;
+        continue;
+      }
+
+      const propName = nameMatch[1]!;
+      const isOptional = nameMatch[2] === '?';
+      index += nameMatch[0].length;
+
+      // Extract the type, handling nested braces and generics
+      const typeResult = this.extractPropType(propsBlock, index);
+      if (!typeResult) break;
+
+      const { type, endIndex } = typeResult;
+      index = endIndex;
 
       props.push({
         name: propName,
-        type: propType,
+        type: type.trim(),
         required: !isOptional,
         defaultValue: undefined,
       });
     }
 
     return props;
+  }
+
+  /**
+   * Extract a property type, handling nested braces, generics, and complex types
+   */
+  private extractPropType(text: string, startIndex: number): { type: string; endIndex: number } | null {
+    let index = startIndex;
+    let depth = 0;
+    let angleBracketDepth = 0;
+    let parenDepth = 0;
+    const length = text.length;
+    const start = startIndex;
+
+    while (index < length) {
+      const char = text[index]!;
+      const prevChar = index > 0 ? text[index - 1] : '';
+
+      // Track nested structures
+      if (char === '{') depth++;
+      else if (char === '}') {
+        if (depth === 0) break; // End of Props block
+        depth--;
+      } else if (char === '<' && prevChar !== '=') {
+        // Don't count < in arrow functions (=>)
+        angleBracketDepth++;
+      } else if (char === '>' && prevChar !== '=') {
+        // Don't count > in arrow functions (=>)
+        if (angleBracketDepth > 0) angleBracketDepth--;
+      } else if (char === '(') parenDepth++;
+      else if (char === ')') parenDepth--;
+
+      // Semi-colon or newline at depth 0 ends the prop type
+      if (depth === 0 && angleBracketDepth === 0 && parenDepth === 0) {
+        if (char === ';' || char === '\n') {
+          const type = text.slice(start, index);
+          return { type, endIndex: index + 1 };
+        }
+      }
+
+      index++;
+    }
+
+    // Handle case where we reached end of block
+    if (index > start) {
+      const type = text.slice(start, index);
+      return { type, endIndex: index };
+    }
+
+    return null;
   }
 
   private extractComponentName(filePath: string): string {
