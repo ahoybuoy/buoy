@@ -97,6 +97,11 @@ export class ReactComponentScanner extends Scanner<
     const components: Component[] = [];
     const relativePath = relative(this.config.projectRoot, filePath);
 
+    // Track compound component namespaces: { "Menu": ["Button", "Item"] }
+    const compoundComponents: Map<string, Set<string>> = new Map();
+    // Track component references for resolving Object.assign
+    const componentNames: Set<string> = new Set();
+
     const visit = (node: ts.Node) => {
       // Function declarations: function Button() {}
       if (ts.isFunctionDeclaration(node) && node.name) {
@@ -106,7 +111,10 @@ export class ReactComponentScanner extends Scanner<
             sourceFile,
             relativePath,
           );
-          if (comp) components.push(comp);
+          if (comp) {
+            components.push(comp);
+            componentNames.add(comp.name);
+          }
         }
       }
 
@@ -114,13 +122,55 @@ export class ReactComponentScanner extends Scanner<
       if (ts.isVariableStatement(node)) {
         for (const decl of node.declarationList.declarations) {
           if (ts.isIdentifier(decl.name) && decl.initializer) {
-            if (this.isReactComponentExpression(decl.initializer, sourceFile)) {
+
+            // Check for Object.assign(Component, { ... }) pattern
+            const compoundInfo = this.extractCompoundComponentFromObjectAssign(
+              decl,
+              sourceFile,
+              relativePath,
+            );
+            if (compoundInfo) {
+              // Add the namespace component
+              components.push(compoundInfo.namespaceComponent);
+              componentNames.add(compoundInfo.namespaceComponent.name);
+              // Track sub-components for this namespace
+              if (!compoundComponents.has(compoundInfo.namespaceComponent.name)) {
+                compoundComponents.set(compoundInfo.namespaceComponent.name, new Set());
+              }
+              for (const subName of compoundInfo.subComponentNames) {
+                compoundComponents.get(compoundInfo.namespaceComponent.name)!.add(subName);
+              }
+            } else if (this.isReactComponentExpression(decl.initializer, sourceFile)) {
               const comp = this.extractVariableComponent(
                 decl,
                 sourceFile,
                 relativePath,
               );
-              if (comp) components.push(comp);
+              if (comp) {
+                components.push(comp);
+                componentNames.add(comp.name);
+              }
+            }
+          }
+        }
+      }
+
+      // Property assignment: Dialog.Title = DialogTitle
+      if (ts.isExpressionStatement(node)) {
+        const expr = node.expression;
+        if (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+          const left = expr.left;
+          // Check for Component.SubComponent pattern
+          if (ts.isPropertyAccessExpression(left)) {
+            const objName = left.expression.getText(sourceFile);
+            const propName = left.name.getText(sourceFile);
+
+            // Only process if the property name starts with uppercase (sub-component)
+            if (/^[A-Z]/.test(propName)) {
+              if (!compoundComponents.has(objName)) {
+                compoundComponents.set(objName, new Set());
+              }
+              compoundComponents.get(objName)!.add(propName);
             }
           }
         }
@@ -130,7 +180,118 @@ export class ReactComponentScanner extends Scanner<
     };
 
     ts.forEachChild(sourceFile, visit);
+
+    // Post-process: Add compound sub-components with namespace prefix
+    for (const [namespace, subNames] of compoundComponents) {
+      for (const subName of subNames) {
+        const compoundName = `${namespace}.${subName}`;
+
+        // Find the original component to get its metadata
+        const originalComponent = components.find((c) => c.name === subName);
+
+        // Get line from original component's source if it's a React source
+        let line = 1;
+        if (originalComponent && originalComponent.source.type === "react") {
+          line = originalComponent.source.line || 1;
+        }
+        const source: ReactSource = {
+          type: "react",
+          path: relativePath,
+          exportName: compoundName,
+          line,
+        };
+
+        components.push({
+          id: createComponentId(source, compoundName),
+          name: compoundName,
+          source,
+          props: originalComponent?.props || [],
+          variants: [],
+          tokens: [],
+          dependencies: originalComponent?.dependencies || [],
+          metadata: {
+            tags: ["compound-component"],
+            ...(originalComponent?.metadata || {}),
+          },
+          scannedAt: new Date(),
+        });
+      }
+    }
+
     return components;
+  }
+
+  /**
+   * Extract compound component from Object.assign(Component, { ... }) pattern
+   */
+  private extractCompoundComponentFromObjectAssign(
+    node: ts.VariableDeclaration,
+    sourceFile: ts.SourceFile,
+    relativePath: string,
+  ): { namespaceComponent: Component; subComponentNames: string[] } | null {
+    if (!ts.isIdentifier(node.name)) return null;
+    if (!node.initializer) return null;
+
+    // Check for Object.assign call
+    if (!ts.isCallExpression(node.initializer)) return null;
+
+    const callExpr = node.initializer;
+    const callee = callExpr.expression;
+
+    // Check if it's Object.assign
+    if (!ts.isPropertyAccessExpression(callee)) return null;
+    if (callee.expression.getText(sourceFile) !== "Object") return null;
+    if (callee.name.getText(sourceFile) !== "assign") return null;
+
+    // Need at least 2 arguments: base component and object with sub-components
+    if (callExpr.arguments.length < 2) return null;
+
+    const namespaceName = node.name.getText(sourceFile);
+
+    // Check for uppercase first letter
+    if (!/^[A-Z]/.test(namespaceName)) return null;
+
+    // Get sub-component names from the object literal (second argument)
+    const subComponentNames: string[] = [];
+    const secondArg = callExpr.arguments[1] as ts.Expression | undefined;
+
+    if (secondArg && ts.isObjectLiteralExpression(secondArg)) {
+      for (const prop of secondArg.properties) {
+        if (ts.isPropertyAssignment(prop) || ts.isShorthandPropertyAssignment(prop)) {
+          if (prop.name) {
+            const propName = prop.name.getText(sourceFile);
+            if (propName && /^[A-Z]/.test(propName)) {
+              subComponentNames.push(propName);
+            }
+          }
+        }
+      }
+    }
+
+    const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+
+    const source: ReactSource = {
+      type: "react",
+      path: relativePath,
+      exportName: namespaceName,
+      line,
+    };
+
+    const namespaceComponent: Component = {
+      id: createComponentId(source, namespaceName),
+      name: namespaceName,
+      source,
+      props: [],
+      variants: [],
+      tokens: [],
+      dependencies: [],
+      metadata: {
+        tags: ["compound-component-namespace"],
+      },
+      scannedAt: new Date(),
+    };
+
+    return { namespaceComponent, subComponentNames };
   }
 
   private isReactComponent(

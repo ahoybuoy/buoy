@@ -152,3 +152,85 @@ export const ThemeableButton = withProvider<ThemeableButtonProps>((props) => {
   return <button className={props.variant}>{props.children}</button>;
 });
 `;
+
+// Compound component with Object.assign pattern (HeadlessUI / Primer style)
+export const COMPOUND_COMPONENT_OBJECT_ASSIGN = `
+import React, { forwardRef } from 'react';
+
+const MenuRoot = forwardRef<HTMLDivElement>((props, ref) => {
+  return <div ref={ref} role="menu">{props.children}</div>;
+});
+
+const MenuButton = forwardRef<HTMLButtonElement>((props, ref) => {
+  return <button ref={ref}>{props.children}</button>;
+});
+
+const MenuItem = forwardRef<HTMLDivElement>((props, ref) => {
+  return <div ref={ref} role="menuitem">{props.children}</div>;
+});
+
+const MenuSeparator = () => {
+  return <hr />;
+};
+
+export const Menu = Object.assign(MenuRoot, {
+  Button: MenuButton,
+  Item: MenuItem,
+  Separator: MenuSeparator,
+});
+`;
+
+// Compound component with simple property assignment
+export const COMPOUND_COMPONENT_PROPERTY_ASSIGNMENT = `
+import React from 'react';
+
+export function Dialog({ children }: { children: React.ReactNode }) {
+  return <div role="dialog">{children}</div>;
+}
+
+function DialogTitle({ children }: { children: React.ReactNode }) {
+  return <h2>{children}</h2>;
+}
+
+function DialogContent({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>;
+}
+
+function DialogFooter({ children }: { children: React.ReactNode }) {
+  return <footer>{children}</footer>;
+}
+
+Dialog.Title = DialogTitle;
+Dialog.Content = DialogContent;
+Dialog.Footer = DialogFooter;
+`;
+
+// React Bootstrap style compound components
+export const COMPOUND_COMPONENT_REACT_BOOTSTRAP = `
+import React from 'react';
+import { forwardRef } from 'react';
+
+const CardRoot = forwardRef<HTMLDivElement>((props, ref) => {
+  return <div ref={ref} className="card">{props.children}</div>;
+});
+
+const CardHeader = forwardRef<HTMLDivElement>((props, ref) => {
+  return <div ref={ref} className="card-header">{props.children}</div>;
+});
+
+const CardBody = forwardRef<HTMLDivElement>((props, ref) => {
+  return <div ref={ref} className="card-body">{props.children}</div>;
+});
+
+const CardFooter = forwardRef<HTMLDivElement>((props, ref) => {
+  return <div ref={ref} className="card-footer">{props.children}</div>;
+});
+
+CardRoot.displayName = 'Card';
+
+export const Card = Object.assign(CardRoot, {
+  Header: CardHeader,
+  Body: CardBody,
+  Footer: CardFooter,
+});
+`;

@@ -12,6 +12,9 @@ import {
   SHADCN_CVA,
   WITH_CONTEXT_PATTERN,
   WITH_PROVIDER_PATTERN,
+  COMPOUND_COMPONENT_OBJECT_ASSIGN,
+  COMPOUND_COMPONENT_PROPERTY_ASSIGNMENT,
+  COMPOUND_COMPONENT_REACT_BOOTSTRAP,
 } from '../__tests__/fixtures/react-components.js';
 import { ReactComponentScanner } from './react-scanner.js';
 
@@ -252,6 +255,68 @@ describe('ReactComponentScanner', () => {
       expect(result.items).toHaveLength(1);
       expect(result.items[0]!.name).toBe('ThemeableButton');
       expect(result.items[0]!.source.type).toBe('react');
+    });
+  });
+
+  describe('compound component detection', () => {
+    it('detects compound components via Object.assign pattern', async () => {
+      vol.fromJSON({
+        '/project/src/Menu.tsx': COMPOUND_COMPONENT_OBJECT_ASSIGN,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      // Should detect the namespace component and all sub-components
+      expect(componentNames).toContain('Menu');
+      expect(componentNames).toContain('Menu.Button');
+      expect(componentNames).toContain('Menu.Item');
+      expect(componentNames).toContain('Menu.Separator');
+    });
+
+    it('detects compound components via property assignment', async () => {
+      vol.fromJSON({
+        '/project/src/Dialog.tsx': COMPOUND_COMPONENT_PROPERTY_ASSIGNMENT,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      // Should detect Dialog and its sub-components
+      expect(componentNames).toContain('Dialog');
+      expect(componentNames).toContain('Dialog.Title');
+      expect(componentNames).toContain('Dialog.Content');
+      expect(componentNames).toContain('Dialog.Footer');
+    });
+
+    it('detects React Bootstrap style compound components', async () => {
+      vol.fromJSON({
+        '/project/src/Card.tsx': COMPOUND_COMPONENT_REACT_BOOTSTRAP,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      // Should detect Card and its sub-components
+      expect(componentNames).toContain('Card');
+      expect(componentNames).toContain('Card.Header');
+      expect(componentNames).toContain('Card.Body');
+      expect(componentNames).toContain('Card.Footer');
     });
   });
 });
