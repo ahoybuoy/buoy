@@ -132,6 +132,330 @@ describe('TailwindConfigParser', () => {
       expect(spacingToken).toBeDefined();
       expect(spacingToken?.category).toBe('spacing');
     });
+
+    it('extracts HSL color values', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            extend: {
+              colors: {
+                gray: {
+                  50: "hsl(204 20% 99%)",
+                  100: "hsl(204 20% 96%)",
+                  500: "hsl(204 4% 32%)",
+                },
+              },
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.colors).toHaveProperty('gray');
+      const gray = result?.theme.colors?.gray as Record<string, string>;
+      expect(gray?.['50']).toBe('hsl(204 20% 99%)');
+      expect(gray?.['100']).toBe('hsl(204 20% 96%)');
+      expect(gray?.['500']).toBe('hsl(204 4% 32%)');
+
+      // Should create tokens for each shade
+      const gray50Token = result?.tokens.find(t => t.name === 'tw-gray-50');
+      expect(gray50Token).toBeDefined();
+      expect(gray50Token?.metadata?.tags).toContain('hsl');
+    });
+
+    it('extracts boxShadow from theme', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            boxShadow: {
+              sm: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+              DEFAULT: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
+              lg: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+              button: "inset 0 -1px 2px 0 rgb(0 0 0 / 0.05)",
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.boxShadow).toHaveProperty('sm');
+      expect(result?.theme.boxShadow).toHaveProperty('DEFAULT');
+      expect(result?.theme.boxShadow).toHaveProperty('lg');
+      expect(result?.theme.boxShadow).toHaveProperty('button');
+
+      const smShadow = result?.tokens.find(t => t.name === 'tw-shadow-sm');
+      expect(smShadow).toBeDefined();
+      expect(smShadow?.category).toBe('shadow');
+    });
+
+    it('extracts dropShadow from theme', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            dropShadow: {
+              sm: "drop-shadow(0 1px 1px rgb(0 0 0 / 0.05))",
+              DEFAULT: "drop-shadow(0 1px 2px rgb(0 0 0 / 0.1))",
+              lg: "drop-shadow(0 10px 8px rgb(0 0 0 / 0.04))",
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.dropShadow).toHaveProperty('sm');
+      expect(result?.theme.dropShadow).toHaveProperty('DEFAULT');
+      expect(result?.theme.dropShadow).toHaveProperty('lg');
+
+      const smDrop = result?.tokens.find(t => t.name === 'tw-drop-shadow-sm');
+      expect(smDrop).toBeDefined();
+      expect(smDrop?.category).toBe('shadow');
+    });
+
+    it('extracts fontFamily arrays', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            fontFamily: {
+              mono: ["Menlo", "Consolas", "Courier New", "monospace"],
+              sans: ["Inter", "ui-sans-serif", "system-ui"],
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.fontFamily).toHaveProperty('mono');
+      expect(result?.theme.fontFamily).toHaveProperty('sans');
+      expect(Array.isArray(result?.theme.fontFamily?.mono)).toBe(true);
+      expect(result?.theme.fontFamily?.mono).toContain('Menlo');
+      expect(result?.theme.fontFamily?.mono).toContain('monospace');
+
+      const monoToken = result?.tokens.find(t => t.name === 'tw-font-mono');
+      expect(monoToken).toBeDefined();
+      expect(monoToken?.category).toBe('typography');
+    });
+
+    it('extracts keyframes from theme.extend', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            extend: {
+              keyframes: {
+                heartbeat: {
+                  "0%": { transform: "scale(1)" },
+                  "50%": { transform: "scale(1.2)" },
+                  "100%": { transform: "scale(1)" },
+                },
+                fadeIn: {
+                  "0%": { opacity: 0 },
+                  "100%": { opacity: 1 },
+                },
+              },
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.keyframes).toBeDefined();
+      expect(result?.theme.keyframes).toContain('heartbeat');
+      expect(result?.theme.keyframes).toContain('fadeIn');
+    });
+
+    it('extracts animation from theme.extend', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            extend: {
+              animation: {
+                heartbeat: "heartbeat 1s ease-in-out infinite",
+                fadeIn: "fadeIn 0.5s ease-in-out forwards",
+              },
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.animation).toBeDefined();
+      expect(result?.theme.animation?.heartbeat).toBe('heartbeat 1s ease-in-out infinite');
+      expect(result?.theme.animation?.fadeIn).toBe('fadeIn 0.5s ease-in-out forwards');
+    });
+
+    it('extracts colors with rgb() values', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            extend: {
+              colors: {
+                "code-foreground": "rgb(var(--code-foreground) / <alpha-value>)",
+                "custom-red": "rgb(255 0 0)",
+                "semi-transparent": "rgb(0 0 0 / 50%)",
+              },
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.colors?.['code-foreground']).toBe('rgb(var(--code-foreground) / <alpha-value>)');
+      expect(result?.theme.colors?.['custom-red']).toBe('rgb(255 0 0)');
+      expect(result?.theme.colors?.['semi-transparent']).toBe('rgb(0 0 0 / 50%)');
+    });
+
+    it('extracts deeply nested color scales with many shades', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            extend: {
+              colors: {
+                gray: {
+                  50: "hsl(204 20% 99%)",
+                  100: "hsl(204 20% 96%)",
+                  150: "hsl(204 20% 94%)",
+                  200: "hsl(204 20% 91%)",
+                  250: "hsl(204 20% 88%)",
+                  300: "hsl(204 20% 82%)",
+                  350: "hsl(204 10% 70%)",
+                  400: "hsl(204 8% 50%)",
+                  450: "hsl(204 4% 40%)",
+                  500: "hsl(204 4% 32%)",
+                  550: "hsl(204 4% 28%)",
+                  600: "hsl(204 4% 24%)",
+                  650: "hsl(204 4% 20%)",
+                  700: "hsl(204 4% 16%)",
+                  750: "hsl(204 4% 14%)",
+                  800: "hsl(204 4% 12%)",
+                  850: "hsl(204 4% 10%)",
+                  900: "hsl(204 4% 8%)",
+                  950: "hsl(204 4% 6%)",
+                },
+              },
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      const gray = result?.theme.colors?.gray as Record<string, string>;
+      expect(Object.keys(gray || {}).length).toBeGreaterThanOrEqual(15);
+      expect(gray?.['150']).toBe('hsl(204 20% 94%)');
+      expect(gray?.['350']).toBe('hsl(204 10% 70%)');
+      expect(gray?.['950']).toBe('hsl(204 4% 6%)');
+    });
+
+    it('extracts plugins array', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {},
+          plugins: [
+            require("tailwindcss-animate"),
+            require("@tailwindcss/typography"),
+          ],
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.plugins).toBeDefined();
+      expect(result?.theme.plugins).toContain('tailwindcss-animate');
+      expect(result?.theme.plugins).toContain('@tailwindcss/typography');
+    });
+
+    it('handles multi-line string values in boxShadow', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            boxShadow: {
+              "md-dark":
+                "0 4px 6px -1px rgb(0 0 0 / 0.25), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+              input:
+                "inset 0 0 0 1px rgba(0 0 0 / 0.1), inset 0 2px 5px 0 rgba(0 0 0 / 0.05)",
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.boxShadow?.['md-dark']).toBe(
+        '0 4px 6px -1px rgb(0 0 0 / 0.25), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
+      );
+      expect(result?.theme.boxShadow?.['input']).toContain('inset 0 0 0 1px');
+    });
+
+    it('extracts maxWidth from theme.extend', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            extend: {
+              maxWidth: {
+                "8xl": "90rem",
+                "9xl": "100rem",
+              },
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.maxWidth).toBeDefined();
+      expect(result?.theme.maxWidth?.['8xl']).toBe('90rem');
+      expect(result?.theme.maxWidth?.['9xl']).toBe('100rem');
+    });
   });
 
   describe('Tailwind v4 CSS config parsing', () => {

@@ -11,11 +11,15 @@ export interface TailwindTheme {
   fontFamily: Record<string, string[]>;
   borderRadius: Record<string, string>;
   boxShadow: Record<string, string>;
+  dropShadow?: Record<string, string>;
   customVariants?: string[];
   utilities?: string[];
   plugins?: string[];
   imports?: string[];
   breakpoints?: Record<string, string>;
+  keyframes?: string[];
+  animation?: Record<string, string>;
+  maxWidth?: Record<string, string>;
 }
 
 export interface ParsedTailwindConfig {
@@ -701,6 +705,11 @@ export class TailwindConfigParser {
       fontFamily: {},
       borderRadius: {},
       boxShadow: {},
+      dropShadow: {},
+      keyframes: [],
+      animation: {},
+      maxWidth: {},
+      plugins: [],
     };
 
     // Extract colors from theme.extend.colors or theme.colors
@@ -721,10 +730,10 @@ export class TailwindConfigParser {
       theme.fontSize = this.parseObjectLiteral(fontSizeMatches);
     }
 
-    // Extract fontFamily
+    // Extract fontFamily (handles array syntax)
     const fontFamilyMatches = this.extractObjectFromConfig(content, 'fontFamily');
     if (fontFamilyMatches) {
-      theme.fontFamily = this.parseObjectLiteral(fontFamilyMatches);
+      theme.fontFamily = this.parseFontFamilyObject(fontFamilyMatches);
     }
 
     // Extract borderRadius
@@ -733,25 +742,66 @@ export class TailwindConfigParser {
       theme.borderRadius = this.parseObjectLiteral(borderRadiusMatches);
     }
 
-    // Extract boxShadow
+    // Extract boxShadow (handles multi-line values)
     const boxShadowMatches = this.extractObjectFromConfig(content, 'boxShadow');
     if (boxShadowMatches) {
-      theme.boxShadow = this.parseObjectLiteral(boxShadowMatches);
+      theme.boxShadow = this.parseMultiLineObjectLiteral(boxShadowMatches);
     }
+
+    // Extract dropShadow
+    const dropShadowMatches = this.extractObjectFromConfig(content, 'dropShadow');
+    if (dropShadowMatches) {
+      theme.dropShadow = this.parseMultiLineObjectLiteral(dropShadowMatches);
+    }
+
+    // Extract keyframes (just get the names)
+    const keyframesMatches = this.extractObjectFromConfig(content, 'keyframes');
+    if (keyframesMatches) {
+      theme.keyframes = this.extractKeyframeNames(keyframesMatches);
+    }
+
+    // Extract animation
+    const animationMatches = this.extractObjectFromConfig(content, 'animation');
+    if (animationMatches) {
+      theme.animation = this.parseObjectLiteral(animationMatches);
+    }
+
+    // Extract maxWidth
+    const maxWidthMatches = this.extractObjectFromConfig(content, 'maxWidth');
+    if (maxWidthMatches) {
+      theme.maxWidth = this.parseObjectLiteral(maxWidthMatches);
+    }
+
+    // Extract plugins from the plugins array
+    theme.plugins = this.extractPluginsFromJS(content);
 
     return theme;
   }
 
   private extractObjectFromConfig(content: string, key: string): string | null {
-    const patterns = [
-      new RegExp(`${key}:\\s*\\{([^{}]*(?:\\{[^{}]*\\}[^{}]*)*)\\}`, 's'),
-      new RegExp(`['"]${key}['"]:\\s*\\{([^{}]*(?:\\{[^{}]*\\}[^{}]*)*)\\}`, 's'),
+    // For deeply nested structures like keyframes, use balanced brace matching
+    const keyPatterns = [
+      new RegExp(`${key}:\\s*\\{`, 'g'),
+      new RegExp(`['"]${key}['"]:\\s*\\{`, 'g'),
     ];
 
-    for (const pattern of patterns) {
-      const match = content.match(pattern);
-      if (match) {
-        return match[1] || null;
+    for (const pattern of keyPatterns) {
+      const keyMatch = pattern.exec(content);
+      if (keyMatch) {
+        const startIdx = keyMatch.index + keyMatch[0].length;
+        let depth = 1;
+        let endIdx = startIdx;
+
+        // Find matching closing brace
+        for (let i = startIdx; i < content.length && depth > 0; i++) {
+          if (content[i] === '{') depth++;
+          else if (content[i] === '}') depth--;
+          endIdx = i;
+        }
+
+        if (depth === 0) {
+          return content.substring(startIdx, endIdx);
+        }
       }
     }
 
@@ -823,10 +873,26 @@ export class TailwindConfigParser {
       }
     }
 
+    // Convert dropShadow to tokens
+    if (theme.dropShadow) {
+      for (const [name, value] of Object.entries(theme.dropShadow)) {
+        tokens.push(this.createDropShadowToken(name, value, source));
+      }
+    }
+
     // Convert borderRadius to tokens
     if (theme.borderRadius) {
       for (const [name, value] of Object.entries(theme.borderRadius)) {
         tokens.push(this.createRawToken(`radius-${name}`, value, 'border', source));
+      }
+    }
+
+    // Convert fontFamily to tokens
+    if (theme.fontFamily) {
+      for (const [name, fonts] of Object.entries(theme.fontFamily)) {
+        if (Array.isArray(fonts)) {
+          tokens.push(this.createFontFamilyToken(name, fonts, source));
+        }
       }
     }
 
@@ -864,6 +930,44 @@ export class TailwindConfigParser {
       };
     }
 
+    // Check for hsl colors - store as raw with hsl tag
+    if (value.startsWith('hsl(') || value.startsWith('hsla(')) {
+      const colorTags = [...tags, 'hsl'];
+      if (value.includes('/') || value.startsWith('hsla(')) {
+        colorTags.push('alpha');
+      }
+      return {
+        id: createTokenId(source, tokenName),
+        name: tokenName,
+        category: 'color',
+        value: { type: 'raw', value },
+        source,
+        aliases: mode === 'dark' ? [`${name}-dark`] : [name],
+        usedBy: [],
+        metadata: { tags: colorTags },
+        scannedAt: new Date(),
+      };
+    }
+
+    // Check for rgb colors - store as raw with rgb tag
+    if (value.startsWith('rgb(') || value.startsWith('rgba(')) {
+      const colorTags = [...tags, 'rgb'];
+      if (value.includes('/') || value.startsWith('rgba(') || value.includes('<alpha-value>')) {
+        colorTags.push('alpha');
+      }
+      return {
+        id: createTokenId(source, tokenName),
+        name: tokenName,
+        category: 'color',
+        value: { type: 'raw', value },
+        source,
+        aliases: mode === 'dark' ? [`${name}-dark`] : [name],
+        usedBy: [],
+        metadata: { tags: colorTags },
+        scannedAt: new Date(),
+      };
+    }
+
     // Check for var() references - store as raw with reference info in aliases
     if (value.startsWith('var(')) {
       const refMatch = value.match(/var\(--([^)]+)\)/);
@@ -881,7 +985,7 @@ export class TailwindConfigParser {
       };
     }
 
-    // Hex, rgb, hsl colors
+    // Hex colors
     return {
       id: createTokenId(source, tokenName),
       name: tokenName,
@@ -945,6 +1049,131 @@ export class TailwindConfigParser {
       aliases: [],
       usedBy: [],
       metadata: { tags: ['tailwind'] },
+      scannedAt: new Date(),
+    };
+  }
+
+  /**
+   * Parse font family objects that contain array values
+   * e.g., mono: ["Menlo", "Consolas", "monospace"]
+   */
+  private parseFontFamilyObject(content: string): Record<string, string[]> {
+    const result: Record<string, string[]> = {};
+
+    // Match key: [array values]
+    const arrayPattern = /['"]?(\w+[-\w]*)['"]?\s*:\s*\[([^\]]+)\]/g;
+    let match;
+
+    while ((match = arrayPattern.exec(content)) !== null) {
+      const key = match[1]!;
+      const arrayContent = match[2]!;
+
+      // Extract individual strings from the array
+      const strings: string[] = [];
+      const stringPattern = /['"]([^'"]+)['"]/g;
+      let strMatch;
+      while ((strMatch = stringPattern.exec(arrayContent)) !== null) {
+        strings.push(strMatch[1]!);
+      }
+
+      if (strings.length > 0) {
+        result[key] = strings;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Parse object literals that may have multi-line string values
+   * Handles cases like:
+   *   "md-dark":
+   *     "0 4px 6px...",
+   */
+  private parseMultiLineObjectLiteral(content: string): Record<string, string> {
+    const result: Record<string, string> = {};
+
+    // First pass: simple key-value on same line
+    const simpleKvPattern = /['"]?([\w-]+)['"]?\s*:\s*['"]([^'"]+)['"]/g;
+    let match;
+
+    while ((match = simpleKvPattern.exec(content)) !== null) {
+      result[match[1]!] = match[2]!;
+    }
+
+    // Second pass: key on one line, value on next line (multi-line)
+    const multiLinePattern = /['"]?([\w-]+)['"]?\s*:\s*\n\s*['"]([^'"]+)['"]/g;
+    while ((match = multiLinePattern.exec(content)) !== null) {
+      result[match[1]!] = match[2]!;
+    }
+
+    return result;
+  }
+
+  /**
+   * Extract keyframe animation names from a keyframes object
+   */
+  private extractKeyframeNames(content: string): string[] {
+    const names: string[] = [];
+
+    // Match keyframe names (keys that have objects as values)
+    const keyframePattern = /['"]?(\w+[-\w]*)['"]?\s*:\s*\{/g;
+    let match;
+
+    while ((match = keyframePattern.exec(content)) !== null) {
+      names.push(match[1]!);
+    }
+
+    return names;
+  }
+
+  /**
+   * Extract plugin names from plugins array in JS config
+   */
+  private extractPluginsFromJS(content: string): string[] {
+    const plugins: string[] = [];
+
+    // Match require("plugin-name") or require('plugin-name')
+    const requirePattern = /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+    let match;
+
+    while ((match = requirePattern.exec(content)) !== null) {
+      plugins.push(match[1]!);
+    }
+
+    return plugins;
+  }
+
+  /**
+   * Create a drop shadow token
+   */
+  private createDropShadowToken(name: string, value: string, source: TokenSource): DesignToken {
+    return {
+      id: createTokenId(source, `tw-drop-shadow-${name}`),
+      name: `tw-drop-shadow-${name}`,
+      category: 'shadow',
+      value: { type: 'raw', value },
+      source,
+      aliases: [name],
+      usedBy: [],
+      metadata: { tags: ['tailwind', 'drop-shadow'] },
+      scannedAt: new Date(),
+    };
+  }
+
+  /**
+   * Create a font family token
+   */
+  private createFontFamilyToken(name: string, fonts: string[], source: TokenSource): DesignToken {
+    return {
+      id: createTokenId(source, `tw-font-${name}`),
+      name: `tw-font-${name}`,
+      category: 'typography',
+      value: { type: 'raw', value: fonts.join(', ') },
+      source,
+      aliases: [name],
+      usedBy: [],
+      metadata: { tags: ['tailwind', 'font-family'] },
       scannedAt: new Date(),
     };
   }
