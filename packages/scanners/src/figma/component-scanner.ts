@@ -154,9 +154,41 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
       tags.push('mixed-naming-convention');
     }
 
+    // Detect incomplete variant matrix
+    if (isComponentSet && this.hasIncompleteVariantMatrix(node)) {
+      tags.push('incomplete-variant-matrix');
+    }
+
+    // Detect duplicate property names (case-insensitive)
+    if (this.hasDuplicatePropertyName(node)) {
+      tags.push('duplicate-property-name');
+    }
+
+    // Add default variant tag for component sets
+    if (isComponentSet) {
+      const defaultVariant = this.getDefaultVariant(node);
+      if (defaultVariant) {
+        tags.push(`default-variant:${defaultVariant}`);
+      }
+    }
+
+    // Add variant dimension tags
+    if (isComponentSet && node.componentPropertyDefinitions) {
+      for (const [key, def] of Object.entries(node.componentPropertyDefinitions)) {
+        if (def.type === 'VARIANT' && def.variantOptions) {
+          tags.push(`variant-dimension:${key}[${def.variantOptions.length}]`);
+        }
+      }
+    }
+
     // Add component key as tag for version tracking
     if (meta?.key) {
       tags.push(`component-key:${meta.key}`);
+    }
+
+    // Detect published/remote components
+    if (meta?.remote) {
+      tags.push('published');
     }
 
     // Add hierarchy path as tag for organization tracking
@@ -341,11 +373,22 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
         if (def.type === 'VARIANT') {
           continue;
         }
+
+        // Build description, including preferred values for INSTANCE_SWAP
+        let description = def.description;
+        if (def.type === 'INSTANCE_SWAP' && def.preferredValues?.length) {
+          const preferredKeys = def.preferredValues.map(pv => pv.key).join(', ');
+          description = description
+            ? `${description}\n\nPreferred values: ${preferredKeys}`
+            : `Preferred values: ${preferredKeys}`;
+        }
+
         props.push({
           name: key,
           type: this.mapFigmaType(def.type),
           required: true,
           defaultValue: def.defaultValue,
+          description,
         });
       }
     }
@@ -414,7 +457,84 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
       BOOLEAN: 'boolean',
       VARIANT: 'enum',
       INSTANCE_SWAP: 'ReactNode',
+      NUMBER: 'number',
     };
     return typeMap[figmaType] || figmaType.toLowerCase();
+  }
+
+  /**
+   * Detect incomplete variant matrix.
+   * Checks if the actual number of variant children matches the expected
+   * count based on the cartesian product of all variant options.
+   */
+  private hasIncompleteVariantMatrix(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions || !node.children) {
+      return false;
+    }
+
+    // Get all variant properties and their option counts
+    const variantDimensions: number[] = [];
+    for (const [, def] of Object.entries(node.componentPropertyDefinitions)) {
+      if (def.type === 'VARIANT' && def.variantOptions) {
+        variantDimensions.push(def.variantOptions.length);
+      }
+    }
+
+    // If no variant dimensions, no matrix to validate
+    if (variantDimensions.length === 0) {
+      return false;
+    }
+
+    // Calculate expected number of variants (cartesian product)
+    const expectedCount = variantDimensions.reduce((acc, count) => acc * count, 1);
+
+    // Count actual COMPONENT children
+    const actualCount = node.children.filter(child => child.type === 'COMPONENT').length;
+
+    // If actual count is less than expected, matrix is incomplete
+    return actualCount < expectedCount;
+  }
+
+  /**
+   * Detect duplicate property names (case-insensitive).
+   * Flags components where the same property name appears with different casing.
+   */
+  private hasDuplicatePropertyName(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions) {
+      return false;
+    }
+
+    const normalizedNames = new Map<string, string>();
+    for (const key of Object.keys(node.componentPropertyDefinitions)) {
+      const normalized = key.toLowerCase();
+      if (normalizedNames.has(normalized)) {
+        const existingKey = normalizedNames.get(normalized)!;
+        if (existingKey !== key) {
+          return true;
+        }
+      }
+      normalizedNames.set(normalized, key);
+    }
+
+    return false;
+  }
+
+  /**
+   * Get the default variant for a component set.
+   * Returns a string like "Size=Medium, State=Default" based on default values.
+   */
+  private getDefaultVariant(node: FigmaNode): string | null {
+    if (!node.componentPropertyDefinitions) {
+      return null;
+    }
+
+    const defaultParts: string[] = [];
+    for (const [key, def] of Object.entries(node.componentPropertyDefinitions)) {
+      if (def.type === 'VARIANT' && def.defaultValue !== undefined) {
+        defaultParts.push(`${key}=${def.defaultValue}`);
+      }
+    }
+
+    return defaultParts.length > 0 ? defaultParts.join(', ') : null;
   }
 }

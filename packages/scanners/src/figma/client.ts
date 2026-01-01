@@ -25,6 +25,8 @@ export interface FigmaPropertyDefinition {
   type: string;
   defaultValue: unknown;
   variantOptions?: string[];
+  description?: string;
+  preferredValues?: Array<{ type: string; key: string }>;
 }
 
 export interface FigmaComponentMeta {
@@ -32,6 +34,7 @@ export interface FigmaComponentMeta {
   name: string;
   description: string;
   documentationLinks: string[];
+  remote?: boolean;
 }
 
 export interface FigmaStyleMeta {

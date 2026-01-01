@@ -900,4 +900,409 @@ describe('FigmaComponentScanner', () => {
       expect(button!.metadata.tags).toContain('empty-component-set');
     });
   });
+
+  describe('default variant detection', () => {
+    it('identifies the default variant based on componentPropertyDefinitions defaultValue', async () => {
+      const file = createFigmaFile([
+        {
+          id: '26:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'],
+            },
+            'State': {
+              type: 'VARIANT',
+              defaultValue: 'Default',
+              variantOptions: ['Default', 'Hover', 'Pressed'],
+            },
+          },
+          children: [
+            { id: '26:2', name: 'Size=Small, State=Default', type: 'COMPONENT' },
+            { id: '26:3', name: 'Size=Medium, State=Default', type: 'COMPONENT' },
+            { id: '26:4', name: 'Size=Large, State=Default', type: 'COMPONENT' },
+            { id: '26:5', name: 'Size=Small, State=Hover', type: 'COMPONENT' },
+            { id: '26:6', name: 'Size=Medium, State=Hover', type: 'COMPONENT' },
+            { id: '26:7', name: 'Size=Large, State=Hover', type: 'COMPONENT' },
+            { id: '26:8', name: 'Size=Small, State=Pressed', type: 'COMPONENT' },
+            { id: '26:9', name: 'Size=Medium, State=Pressed', type: 'COMPONENT' },
+            { id: '26:10', name: 'Size=Large, State=Pressed', type: 'COMPONENT' },
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      // Should have a tag indicating the default variant
+      expect(button!.metadata.tags).toContainEqual(expect.stringMatching(/^default-variant:/));
+    });
+  });
+
+  describe('incomplete variant matrix detection', () => {
+    it('flags component sets with missing variant combinations', async () => {
+      const file = createFigmaFile([
+        {
+          id: '27:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'], // 3 options
+            },
+            'State': {
+              type: 'VARIANT',
+              defaultValue: 'Default',
+              variantOptions: ['Default', 'Hover', 'Pressed'], // 3 options = 9 total combinations
+            },
+          },
+          children: [
+            // Only 5 variants instead of 9
+            { id: '27:2', name: 'Size=Small, State=Default', type: 'COMPONENT' },
+            { id: '27:3', name: 'Size=Medium, State=Default', type: 'COMPONENT' },
+            { id: '27:4', name: 'Size=Large, State=Default', type: 'COMPONENT' },
+            { id: '27:5', name: 'Size=Small, State=Hover', type: 'COMPONENT' },
+            { id: '27:6', name: 'Size=Medium, State=Hover', type: 'COMPONENT' },
+            // Missing: Large+Hover, Small+Pressed, Medium+Pressed, Large+Pressed
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      // Should detect incomplete variant matrix
+      expect(button!.metadata.tags).toContain('incomplete-variant-matrix');
+    });
+
+    it('does not flag component sets with complete variant matrix', async () => {
+      const file = createFigmaFile([
+        {
+          id: '28:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Large'], // 2 options
+            },
+            'State': {
+              type: 'VARIANT',
+              defaultValue: 'Default',
+              variantOptions: ['Default', 'Hover'], // 2 options = 4 total
+            },
+          },
+          children: [
+            { id: '28:2', name: 'Size=Small, State=Default', type: 'COMPONENT' },
+            { id: '28:3', name: 'Size=Large, State=Default', type: 'COMPONENT' },
+            { id: '28:4', name: 'Size=Small, State=Hover', type: 'COMPONENT' },
+            { id: '28:5', name: 'Size=Large, State=Hover', type: 'COMPONENT' },
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).not.toContain('incomplete-variant-matrix');
+    });
+  });
+
+  describe('NUMBER property type support', () => {
+    it('extracts NUMBER properties with correct type mapping', async () => {
+      const file = createFigmaFile([
+        {
+          id: '29:1',
+          name: 'Slider',
+          type: 'COMPONENT',
+          componentPropertyDefinitions: {
+            'Min Value': {
+              type: 'NUMBER',
+              defaultValue: 0,
+            },
+            'Max Value': {
+              type: 'NUMBER',
+              defaultValue: 100,
+            },
+            'Step': {
+              type: 'NUMBER',
+              defaultValue: 1,
+            },
+          },
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const slider = result.items.find(c => c.name === 'Slider');
+      expect(slider).toBeDefined();
+      expect(slider!.props).toContainEqual(
+        expect.objectContaining({
+          name: 'Min Value',
+          type: 'number',
+          defaultValue: 0,
+        })
+      );
+      expect(slider!.props).toContainEqual(
+        expect.objectContaining({
+          name: 'Max Value',
+          type: 'number',
+          defaultValue: 100,
+        })
+      );
+    });
+  });
+
+  describe('INSTANCE_SWAP preferred values', () => {
+    it('extracts preferred values for INSTANCE_SWAP properties', async () => {
+      const file = createFigmaFile([
+        {
+          id: '30:1',
+          name: 'IconButton',
+          type: 'COMPONENT',
+          componentPropertyDefinitions: {
+            'Icon': {
+              type: 'INSTANCE_SWAP',
+              defaultValue: 'icon-123',
+              preferredValues: [
+                { type: 'COMPONENT', key: 'icon-star' },
+                { type: 'COMPONENT', key: 'icon-heart' },
+                { type: 'COMPONENT', key: 'icon-settings' },
+              ],
+            },
+          },
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const iconButton = result.items.find(c => c.name === 'IconButton');
+      expect(iconButton).toBeDefined();
+      // Should extract INSTANCE_SWAP with preferred values info
+      const iconProp = iconButton!.props.find(p => p.name === 'Icon');
+      expect(iconProp).toBeDefined();
+      expect(iconProp!.type).toBe('ReactNode');
+      // Preferred values should be captured in description or metadata
+      expect(iconProp!.description).toContain('icon-star');
+    });
+  });
+
+  describe('property description extraction', () => {
+    it('extracts descriptions from componentPropertyDefinitions', async () => {
+      const file = createFigmaFile([
+        {
+          id: '31:1',
+          name: 'Button',
+          type: 'COMPONENT',
+          componentPropertyDefinitions: {
+            'Label': {
+              type: 'TEXT',
+              defaultValue: 'Click me',
+              description: 'The text displayed on the button',
+            },
+            'Disabled': {
+              type: 'BOOLEAN',
+              defaultValue: false,
+              description: 'Whether the button is disabled and non-interactive',
+            },
+          },
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button');
+      expect(button).toBeDefined();
+
+      const labelProp = button!.props.find(p => p.name === 'Label');
+      expect(labelProp).toBeDefined();
+      expect(labelProp!.description).toBe('The text displayed on the button');
+
+      const disabledProp = button!.props.find(p => p.name === 'Disabled');
+      expect(disabledProp).toBeDefined();
+      expect(disabledProp!.description).toBe('Whether the button is disabled and non-interactive');
+    });
+  });
+
+  describe('published component detection', () => {
+    it('detects components published to team library', async () => {
+      const file: FigmaFile = {
+        name: 'Test File',
+        document: {
+          id: '0:0',
+          name: 'Document',
+          type: 'DOCUMENT',
+          children: [
+            {
+              id: '1:1',
+              name: 'Components',
+              type: 'CANVAS',
+              children: [
+                {
+                  id: '32:1',
+                  name: 'Button',
+                  type: 'COMPONENT',
+                },
+              ],
+            },
+          ],
+        },
+        components: {
+          '32:1': {
+            key: 'published-btn-key',
+            name: 'Button',
+            description: 'A published button',
+            documentationLinks: [],
+            remote: true, // Indicates this is a published component
+          },
+        },
+        styles: {},
+      };
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).toContain('published');
+    });
+
+    it('does not flag local-only components as published', async () => {
+      const file: FigmaFile = {
+        name: 'Test File',
+        document: {
+          id: '0:0',
+          name: 'Document',
+          type: 'DOCUMENT',
+          children: [
+            {
+              id: '1:1',
+              name: 'Components',
+              type: 'CANVAS',
+              children: [
+                {
+                  id: '33:1',
+                  name: 'LocalButton',
+                  type: 'COMPONENT',
+                },
+              ],
+            },
+          ],
+        },
+        components: {
+          '33:1': {
+            key: 'local-btn-key',
+            name: 'LocalButton',
+            description: 'A local button',
+            documentationLinks: [],
+            // remote: false or not present
+          },
+        },
+        styles: {},
+      };
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'LocalButton');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).not.toContain('published');
+    });
+  });
+
+  describe('duplicate property name detection', () => {
+    it('flags components with duplicate property names across different types', async () => {
+      const file = createFigmaFile([
+        {
+          id: '34:1',
+          name: 'BadButton',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'],
+            },
+            'size': { // Same name different case - potential issue
+              type: 'TEXT',
+              defaultValue: 'large',
+            },
+          },
+          children: [],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'BadButton');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).toContain('duplicate-property-name');
+    });
+  });
+
+  describe('variant property category extraction', () => {
+    it('extracts variant property categories (dimensions) from componentPropertyDefinitions', async () => {
+      const file = createFigmaFile([
+        {
+          id: '35:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'],
+            },
+            'State': {
+              type: 'VARIANT',
+              defaultValue: 'Default',
+              variantOptions: ['Default', 'Hover', 'Pressed', 'Disabled'],
+            },
+            'Type': {
+              type: 'VARIANT',
+              defaultValue: 'Primary',
+              variantOptions: ['Primary', 'Secondary', 'Tertiary'],
+            },
+          },
+          children: [],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button');
+      expect(button).toBeDefined();
+      // Should have tags for each variant dimension/category
+      expect(button!.metadata.tags).toContainEqual(expect.stringMatching(/^variant-dimension:Size\[3\]$/));
+      expect(button!.metadata.tags).toContainEqual(expect.stringMatching(/^variant-dimension:State\[4\]$/));
+      expect(button!.metadata.tags).toContainEqual(expect.stringMatching(/^variant-dimension:Type\[3\]$/));
+    });
+  });
 });
