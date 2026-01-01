@@ -22,6 +22,12 @@ import {
   CHAKRA_STYLED_FACTORY_WITH_VARIANTS,
   MANTINE_FACTORY,
   MANTINE_FACTORY_WITH_STATICS,
+  CHAKRA_WITH_PROVIDER_STRING_ARGS,
+  REACT_FC_ANNOTATED_COMPONENT,
+  MEMO_FORWARD_REF_COMPONENT,
+  FORWARD_REF_NAMED_FUNCTION,
+  FUNCTION_DECLARATION_WITH_JSX,
+  MULTI_PATTERN_FILE,
 } from '../__tests__/fixtures/react-components.js';
 import { ReactComponentScanner } from './react-scanner.js';
 
@@ -449,6 +455,125 @@ describe('ReactComponentScanner', () => {
       expect(componentNames).toContain('DatePicker');
       expect(componentNames).toContain('DatePickerInput');
       expect(componentNames).toContain('DatePicker.Input');
+    });
+  });
+
+  describe('Chakra v3 withProvider/withContext with string args', () => {
+    it('detects withProvider with string element arguments', async () => {
+      vol.fromJSON({
+        '/project/src/Card.tsx': CHAKRA_WITH_PROVIDER_STRING_ARGS,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      // Should detect all withProvider/withContext components
+      expect(componentNames).toContain('CardRoot');
+      expect(componentNames).toContain('CardBody');
+      expect(componentNames).toContain('CardHeader');
+    });
+  });
+
+  describe('React.FC type annotated components', () => {
+    it('detects React.FC annotated functional components', async () => {
+      vol.fromJSON({
+        '/project/src/TooltipProvider.tsx': REACT_FC_ANNOTATED_COMPONENT,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('TooltipProvider');
+      expect(result.items[0]!.source.type).toBe('react');
+    });
+  });
+
+  describe('memo wrapped components', () => {
+    it('detects memo(forwardRef(...)) pattern', async () => {
+      vol.fromJSON({
+        '/project/src/MemoizedButton.tsx': MEMO_FORWARD_REF_COMPONENT,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('MemoizedButton');
+      expect(result.items[0]!.source.type).toBe('react');
+    });
+  });
+
+  describe('forwardRef with named function expression', () => {
+    it('detects forwardRef(function ComponentName(...))', async () => {
+      vol.fromJSON({
+        '/project/src/Button.tsx': FORWARD_REF_NAMED_FUNCTION,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('Button');
+      expect(result.items[0]!.source.type).toBe('react');
+    });
+  });
+
+  describe('function declaration components', () => {
+    it('detects function Button({...}) declarations with JSX', async () => {
+      vol.fromJSON({
+        '/project/src/button.tsx': FUNCTION_DECLARATION_WITH_JSX,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('Button');
+      expect(result.items[0]!.source.type).toBe('react');
+    });
+  });
+
+  describe('mixed pattern detection', () => {
+    it('detects multiple component patterns in same file', async () => {
+      vol.fromJSON({
+        '/project/src/components.tsx': MULTI_PATTERN_FILE,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      // Should detect all four components
+      expect(componentNames).toContain('Container'); // React.FC
+      expect(componentNames).toContain('Wrapper');   // Arrow function
+      expect(componentNames).toContain('Card');      // memo(forwardRef)
+      expect(componentNames).toContain('Footer');    // Function declaration
     });
   });
 });

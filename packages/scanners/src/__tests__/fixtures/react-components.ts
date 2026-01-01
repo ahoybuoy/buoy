@@ -403,3 +403,174 @@ export const DatePicker = factory<DatePickerFactory>((_props, ref) => {
 
 DatePicker.Input = DatePickerInput;
 `;
+
+// Chakra v3 withProvider/withContext with string arguments pattern
+// These create styled components by wrapping an HTML element with context
+export const CHAKRA_WITH_PROVIDER_STRING_ARGS = `
+"use client"
+
+import {
+  type HTMLChakraProps,
+  type SlotRecipeProps,
+  createSlotRecipeContext,
+} from "../../styled-system";
+
+const {
+  withProvider,
+  withContext,
+  useStyles: useCardStyles,
+} = createSlotRecipeContext({ key: "card" });
+
+export interface CardRootProps extends HTMLChakraProps<"div", SlotRecipeProps<"card">> {}
+
+export const CardRoot = withProvider<HTMLDivElement, CardRootProps>(
+  "div",
+  "root",
+);
+
+export interface CardBodyProps extends HTMLChakraProps<"div"> {}
+
+export const CardBody = withContext<HTMLDivElement, CardBodyProps>(
+  "div",
+  "body",
+);
+
+export interface CardHeaderProps extends HTMLChakraProps<"div"> {}
+
+export const CardHeader = withContext<HTMLDivElement, CardHeaderProps>(
+  "div",
+  "header",
+);
+`;
+
+// React.FC type annotated functional components (Radix pattern)
+export const REACT_FC_ANNOTATED_COMPONENT = `
+import * as React from 'react';
+
+interface TooltipProviderProps {
+  children: React.ReactNode;
+  delayDuration?: number;
+}
+
+const TooltipProvider: React.FC<TooltipProviderProps> = (props) => {
+  const { children, delayDuration = 700 } = props;
+  return (
+    <div data-delay={delayDuration}>
+      {children}
+    </div>
+  );
+};
+
+TooltipProvider.displayName = 'TooltipProvider';
+
+export { TooltipProvider };
+`;
+
+// memo() wrapped forwardRef component
+export const MEMO_FORWARD_REF_COMPONENT = `
+import React, { forwardRef, memo } from 'react';
+
+interface MemoizedButtonProps {
+  onClick: () => void;
+  children: React.ReactNode;
+}
+
+export const MemoizedButton = memo(
+  forwardRef<HTMLButtonElement, MemoizedButtonProps>(
+    ({ onClick, children }, ref) => {
+      return (
+        <button ref={ref} onClick={onClick}>
+          {children}
+        </button>
+      );
+    }
+  )
+);
+
+MemoizedButton.displayName = 'MemoizedButton';
+`;
+
+// Named function expression inside forwardRef (Chakra pattern)
+export const FORWARD_REF_NAMED_FUNCTION = `
+import { forwardRef } from 'react';
+
+interface ButtonProps {
+  loading?: boolean;
+  children: React.ReactNode;
+}
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(inProps, ref) {
+    const { loading, children, ...rest } = inProps;
+    return (
+      <button ref={ref} disabled={loading} {...rest}>
+        {children}
+      </button>
+    );
+  },
+);
+
+Button.displayName = "Button";
+`;
+
+// Function declaration component (shadcn v4 style) - not const assignment
+export const FUNCTION_DECLARATION_WITH_JSX = `
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-md",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground",
+        destructive: "bg-destructive text-destructive-foreground",
+      },
+    },
+  }
+);
+
+function Button({
+  className,
+  variant = "default",
+  ...props
+}: React.ComponentProps<"button"> & VariantProps<typeof buttonVariants>) {
+  return (
+    <button
+      className={buttonVariants({ variant, className })}
+      {...props}
+    />
+  );
+}
+
+export { Button, buttonVariants };
+`;
+
+// Multiple components in single file with different patterns
+export const MULTI_PATTERN_FILE = `
+import React, { forwardRef, memo } from 'react';
+
+// React.FC pattern
+const Container: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return <div className="container">{children}</div>;
+};
+
+// Arrow function component
+export const Wrapper = ({ children }: { children: React.ReactNode }) => {
+  return <section className="wrapper">{children}</section>;
+};
+
+// forwardRef with memo
+export const Card = memo(
+  forwardRef<HTMLDivElement, { title: string }>(({ title }, ref) => {
+    return <div ref={ref} className="card">{title}</div>;
+  })
+);
+
+// Function declaration
+function Footer({ copyright }: { copyright: string }) {
+  return <footer>{copyright}</footer>;
+}
+
+export { Container, Footer };
+`;
