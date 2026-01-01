@@ -789,4 +789,216 @@ type SizeType = 'sm' | 'lg';
       expect(new Set(ids).size).toBe(4);
     });
   });
+
+  describe("TypeScript token object parsing", () => {
+    it("extracts tokens from defineTokens.colors pattern (Chakra/Panda)", async () => {
+      vol.fromJSON({
+        "/project/tokens/colors.ts": `
+          import { defineTokens } from "../def"
+
+          export const colors = defineTokens.colors({
+            black: {
+              value: "#09090B",
+            },
+            white: {
+              value: "#FFFFFF",
+            },
+            gray: {
+              "50": {
+                value: "#fafafa",
+              },
+              "100": {
+                value: "#f4f4f5",
+              },
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect: black, white, gray.50, gray.100 = 4 tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(4);
+
+      // Check that we got the black token
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "black",
+          category: "color",
+          value: expect.objectContaining({ hex: "#09090b" }),
+        }),
+      );
+
+      // Check nested gray tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "gray.50",
+          category: "color",
+        }),
+      );
+    });
+
+    it("extracts tokens from defineTokens.spacing pattern", async () => {
+      vol.fromJSON({
+        "/project/tokens/spacing.ts": `
+          import { defineTokens } from "../def"
+
+          export const spacing = defineTokens.spacing({
+            "1": {
+              value: "0.25rem",
+            },
+            "2": {
+              value: "0.5rem",
+            },
+            "4": {
+              value: "1rem",
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(3);
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "1",
+          category: "spacing",
+        }),
+      );
+    });
+
+    it("extracts tokens from plain object exports", async () => {
+      vol.fromJSON({
+        "/project/tokens/theme.ts": `
+          export const colors = {
+            primary: {
+              value: "#0066cc",
+            },
+            secondary: {
+              value: "#666666",
+            },
+          }
+
+          export const spacing = {
+            sm: {
+              value: "8px",
+            },
+            md: {
+              value: "16px",
+            },
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(4);
+    });
+
+    it("extracts tokens from const objects with as const", async () => {
+      vol.fromJSON({
+        "/project/tokens/constants.ts": `
+          export const colors = {
+            primary: "#0066cc",
+            secondary: "#666666",
+            success: "#22c55e",
+          } as const;
+
+          export const spacing = {
+            xs: "4px",
+            sm: "8px",
+            md: "16px",
+          } as const;
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Direct value tokens (not nested { value: "..." })
+      expect(result.items.length).toBeGreaterThanOrEqual(6);
+    });
+
+    it("detects tokens in files with token-related naming", async () => {
+      vol.fromJSON({
+        "/project/src/tokens/index.ts": `
+          export const colors = {
+            brand: {
+              value: "#0066cc",
+            },
+          }
+        `,
+        "/project/src/theme/tokens.ts": `
+          export const spacing = {
+            base: {
+              value: "8px",
+            },
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["**/tokens/**/*.ts", "**/theme/tokens.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("handles deeply nested token structures", async () => {
+      vol.fromJSON({
+        "/project/tokens/semantic.ts": `
+          export const colors = defineTokens.colors({
+            brand: {
+              primary: {
+                "50": { value: "#eff6ff" },
+                "100": { value: "#dbeafe" },
+                "500": { value: "#3b82f6" },
+              },
+              secondary: {
+                "50": { value: "#f0fdf4" },
+                "500": { value: "#22c55e" },
+              },
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(5);
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: expect.stringContaining("brand.primary.500"),
+        }),
+      );
+    });
+  });
 });

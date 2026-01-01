@@ -62,12 +62,19 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       ]);
       const cssFiles = await this.findTokenFiles(["**/*.css", "**/*.scss"]);
       const tsFiles = await this.findTokenFiles([
+        // Type definition files
         "**/types.ts",
         "**/types.tsx",
         "**/types/**/*.ts",
         "**/types/**/*.tsx",
         "**/*.types.ts",
         "**/*.types.tsx",
+        // Token definition files (TypeScript objects)
+        "**/tokens/**/*.ts",
+        "**/tokens/**/*.tsx",
+        "**/tokens.ts",
+        "**/theme/tokens.ts",
+        "**/theme/**/*.ts",
       ]);
       filesToScan = [...jsonFiles, ...cssFiles, ...tsFiles];
     }
@@ -553,20 +560,29 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     const lower = type.toLowerCase();
     const mapping: Record<string, TokenCategory> = {
       color: "color",
+      colors: "color",
       colours: "color",
       spacing: "spacing",
       space: "spacing",
+      sizes: "sizing",
       typography: "typography",
       font: "typography",
+      fonts: "typography",
       shadow: "shadow",
+      shadows: "shadow",
       boxshadow: "shadow",
       border: "border",
+      borders: "border",
       borderradius: "border",
+      radii: "border",
       sizing: "sizing",
       size: "sizing",
       motion: "motion",
       animation: "motion",
+      animations: "motion",
       duration: "motion",
+      durations: "motion",
+      easings: "motion",
     };
 
     return mapping[lower] || "other";
@@ -668,7 +684,440 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       }
     }
 
+    // Also extract token objects (defineTokens.colors, export const colors = {...}, etc.)
+    const objectTokens = this.extractTypeScriptTokenObjects(
+      content,
+      relativePath,
+    );
+    tokens.push(...objectTokens);
+
     return tokens;
+  }
+
+  /**
+   * Extract design tokens from TypeScript/JavaScript object definitions.
+   *
+   * Detects patterns like:
+   * - defineTokens.colors({ black: { value: "#000" }, ... })
+   * - export const colors = { primary: { value: "#0066cc" }, ... }
+   * - export const colors = { primary: "#0066cc", ... } as const
+   */
+  private extractTypeScriptTokenObjects(
+    content: string,
+    relativePath: string,
+  ): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Pattern 1: defineTokens.category({ ... }) - Panda CSS / Chakra UI style
+    // Match: defineTokens.colors({ ... }), defineTokens.spacing({ ... }), etc.
+    // Use brace matching to capture the full object
+    const defineTokensMatches = this.findDefineTokensCalls(content);
+    for (const { category, objectStr, lineNumber } of defineTokensMatches) {
+      const parsedTokens = this.parseTokenObjectString(
+        objectStr,
+        category,
+        relativePath,
+        lineNumber,
+      );
+      tokens.push(...parsedTokens);
+    }
+
+    // Pattern 2: export const varName = { ... } with { value: "..." } structure
+    const constObjectMatches = this.findConstObjectAssignments(content);
+    for (const { varName, objectStr, lineNumber } of constObjectMatches) {
+      // Skip if already processed by defineTokens pattern
+      if (varName.includes("defineTokens")) continue;
+
+      // Infer category from variable name
+      const category = this.inferCategoryFromVarName(varName);
+
+      // Only process if the variable name suggests design tokens
+      if (!this.isTokenRelatedVarName(varName)) continue;
+
+      const parsedTokens = this.parseTokenObjectString(
+        objectStr,
+        category,
+        relativePath,
+        lineNumber,
+        varName,
+      );
+      tokens.push(...parsedTokens);
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Parse a token object string and extract tokens.
+   * Handles nested structures like:
+   * { black: { value: "#000" }, gray: { "50": { value: "#fafafa" } } }
+   */
+  private parseTokenObjectString(
+    objectStr: string,
+    category: string,
+    relativePath: string,
+    lineNumber: number,
+    varName?: string,
+  ): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Try to parse as JavaScript object
+    try {
+      // Sanitize the object string for eval-free parsing
+      // We'll use a simple regex-based parser instead of eval
+      const extractedTokens = this.extractTokensFromObjectLiteral(
+        objectStr,
+        "",
+        category,
+      );
+
+      for (const { name, value, tokenCategory } of extractedTokens) {
+        const source: TypeScriptTokenSource = {
+          type: "typescript",
+          path: relativePath,
+          typeName: varName || category,
+          line: lineNumber,
+        };
+
+        // Normalize category for proper value parsing (colors -> color)
+        const normalizedCategory = this.normalizeCategory(tokenCategory);
+        const tokenValue = this.parseTokenValue(normalizedCategory, value);
+
+        tokens.push({
+          id: createTokenId(source, name),
+          name,
+          category: normalizedCategory,
+          value: tokenValue,
+          source,
+          aliases: [],
+          usedBy: [],
+          metadata: {
+            description: varName
+              ? `Token from ${varName}`
+              : `Token from defineTokens.${category}`,
+          },
+          scannedAt: new Date(),
+        });
+      }
+    } catch {
+      // Ignore parse errors
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Extract tokens from an object literal string using regex.
+   * This avoids eval and handles the common token patterns.
+   */
+  private extractTokensFromObjectLiteral(
+    objectStr: string,
+    prefix: string,
+    category: string,
+  ): Array<{ name: string; value: string; tokenCategory: string }> {
+    const results: Array<{
+      name: string;
+      value: string;
+      tokenCategory: string;
+    }> = [];
+
+    // Remove outer braces
+    let inner = objectStr.trim();
+    if (inner.startsWith("{")) inner = inner.slice(1);
+    if (inner.endsWith("}")) inner = inner.slice(0, -1);
+
+    // Strategy: Parse top-level keys and their values
+    // Use a state machine approach to handle nested braces
+    const entries = this.parseObjectEntries(inner);
+
+    for (const { key, content } of entries) {
+      // Skip if key is 'value' - it's a property not a token key
+      if (key === "value") continue;
+
+      const tokenName = prefix ? `${prefix}.${key}` : key;
+      const trimmedContent = content.trim();
+
+      // Check if this is a terminal token with { value: "..." }
+      const valueMatch = trimmedContent.match(
+        /^\{\s*value\s*:\s*["']([^"']+)["']/,
+      );
+      if (valueMatch && valueMatch[1]) {
+        results.push({
+          name: tokenName,
+          value: valueMatch[1],
+          tokenCategory: category,
+        });
+        continue;
+      }
+
+      // Check if this is a direct string value (for "as const" objects)
+      const directValueMatch = trimmedContent.match(/^["']([^"']+)["']$/);
+      if (directValueMatch && directValueMatch[1]) {
+        results.push({
+          name: tokenName,
+          value: directValueMatch[1],
+          tokenCategory: category,
+        });
+        continue;
+      }
+
+      // Check if this is a nested object
+      if (trimmedContent.startsWith("{") && trimmedContent.endsWith("}")) {
+        // Recursively extract from nested object
+        const nestedResults = this.extractTokensFromObjectLiteral(
+          trimmedContent,
+          tokenName,
+          category,
+        );
+        results.push(...nestedResults);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Find const varName = { ... } assignments using brace matching.
+   */
+  private findConstObjectAssignments(
+    content: string,
+  ): Array<{ varName: string; objectStr: string; lineNumber: number }> {
+    const results: Array<{
+      varName: string;
+      objectStr: string;
+      lineNumber: number;
+    }> = [];
+
+    // Find all (export)? const varName = { patterns
+    const startRegex = /(?:export\s+)?const\s+(\w+)\s*=\s*\{/g;
+    let match;
+
+    while ((match = startRegex.exec(content)) !== null) {
+      const varName = match[1] || "";
+      const startIndex = match.index + match[0].length - 1; // Position of opening {
+
+      // Check if this is part of a defineTokens call - if so, skip
+      const beforeMatch = content.slice(Math.max(0, match.index - 30), match.index);
+      if (beforeMatch.includes("defineTokens.")) continue;
+
+      // Find matching closing brace
+      let braceDepth = 1;
+      let i = startIndex + 1;
+      while (i < content.length && braceDepth > 0) {
+        if (content[i] === "{") braceDepth++;
+        if (content[i] === "}") braceDepth--;
+        i++;
+      }
+
+      if (braceDepth === 0) {
+        const objectStr = content.slice(startIndex, i);
+        const lineNumber = content.slice(0, match.index).split("\n").length;
+        results.push({ varName, objectStr, lineNumber });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Find defineTokens.category({ ... }) calls in content using brace matching.
+   */
+  private findDefineTokensCalls(
+    content: string,
+  ): Array<{ category: string; objectStr: string; lineNumber: number }> {
+    const results: Array<{
+      category: string;
+      objectStr: string;
+      lineNumber: number;
+    }> = [];
+
+    // Find all defineTokens.category( patterns
+    const startRegex = /defineTokens\.(\w+)\s*\(\s*\{/g;
+    let match;
+
+    while ((match = startRegex.exec(content)) !== null) {
+      const category = match[1] || "other";
+      const startIndex = match.index + match[0].length - 1; // Position of opening {
+
+      // Find matching closing brace
+      let braceDepth = 1;
+      let i = startIndex + 1;
+      while (i < content.length && braceDepth > 0) {
+        if (content[i] === "{") braceDepth++;
+        if (content[i] === "}") braceDepth--;
+        i++;
+      }
+
+      if (braceDepth === 0) {
+        const objectStr = content.slice(startIndex, i);
+        const lineNumber = content.slice(0, match.index).split("\n").length;
+        results.push({ category, objectStr, lineNumber });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse object entries handling nested braces correctly.
+   */
+  private parseObjectEntries(
+    content: string,
+  ): Array<{ key: string; content: string }> {
+    const entries: Array<{ key: string; content: string }> = [];
+    let i = 0;
+
+    while (i < content.length) {
+      // Skip whitespace and commas
+      while (i < content.length && /[\s,]/.test(content[i]!)) {
+        i++;
+      }
+      if (i >= content.length) break;
+
+      // Parse key (quoted or unquoted)
+      let key = "";
+      if (content[i] === '"' || content[i] === "'") {
+        const quote = content[i];
+        i++;
+        while (i < content.length && content[i] !== quote) {
+          key += content[i];
+          i++;
+        }
+        i++; // Skip closing quote
+      } else {
+        while (i < content.length && /\w/.test(content[i]!)) {
+          key += content[i];
+          i++;
+        }
+      }
+
+      if (!key) break;
+
+      // Skip to colon
+      while (i < content.length && content[i] !== ":") {
+        i++;
+      }
+      if (i >= content.length) break;
+      i++; // Skip colon
+
+      // Skip whitespace
+      while (i < content.length && /\s/.test(content[i]!)) {
+        i++;
+      }
+      if (i >= content.length) break;
+
+      // Parse value (string or object)
+      let valueContent = "";
+      if (content[i] === '"' || content[i] === "'") {
+        // String value
+        const quote = content[i];
+        valueContent += quote;
+        i++;
+        while (i < content.length && content[i] !== quote) {
+          valueContent += content[i];
+          i++;
+        }
+        if (i < content.length) {
+          valueContent += content[i]; // Include closing quote
+          i++;
+        }
+      } else if (content[i] === "{") {
+        // Object value - find matching brace
+        let braceDepth = 0;
+        while (i < content.length) {
+          if (content[i] === "{") braceDepth++;
+          if (content[i] === "}") {
+            braceDepth--;
+            if (braceDepth === 0) {
+              valueContent += content[i];
+              i++;
+              break;
+            }
+          }
+          valueContent += content[i];
+          i++;
+        }
+      }
+
+      if (key && valueContent) {
+        entries.push({ key, content: valueContent });
+      }
+    }
+
+    return entries;
+  }
+
+  /**
+   * Check if a variable name suggests it contains design tokens.
+   */
+  private isTokenRelatedVarName(varName: string): boolean {
+    const tokenPatterns = [
+      /^colors?$/i,
+      /^spacing$/i,
+      /^sizes?$/i,
+      /^fonts?$/i,
+      /^typography$/i,
+      /^shadows?$/i,
+      /^borders?$/i,
+      /^radii$/i,
+      /^radius$/i,
+      /^zIndex$/i,
+      /^breakpoints?$/i,
+      /^theme$/i,
+      /^tokens?$/i,
+      /^palette$/i,
+      /^durations?$/i,
+      /^easings?$/i,
+      /^animations?$/i,
+      /^letterSpacings?$/i,
+      /^lineHeights?$/i,
+      /^fontSizes?$/i,
+      /^fontWeights?$/i,
+    ];
+
+    return tokenPatterns.some((pattern) => pattern.test(varName));
+  }
+
+  /**
+   * Infer token category from variable name.
+   */
+  private inferCategoryFromVarName(varName: string): string {
+    const nameLower = varName.toLowerCase();
+
+    if (nameLower.includes("color") || nameLower === "palette") return "color";
+    if (nameLower.includes("spacing") || nameLower.includes("gap"))
+      return "spacing";
+    if (
+      nameLower.includes("size") &&
+      !nameLower.includes("font") &&
+      !nameLower.includes("text")
+    )
+      return "sizing";
+    if (
+      nameLower.includes("font") ||
+      nameLower.includes("text") ||
+      nameLower === "typography"
+    )
+      return "typography";
+    if (nameLower.includes("shadow") || nameLower.includes("elevation"))
+      return "shadow";
+    if (
+      nameLower.includes("border") ||
+      nameLower.includes("radi") ||
+      nameLower === "radii"
+    )
+      return "border";
+    if (
+      nameLower.includes("animation") ||
+      nameLower.includes("duration") ||
+      nameLower.includes("easing") ||
+      nameLower.includes("motion")
+    )
+      return "motion";
+    if (nameLower.includes("breakpoint")) return "sizing";
+    if (nameLower.includes("zindex") || nameLower === "z") return "other";
+
+    return "other";
   }
 
   /**
