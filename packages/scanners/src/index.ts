@@ -16,7 +16,7 @@ export { StorybookScanner, type StorybookScannerConfig } from './storybook/index
 
 // Tailwind scanner
 export { TailwindScanner, TailwindConfigParser, ArbitraryValueDetector } from './tailwind/index.js';
-export type { TailwindScannerConfig, TailwindScanResult, TailwindTheme, ArbitraryValue } from './tailwind/index.js';
+export type { TailwindScannerConfig, TailwindScanResult, TailwindTheme, ArbitraryValue, SemanticToken } from './tailwind/index.js';
 
 // Plugin adapter
 export { createPluginFromScanner } from './plugin-adapter.js';

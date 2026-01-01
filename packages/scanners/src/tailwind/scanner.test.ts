@@ -290,6 +290,321 @@ module.exports = {
     });
   });
 
+  describe('semantic token extraction from class usage', () => {
+    it('extracts semantic tokens from Tailwind classes in TSX files', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue([
+        '/test/project/src/components/Button.tsx',
+        '/test/project/src/components/Card.tsx',
+      ]);
+
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        if (String(path).includes('Button.tsx')) {
+          return `
+import React from 'react';
+
+export const Button = ({ children }) => (
+  <button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2">
+    {children}
+  </button>
+);
+          `;
+        }
+        if (String(path).includes('Card.tsx')) {
+          return `
+import React from 'react';
+
+export const Card = ({ children }) => (
+  <div className="bg-card text-card-foreground border border-border rounded-lg p-6">
+    {children}
+  </div>
+);
+          `;
+        }
+        return '';
+      });
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        extractSemanticTokens: true,
+      });
+
+      const result = await scanner.scan();
+
+      // Should extract semantic tokens from class usage
+      expect(result.semanticTokens).toBeDefined();
+      expect(result.semanticTokens!.length).toBeGreaterThan(0);
+
+      // Should find common semantic tokens
+      const tokenNames = result.semanticTokens!.map(t => t.name);
+      expect(tokenNames).toContain('primary');
+      expect(tokenNames).toContain('primary-foreground');
+      expect(tokenNames).toContain('card');
+      expect(tokenNames).toContain('border');
+    });
+
+    it('extracts semantic tokens from cva variant definitions', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue(['/test/project/src/components/Button.tsx']);
+
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+import { cva } from 'class-variance-authority';
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-md text-sm font-medium",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
+      },
+    },
+  }
+);
+      `);
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        extractSemanticTokens: true,
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.semanticTokens).toBeDefined();
+
+      const tokenNames = result.semanticTokens!.map(t => t.name);
+      expect(tokenNames).toContain('primary');
+      expect(tokenNames).toContain('destructive');
+      expect(tokenNames).toContain('secondary');
+      expect(tokenNames).toContain('accent');
+      expect(tokenNames).toContain('background');
+      expect(tokenNames).toContain('input');
+    });
+
+    it('counts semantic token usage frequency', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue([
+        '/test/project/src/components/Button.tsx',
+        '/test/project/src/components/Input.tsx',
+      ]);
+
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        if (String(path).includes('Button.tsx')) {
+          return `<button className="bg-primary text-primary-foreground">Click</button>`;
+        }
+        if (String(path).includes('Input.tsx')) {
+          return `<input className="border-input bg-background text-foreground focus:ring-primary" />`;
+        }
+        return '';
+      });
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        extractSemanticTokens: true,
+      });
+
+      const result = await scanner.scan();
+
+      const primaryToken = result.semanticTokens!.find(t => t.name === 'primary');
+      expect(primaryToken).toBeDefined();
+      expect(primaryToken!.usageCount).toBeGreaterThanOrEqual(2);
+    });
+
+    it('identifies files using each semantic token', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue([
+        '/test/project/src/Button.tsx',
+        '/test/project/src/Card.tsx',
+      ]);
+
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        if (String(path).includes('Button.tsx')) {
+          return `<button className="bg-primary">Click</button>`;
+        }
+        if (String(path).includes('Card.tsx')) {
+          return `<div className="bg-primary border">Card</div>`;
+        }
+        return '';
+      });
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        extractSemanticTokens: true,
+      });
+
+      const result = await scanner.scan();
+
+      const primaryToken = result.semanticTokens!.find(t => t.name === 'primary');
+      expect(primaryToken!.usedInFiles).toContain('src/Button.tsx');
+      expect(primaryToken!.usedInFiles).toContain('src/Card.tsx');
+    });
+
+    it('extracts semantic tokens from cn/clsx/classnames function calls', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue(['/test/project/src/Input.tsx']);
+
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+import { cn } from '@/lib/utils';
+
+export const Input = ({ className, ...props }) => (
+  <input
+    className={cn(
+      "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2",
+      "text-foreground placeholder:text-muted-foreground",
+      "focus-visible:ring-ring focus-visible:ring-offset-2",
+      className
+    )}
+    {...props}
+  />
+);
+      `);
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        extractSemanticTokens: true,
+      });
+
+      const result = await scanner.scan();
+
+      const tokenNames = result.semanticTokens!.map(t => t.name);
+      expect(tokenNames).toContain('input');
+      expect(tokenNames).toContain('background');
+      expect(tokenNames).toContain('foreground');
+      expect(tokenNames).toContain('muted-foreground');
+      expect(tokenNames).toContain('ring');
+    });
+
+    it('respects extractSemanticTokens option when false', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue(['/test/project/src/Button.tsx']);
+
+      vi.mocked(fs.readFileSync).mockReturnValue(`<button className="bg-primary">Click</button>`);
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        extractSemanticTokens: false,
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.semanticTokens).toBeUndefined();
+    });
+
+    it('extracts semantic tokens from real shadcn-ui button component pattern', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue(['/test/project/registry/default/ui/button.tsx']);
+
+      // Real shadcn-ui button component code pattern
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
+      },
+    },
+  }
+)
+      `);
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        extractSemanticTokens: true,
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.semanticTokens).toBeDefined();
+      expect(result.semanticTokens!.length).toBeGreaterThan(0);
+
+      const tokenNames = result.semanticTokens!.map(t => t.name);
+
+      // All core shadcn-ui semantic tokens from button component
+      expect(tokenNames).toContain('primary');
+      expect(tokenNames).toContain('primary-foreground');
+      expect(tokenNames).toContain('destructive');
+      expect(tokenNames).toContain('destructive-foreground');
+      expect(tokenNames).toContain('secondary');
+      expect(tokenNames).toContain('secondary-foreground');
+      expect(tokenNames).toContain('accent');
+      expect(tokenNames).toContain('accent-foreground');
+      expect(tokenNames).toContain('background');
+      expect(tokenNames).toContain('input');
+      expect(tokenNames).toContain('ring');
+
+      // Verify stats
+      expect(result.stats.semanticTokensFound).toBe(result.semanticTokens!.length);
+    });
+
+    it('extracts semantic tokens from headlessui-style forwardRef components', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue(['/test/project/playgrounds/react/components/button.tsx']);
+
+      // Real headlessui playground button pattern
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+import { forwardRef, ComponentProps, ReactNode } from 'react'
+import { classNames } from '../utils/class-names'
+
+export let Button = forwardRef<
+  HTMLButtonElement,
+  ComponentProps<'button'> & { children?: ReactNode }
+>(({ className, ...props }, ref) => (
+  <button
+    ref={ref}
+    type="button"
+    className={classNames(
+      'focus:outline-hidden ui-focus-visible:ring-2 ui-focus-visible:ring-offset-2 flex items-center rounded-md border border-gray-300 bg-white px-2 py-1 ring-gray-500 ring-offset-gray-100',
+      className
+    )}
+    {...props}
+  />
+))
+      `);
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        extractSemanticTokens: true,
+      });
+
+      const result = await scanner.scan();
+
+      // headlessui uses standard Tailwind colors, not semantic tokens
+      // This verifies we correctly filter out utility colors like gray-300
+      expect(result.semanticTokens).toBeDefined();
+
+      // Should not find utility color tokens (gray-300, gray-500, etc.)
+      const tokenNames = result.semanticTokens!.map(t => t.name);
+      expect(tokenNames).not.toContain('gray-300');
+      expect(tokenNames).not.toContain('gray-500');
+      expect(tokenNames).not.toContain('gray-100');
+    });
+  });
+
   describe('scan orchestration', () => {
     it('combines theme tokens and arbitrary value detection', async () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);

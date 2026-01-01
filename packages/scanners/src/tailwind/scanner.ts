@@ -13,16 +13,37 @@ export interface TailwindScannerConfig {
   detectArbitraryValues?: boolean;
   /** Whether to extract theme tokens from config (default: true) */
   extractThemeTokens?: boolean;
+  /** Whether to extract semantic tokens from class usage in source files (default: false) */
+  extractSemanticTokens?: boolean;
+}
+
+/**
+ * Represents a semantic design token discovered from Tailwind class usage
+ */
+export interface SemanticToken {
+  /** Token name (e.g., 'primary', 'primary-foreground', 'muted') */
+  name: string;
+  /** Token category inferred from usage */
+  category: 'color' | 'spacing' | 'border' | 'typography' | 'other';
+  /** Number of times this token is used */
+  usageCount: number;
+  /** Files where this token is used */
+  usedInFiles: string[];
+  /** Example classes using this token */
+  exampleClasses: string[];
 }
 
 export interface TailwindScanResult {
   tokens: DesignToken[];
   drifts: DriftSignal[];
   configPath: string | null;
+  /** Semantic tokens discovered from Tailwind class usage */
+  semanticTokens?: SemanticToken[];
   stats: {
     filesScanned: number;
     arbitraryValuesFound: number;
     tokensExtracted: number;
+    semanticTokensFound?: number;
   };
 }
 
@@ -45,6 +66,7 @@ export class TailwindScanner {
     this.config = {
       detectArbitraryValues: true,
       extractThemeTokens: true,
+      extractSemanticTokens: false,
       ...config,
     };
   }
@@ -99,7 +121,265 @@ export class TailwindScanner {
       result.stats.filesScanned = new Set(arbitraryValues.map(v => v.file)).size;
     }
 
+    // Extract semantic tokens from class usage in source files
+    if (this.config.extractSemanticTokens) {
+      const semanticTokens = await this.extractSemanticTokens();
+      result.semanticTokens = semanticTokens;
+      result.stats.semanticTokensFound = semanticTokens.length;
+    }
+
     return result;
+  }
+
+  /**
+   * Extract semantic design tokens from Tailwind class usage in source files
+   */
+  private async extractSemanticTokens(): Promise<SemanticToken[]> {
+    const tokenMap = new Map<string, SemanticToken>();
+
+    // File patterns to scan for Tailwind classes
+    const sourcePatterns = this.config.include || [
+      '**/*.tsx',
+      '**/*.jsx',
+      '**/*.ts',
+      '**/*.js',
+      '**/*.vue',
+      '**/*.svelte',
+    ];
+
+    const exclude = [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/.next/**',
+      '**/*.test.*',
+      '**/*.spec.*',
+      ...(this.config.exclude || []),
+    ];
+
+    for (const pattern of sourcePatterns) {
+      try {
+        const files = await glob(pattern, {
+          cwd: this.config.projectRoot,
+          ignore: exclude,
+          absolute: true,
+        });
+
+        for (const file of files) {
+          const content = readFileSync(file, 'utf-8');
+          const relativePath = file.replace(this.config.projectRoot + '/', '');
+          this.extractSemanticTokensFromContent(content, relativePath, tokenMap);
+        }
+      } catch {
+        // Continue to next pattern
+      }
+    }
+
+    return Array.from(tokenMap.values());
+  }
+
+  /**
+   * Extract semantic tokens from file content
+   */
+  private extractSemanticTokensFromContent(
+    content: string,
+    filePath: string,
+    tokenMap: Map<string, SemanticToken>
+  ): void {
+    // Extract all string literals that could contain Tailwind classes
+    const classStrings = this.extractClassStrings(content);
+
+    for (const classString of classStrings) {
+      const classes = classString.split(/\s+/).filter(Boolean);
+
+      for (const cls of classes) {
+        const semanticToken = this.parseSemanticToken(cls);
+        if (semanticToken) {
+          const existing = tokenMap.get(semanticToken.name);
+          if (existing) {
+            existing.usageCount++;
+            if (!existing.usedInFiles.includes(filePath)) {
+              existing.usedInFiles.push(filePath);
+            }
+            if (existing.exampleClasses.length < 5 && !existing.exampleClasses.includes(cls)) {
+              existing.exampleClasses.push(cls);
+            }
+          } else {
+            tokenMap.set(semanticToken.name, {
+              ...semanticToken,
+              usageCount: 1,
+              usedInFiles: [filePath],
+              exampleClasses: [cls],
+            });
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Extract class strings from source code content
+   */
+  private extractClassStrings(content: string): string[] {
+    const classStrings: string[] = [];
+
+    // Match className="..." or class="..."
+    const classNameRegex = /(?:className|class)\s*=\s*["']([^"']+)["']/g;
+    let match;
+    while ((match = classNameRegex.exec(content)) !== null) {
+      classStrings.push(match[1]!);
+    }
+
+    // Match className={cn(...)} or className={clsx(...)} or className={classNames(...)}
+    const cnCallRegex = /(?:cn|clsx|classNames|cva)\s*\(\s*[\s\S]*?\)/g;
+    while ((match = cnCallRegex.exec(content)) !== null) {
+      // Extract string literals from within the function call
+      const innerStrings = this.extractStringsFromFunctionCall(match[0]);
+      classStrings.push(...innerStrings);
+    }
+
+    // Match cva variant definitions - look for object values that are strings
+    const variantRegex = /variants\s*:\s*\{[\s\S]*?\}/g;
+    while ((match = variantRegex.exec(content)) !== null) {
+      const innerStrings = this.extractStringsFromFunctionCall(match[0]);
+      classStrings.push(...innerStrings);
+    }
+
+    return classStrings;
+  }
+
+  /**
+   * Extract string literals from a function call or object
+   */
+  private extractStringsFromFunctionCall(code: string): string[] {
+    const strings: string[] = [];
+    // Match both single and double quoted strings
+    const stringRegex = /["']([^"']+)["']/g;
+    let match;
+    while ((match = stringRegex.exec(code)) !== null) {
+      strings.push(match[1]!);
+    }
+    // Match template literals
+    const templateRegex = /`([^`]+)`/g;
+    while ((match = templateRegex.exec(code)) !== null) {
+      strings.push(match[1]!);
+    }
+    return strings;
+  }
+
+  /**
+   * Parse a Tailwind class to extract semantic token name
+   * Returns null if the class doesn't reference a semantic token
+   */
+  private parseSemanticToken(cls: string): Omit<SemanticToken, 'usageCount' | 'usedInFiles' | 'exampleClasses'> | null {
+    // Known semantic token patterns in shadcn-ui and similar design systems
+    const semanticPatterns = [
+      // Color tokens: bg-primary, text-foreground, border-input, etc.
+      /^(?:bg|text|border|ring|outline|fill|stroke|shadow|from|to|via)-([a-z]+-?[a-z]*(?:-foreground)?)(?:\/\d+)?$/,
+      // Hover/focus variants: hover:bg-primary, focus:ring-ring
+      /^(?:hover|focus|active|disabled|focus-visible):(?:bg|text|border|ring|outline|fill|stroke|from|to|via)-([a-z]+-?[a-z]*(?:-foreground)?)(?:\/\d+)?$/,
+      // Placeholder variants: placeholder:text-muted-foreground
+      /^placeholder:(?:text|bg)-([a-z]+-?[a-z]*(?:-foreground)?)(?:\/\d+)?$/,
+    ];
+
+    // Known semantic token names from shadcn-ui and common design systems
+    const knownSemanticTokens = new Set([
+      'primary', 'primary-foreground',
+      'secondary', 'secondary-foreground',
+      'destructive', 'destructive-foreground',
+      'muted', 'muted-foreground',
+      'accent', 'accent-foreground',
+      'popover', 'popover-foreground',
+      'card', 'card-foreground',
+      'background', 'foreground',
+      'border', 'input', 'ring',
+      'chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5',
+      'sidebar', 'sidebar-foreground',
+      'sidebar-primary', 'sidebar-primary-foreground',
+      'sidebar-accent', 'sidebar-accent-foreground',
+      'sidebar-border', 'sidebar-ring',
+    ]);
+
+    for (const pattern of semanticPatterns) {
+      const match = cls.match(pattern);
+      if (match && match[1]) {
+        const tokenName = match[1];
+        // Only return if it's a known semantic token or looks like one
+        if (knownSemanticTokens.has(tokenName) || this.looksLikeSemanticToken(tokenName)) {
+          return {
+            name: tokenName,
+            category: this.categorizeSemanticToken(tokenName, cls),
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Check if a token name looks like a semantic design token
+   */
+  private looksLikeSemanticToken(name: string): boolean {
+    // Semantic tokens typically have meaningful names, not utility values
+    // Exclude standard Tailwind color names like 'red-500', 'blue-200', etc.
+    const utilityColorPattern = /^(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|black|white)(-\d+)?$/;
+    if (utilityColorPattern.test(name)) {
+      return false;
+    }
+
+    // Semantic tokens usually have descriptive names
+    const semanticPatterns = [
+      /foreground$/,
+      /background$/,
+      /^primary/,
+      /^secondary/,
+      /^accent/,
+      /^muted/,
+      /^destructive/,
+      /^success/,
+      /^warning/,
+      /^error/,
+      /^info/,
+      /^surface/,
+      /^popover/,
+      /^card/,
+      /^sidebar/,
+      /^input$/,
+      /^ring$/,
+      /^border$/,
+    ];
+
+    return semanticPatterns.some(pattern => pattern.test(name));
+  }
+
+  /**
+   * Categorize a semantic token based on its name and usage
+   */
+  private categorizeSemanticToken(name: string, cls: string): 'color' | 'spacing' | 'border' | 'typography' | 'other' {
+    // If used with text-*, it's text color
+    if (cls.includes('text-')) {
+      return 'color';
+    }
+    // If used with bg-*, it's background color
+    if (cls.includes('bg-')) {
+      return 'color';
+    }
+    // Border-related
+    if (cls.includes('border-') || name.includes('border')) {
+      return name === 'border' ? 'color' : 'border';
+    }
+    // Ring-related
+    if (cls.includes('ring-') || name === 'ring') {
+      return 'color';
+    }
+
+    // Default based on name
+    if (name.includes('foreground') || name.includes('background')) {
+      return 'color';
+    }
+
+    return 'color';
   }
 
   /**
