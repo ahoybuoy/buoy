@@ -75,6 +75,11 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         "**/tokens.ts",
         "**/theme/tokens.ts",
         "**/theme/**/*.ts",
+        // Mantine-style theme definition files
+        "**/default-theme.ts",
+        "**/default-colors.ts",
+        "**/*Provider/**/*.ts",
+        "**/*Provider/**/*.tsx",
       ]);
       filesToScan = [...jsonFiles, ...cssFiles, ...tsFiles];
     }
@@ -846,11 +851,24 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       // Skip certain keys that are not token values
       if (key === "value" || key === "description" || key === "type" || key === "$value" || key === "$type") continue;
 
+      const trimmedContent = content.trim();
+
       // Skip keys that are clearly config, not tokens
-      if (this.isConfigKey(key)) continue;
+      // BUT: allow config keys if they look like token values (arrays, objects with {value}, etc.)
+      if (this.isConfigKey(key)) {
+        // If the content looks like a token value, process it anyway
+        const looksLikeTokenValue =
+          trimmedContent.startsWith("[") || // Array of values
+          trimmedContent.match(/^\{\s*value\s*:/) || // Object with value property
+          trimmedContent.match(/^\{\s*["']?\d+["']?\s*:/) || // Nested object with numeric keys
+          trimmedContent.match(/^["']#[0-9a-fA-F]/); // Direct hex color string
+
+        if (!looksLikeTokenValue) {
+          continue;
+        }
+      }
 
       const tokenName = prefix ? `${prefix}.${key}` : key;
-      const trimmedContent = content.trim();
 
       // Determine category for this token
       // If a category was passed in (e.g., from defineTokens.colors), use it
@@ -929,6 +947,20 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         continue;
       }
 
+      // Check if this is an array of color values (Mantine-style color palette)
+      // Pattern: ['#C9C9C9', '#b8b8b8', ...]
+      if (trimmedContent.startsWith("[") && trimmedContent.endsWith("]")) {
+        const arrayTokens = this.extractColorArrayTokens(
+          trimmedContent,
+          tokenName,
+          effectiveCategory,
+        );
+        if (arrayTokens.length > 0) {
+          results.push(...arrayTokens);
+          continue;
+        }
+      }
+
       // Check if this is a nested object
       if (trimmedContent.startsWith("{") && trimmedContent.endsWith("}")) {
         // For nested objects, determine the category:
@@ -945,6 +977,66 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           isSemantic,
         );
         results.push(...nestedResults);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Extract tokens from an array of color values (Mantine-style color palettes).
+   * Pattern: ['#C9C9C9', '#b8b8b8', '#828282', ...]
+   *
+   * Creates tokens like: dark.0, dark.1, dark.2, etc.
+   */
+  private extractColorArrayTokens(
+    arrayStr: string,
+    prefix: string,
+    category: string,
+  ): Array<{ name: string; value: string; tokenCategory: string }> {
+    const results: Array<{
+      name: string;
+      value: string;
+      tokenCategory: string;
+    }> = [];
+
+    // Remove brackets
+    let inner = arrayStr.trim();
+    if (inner.startsWith("[")) inner = inner.slice(1);
+    if (inner.endsWith("]")) inner = inner.slice(0, -1);
+
+    // Extract all string values from the array
+    const valueRegex = /['"]([^'"]+)['"]/g;
+    let match;
+    let index = 0;
+
+    while ((match = valueRegex.exec(inner)) !== null) {
+      const value = match[1];
+      if (value) {
+        // Check if it looks like a color value
+        const looksLikeColor =
+          value.startsWith("#") ||
+          value.startsWith("rgb") ||
+          value.startsWith("hsl") ||
+          value.startsWith("rgba") ||
+          value.startsWith("hsla");
+
+        if (looksLikeColor) {
+          results.push({
+            name: `${prefix}.${index}`,
+            value: value,
+            // Color arrays are always color tokens
+            tokenCategory: "color",
+          });
+        } else {
+          // Non-color value - use provided category
+          results.push({
+            name: `${prefix}.${index}`,
+            value: value,
+            tokenCategory: category,
+          });
+        }
+        index++;
       }
     }
 
@@ -1178,6 +1270,22 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           valueContent += content[i];
           i++;
         }
+      } else if (content[i] === "[") {
+        // Array value - find matching bracket
+        let bracketDepth = 0;
+        while (i < content.length) {
+          if (content[i] === "[") bracketDepth++;
+          if (content[i] === "]") {
+            bracketDepth--;
+            if (bracketDepth === 0) {
+              valueContent += content[i];
+              i++;
+              break;
+            }
+          }
+          valueContent += content[i];
+          i++;
+        }
       } else {
         // Other expression (function call, identifier, number, etc.)
         // Parse until comma or closing brace, handling nested parens
@@ -1231,7 +1339,9 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       /^fontWeights?$/i,
       // Theme variable patterns (Mantine, Chakra, etc.)
       /DEFAULT_THEME/i,
+      /DEFAULT_COLORS/i,
       /^default.*theme$/i,
+      /^default.*colors$/i,
       /^mantine.*theme$/i,
       /^chakra.*theme$/i,
     ];

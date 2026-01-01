@@ -1314,4 +1314,165 @@ type SizeType = 'sm' | 'lg';
       expect(result.items.length).toBeGreaterThanOrEqual(3);
     });
   });
+
+  describe("Mantine-style color arrays", () => {
+    it("extracts tokens from color palette arrays like Mantine DEFAULT_COLORS", async () => {
+      vol.fromJSON({
+        "/project/theme/default-colors.ts": `
+          export const DEFAULT_COLORS = {
+            dark: [
+              '#C9C9C9',
+              '#b8b8b8',
+              '#828282',
+              '#696969',
+              '#424242',
+            ],
+            gray: [
+              '#f8f9fa',
+              '#f1f3f5',
+              '#e9ecef',
+            ],
+            blue: [
+              '#e7f5ff',
+              '#d0ebff',
+              '#a5d8ff',
+            ],
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["theme/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect: dark.0-4, gray.0-2, blue.0-2 = 5 + 3 + 3 = 11 tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(11);
+
+      // Check that we got indexed color tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: expect.stringMatching(/dark\.0|dark\[0\]/),
+          category: "color",
+        }),
+      );
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: expect.stringMatching(/gray\.2|gray\[2\]/),
+          category: "color",
+        }),
+      );
+    });
+
+    it("extracts color arrays with type annotations", async () => {
+      vol.fromJSON({
+        "/project/theme/colors.ts": `
+          type MantineThemeColors = Record<string, string[]>;
+
+          export const DEFAULT_COLORS: MantineThemeColors = {
+            red: [
+              '#fff5f5',
+              '#ffe3e3',
+              '#ffc9c9',
+            ],
+            green: [
+              '#ebfbee',
+              '#d3f9d8',
+            ],
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["theme/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect red.0-2 and green.0-1 = 3 + 2 = 5 tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(5);
+    });
+  });
+
+  describe("Extended file path patterns", () => {
+    it("scans default-theme.ts files outside of /theme/ directory", async () => {
+      vol.fromJSON({
+        "/project/src/core/Provider/default-theme.ts": `
+          const rem = (value: number) => \`\${value / 16}rem\`;
+
+          export const DEFAULT_THEME = {
+            fontSizes: {
+              xs: rem(12),
+              sm: rem(14),
+              md: rem(16),
+            },
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect fontSizes.xs, fontSizes.sm, fontSizes.md
+      expect(result.items.length).toBeGreaterThanOrEqual(3);
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: expect.stringContaining("fontSizes"),
+          category: "typography",
+        }),
+      );
+    });
+
+    it("scans default-colors.ts files outside of /theme/ directory", async () => {
+      vol.fromJSON({
+        "/project/src/core/Provider/default-colors.ts": `
+          export const DEFAULT_COLORS = {
+            gray: [
+              '#f8f9fa',
+              '#f1f3f5',
+              '#e9ecef',
+            ],
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect gray color tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("scans *Provider/**/*.ts pattern for theme files", async () => {
+      vol.fromJSON({
+        "/project/packages/core/src/MantineProvider/default-theme.ts": `
+          export const theme = {
+            spacing: {
+              xs: '10px',
+              sm: '12px',
+              md: '16px',
+            },
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(3);
+    });
+  });
 });
