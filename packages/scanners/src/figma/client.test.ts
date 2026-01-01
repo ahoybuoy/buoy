@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { FigmaClient, FigmaAPIError, FigmaClientOptions } from './client.js';
+import {
+  FigmaClient,
+  FigmaAPIError,
+  FigmaClientOptions,
+  FigmaAuthError,
+  FigmaNotFoundError,
+  FigmaRateLimitError,
+  createFigmaClient,
+} from './client.js';
 
 describe('FigmaClient', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -571,6 +579,277 @@ describe('FigmaClient', () => {
       const url = client.getFigmaUrl('abc123', '1:1');
 
       expect(url).toBe('https://www.figma.com/file/abc123?node-id=1%3A1');
+    });
+  });
+
+  describe('OAuth2 authentication', () => {
+    it('supports OAuth2 bearer token via factory function', async () => {
+      mockSuccessResponse({ name: 'Test File' });
+
+      const client = createFigmaClient({
+        authType: 'oauth2',
+        accessToken: 'oauth-bearer-token',
+      });
+
+      await client.getFile('test-key');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer oauth-bearer-token',
+          }),
+        })
+      );
+    });
+
+    it('defaults to personal access token authentication', async () => {
+      mockSuccessResponse({ name: 'Test File' });
+
+      const client = createFigmaClient({
+        accessToken: 'personal-token',
+      });
+
+      await client.getFile('test-key');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Figma-Token': 'personal-token',
+          }),
+        })
+      );
+    });
+  });
+
+  describe('team and project endpoints', () => {
+    it('fetches team projects with getTeamProjects', async () => {
+      const projectsData = {
+        projects: [
+          { id: 'proj1', name: 'Design System' },
+          { id: 'proj2', name: 'Marketing' },
+        ],
+      };
+      mockSuccessResponse(projectsData);
+
+      const client = createClient();
+      const result = await client.getTeamProjects('team123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/teams/team123/projects',
+        expect.any(Object)
+      );
+      expect(result).toEqual(projectsData);
+    });
+
+    it('fetches project files with getProjectFiles', async () => {
+      const filesData = {
+        files: [
+          { key: 'file1', name: 'Components', thumbnail_url: 'https://...' },
+          { key: 'file2', name: 'Icons', thumbnail_url: 'https://...' },
+        ],
+      };
+      mockSuccessResponse(filesData);
+
+      const client = createClient();
+      const result = await client.getProjectFiles('proj123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/projects/proj123/files',
+        expect.any(Object)
+      );
+      expect(result).toEqual(filesData);
+    });
+  });
+
+  describe('file versions', () => {
+    it('fetches file version history', async () => {
+      const versionsData = {
+        versions: [
+          { id: 'v1', created_at: '2024-01-01T00:00:00Z', label: 'Initial' },
+          { id: 'v2', created_at: '2024-01-02T00:00:00Z', label: 'Updated' },
+        ],
+      };
+      mockSuccessResponse(versionsData);
+
+      const client = createClient();
+      const result = await client.getFileVersions('abc123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/versions',
+        expect.any(Object)
+      );
+      expect(result).toEqual(versionsData);
+    });
+
+    it('fetches specific file version', async () => {
+      const fileData = {
+        name: 'Old Version',
+        document: { id: '0:0', name: 'Document', type: 'DOCUMENT', children: [] },
+      };
+      mockSuccessResponse(fileData);
+
+      const client = createClient();
+      const result = await client.getFile('abc123', { version: 'v123' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123?version=v123',
+        expect.any(Object)
+      );
+      expect(result).toEqual(fileData);
+    });
+  });
+
+  describe('specific error types', () => {
+    it('throws FigmaAuthError on 401 Unauthorized', async () => {
+      mockErrorResponse(401, 'Unauthorized', 'Invalid token');
+
+      const client = createClient({ maxRetries: 0 });
+
+      await expect(client.getFile('abc123')).rejects.toThrow(FigmaAuthError);
+    });
+
+    it('throws FigmaAuthError on 403 Forbidden', async () => {
+      mockErrorResponse(403, 'Forbidden', 'Access denied');
+
+      const client = createClient({ maxRetries: 0 });
+
+      await expect(client.getFile('abc123')).rejects.toThrow(FigmaAuthError);
+    });
+
+    it('throws FigmaNotFoundError on 404', async () => {
+      mockErrorResponse(404, 'Not Found', 'File not found');
+
+      const client = createClient({ maxRetries: 0 });
+
+      await expect(client.getFile('abc123')).rejects.toThrow(FigmaNotFoundError);
+    });
+
+    it('throws FigmaRateLimitError on 429 after retries exhausted', async () => {
+      mockErrorResponse(429, 'Too Many Requests', 'Rate limited');
+      mockErrorResponse(429, 'Too Many Requests', 'Rate limited');
+      mockErrorResponse(429, 'Too Many Requests', 'Rate limited');
+      mockErrorResponse(429, 'Too Many Requests', 'Rate limited');
+
+      const client = createClient({ maxRetries: 3, initialRetryDelayMs: 100 });
+
+      const promise = client.getFile('abc123').catch((e) => e);
+
+      await vi.advanceTimersByTimeAsync(30000);
+
+      const error = await promise;
+      expect(error).toBeInstanceOf(FigmaRateLimitError);
+    });
+
+    it('FigmaRateLimitError includes retry timing information', async () => {
+      mockErrorResponse(429, 'Too Many Requests', 'Rate limited', {
+        'Retry-After': '60',
+      });
+
+      const client = createClient({ maxRetries: 0 });
+
+      try {
+        await client.getFile('abc123');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(FigmaRateLimitError);
+        expect((error as FigmaRateLimitError).retryAfterMs).toBe(60000);
+      }
+    });
+  });
+
+  describe('proactive rate limit handling', () => {
+    it('waits proactively when approaching rate limit', async () => {
+      // First request returns low remaining count
+      const resetTime = Math.floor(Date.now() / 1000) + 5;
+      mockSuccessResponse({ name: 'File 1' }, {
+        'X-RateLimit-Remaining': '1',
+        'X-RateLimit-Reset': String(resetTime),
+      });
+      mockSuccessResponse({ name: 'File 2' });
+
+      const client = new FigmaClient('test-token', {
+        enableCache: false,
+        proactiveRateLimitThreshold: 2,
+      });
+
+      await client.getFile('file1');
+
+      // Second request should wait until rate limit resets
+      const startTime = Date.now();
+      const promise = client.getFile('file2');
+
+      // Should not complete immediately due to proactive waiting
+      await vi.advanceTimersByTimeAsync(100);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      // After waiting for reset, should proceed
+      await vi.advanceTimersByTimeAsync(5000);
+      await promise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not wait when remaining requests are above threshold', async () => {
+      mockSuccessResponse({ name: 'File 1' }, {
+        'X-RateLimit-Remaining': '100',
+        'X-RateLimit-Reset': String(Math.floor(Date.now() / 1000) + 60),
+      });
+      mockSuccessResponse({ name: 'File 2' });
+
+      const client = new FigmaClient('test-token', {
+        enableCache: false,
+        proactiveRateLimitThreshold: 5,
+      });
+
+      await client.getFile('file1');
+      await client.getFile('file2');
+
+      // Both requests should complete without delay
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('comments API', () => {
+    it('fetches file comments', async () => {
+      const commentsData = {
+        comments: [
+          { id: 'c1', message: 'Nice work!', user: { handle: 'designer' } },
+        ],
+      };
+      mockSuccessResponse(commentsData);
+
+      const client = createClient();
+      const result = await client.getComments('abc123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/comments',
+        expect.any(Object)
+      );
+      expect(result).toEqual(commentsData);
+    });
+  });
+
+  describe('component sets', () => {
+    it('fetches component sets from a file', async () => {
+      const componentSetsData = {
+        meta: {
+          component_sets: [
+            { key: 'set1', name: 'Button', description: 'Button variants' },
+          ],
+        },
+      };
+      mockSuccessResponse(componentSetsData);
+
+      const client = createClient();
+      const result = await client.getFileComponentSets('abc123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/component_sets',
+        expect.any(Object)
+      );
+      expect(result).toEqual(componentSetsData);
     });
   });
 });

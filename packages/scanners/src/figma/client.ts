@@ -102,6 +102,40 @@ export class FigmaAPIError extends Error {
   }
 }
 
+/**
+ * Error thrown when authentication fails (401, 403)
+ */
+export class FigmaAuthError extends FigmaAPIError {
+  constructor(message: string, statusCode: number, responseBody: string) {
+    super(message, statusCode, responseBody);
+    this.name = "FigmaAuthError";
+  }
+}
+
+/**
+ * Error thrown when a resource is not found (404)
+ */
+export class FigmaNotFoundError extends FigmaAPIError {
+  constructor(message: string, responseBody: string) {
+    super(message, 404, responseBody);
+    this.name = "FigmaNotFoundError";
+  }
+}
+
+/**
+ * Error thrown when rate limit is exceeded (429)
+ */
+export class FigmaRateLimitError extends FigmaAPIError {
+  constructor(
+    message: string,
+    responseBody: string,
+    public readonly retryAfterMs?: number,
+  ) {
+    super(message, 429, responseBody);
+    this.name = "FigmaRateLimitError";
+  }
+}
+
 export interface FigmaClientOptions {
   /**
    * Maximum number of retry attempts for failed requests
@@ -132,6 +166,78 @@ export interface FigmaClientOptions {
    * @default 60000 (1 minute)
    */
   cacheTtlMs?: number;
+
+  /**
+   * Threshold for proactive rate limiting.
+   * When remaining requests fall below this threshold, the client will
+   * wait until the rate limit resets before making new requests.
+   * @default 0 (disabled)
+   */
+  proactiveRateLimitThreshold?: number;
+
+  /**
+   * Authentication type to use
+   * @default 'personal'
+   */
+  authType?: "personal" | "oauth2";
+}
+
+/**
+ * Options for creating a Figma client with authentication
+ */
+export interface CreateFigmaClientOptions extends FigmaClientOptions {
+  accessToken: string;
+}
+
+/**
+ * Options for fetching a file
+ */
+export interface GetFileOptions {
+  /**
+   * Specific version ID to fetch
+   */
+  version?: string;
+}
+
+/**
+ * Response from team projects endpoint
+ */
+export interface FigmaTeamProjectsResponse {
+  projects: Array<{ id: string; name: string }>;
+}
+
+/**
+ * Response from project files endpoint
+ */
+export interface FigmaProjectFilesResponse {
+  files: Array<{ key: string; name: string; thumbnail_url?: string }>;
+}
+
+/**
+ * Response from file versions endpoint
+ */
+export interface FigmaFileVersionsResponse {
+  versions: Array<{ id: string; created_at: string; label?: string }>;
+}
+
+/**
+ * Response from comments endpoint
+ */
+export interface FigmaCommentsResponse {
+  comments: Array<{
+    id: string;
+    message: string;
+    user: { handle: string; img_url?: string };
+  }>;
+}
+
+/**
+ * Response from component sets endpoint
+ */
+export interface FigmaComponentSetsResponse {
+  meta: {
+    component_sets: Array<{ key: string; name: string; description: string }>;
+  };
 }
 
 interface CacheEntry<T> {
@@ -168,6 +274,8 @@ export class FigmaClient {
   private initialRetryDelayMs: number;
   private enableCache: boolean;
   private cacheTtlMs: number;
+  private proactiveRateLimitThreshold: number;
+  private authType: "personal" | "oauth2";
   private cache: Map<string, CacheEntry<unknown>> = new Map();
   private rateLimitInfo: RateLimitInfo | null = null;
 
@@ -181,6 +289,8 @@ export class FigmaClient {
     this.initialRetryDelayMs = options.initialRetryDelayMs ?? 1000;
     this.enableCache = options.enableCache ?? true;
     this.cacheTtlMs = options.cacheTtlMs ?? 60000;
+    this.proactiveRateLimitThreshold = options.proactiveRateLimitThreshold ?? 0;
+    this.authType = options.authType ?? "personal";
   }
 
   private async fetch<T>(endpoint: string): Promise<T> {
@@ -191,6 +301,9 @@ export class FigmaClient {
         return cached;
       }
     }
+
+    // Proactive rate limit waiting
+    await this.waitForRateLimitIfNeeded();
 
     let lastError: Error | null = null;
     let attempt = 0;
@@ -222,8 +335,41 @@ export class FigmaClient {
       }
     }
 
+    // Convert to specific error type if rate limit was exhausted
+    if (
+      lastError instanceof FigmaAPIError &&
+      lastError.statusCode === 429 &&
+      !(lastError instanceof FigmaRateLimitError)
+    ) {
+      const retryAfter = (lastError as FigmaAPIError & { retryAfter?: number })
+        .retryAfter;
+      throw new FigmaRateLimitError(
+        lastError.message,
+        lastError.responseBody,
+        retryAfter
+      );
+    }
+
     // All retries exhausted
     throw lastError ?? new Error("Unknown error during Figma API request");
+  }
+
+  /**
+   * Wait proactively if we're approaching the rate limit
+   */
+  private async waitForRateLimitIfNeeded(): Promise<void> {
+    if (
+      this.proactiveRateLimitThreshold <= 0 ||
+      !this.rateLimitInfo ||
+      this.rateLimitInfo.remaining > this.proactiveRateLimitThreshold
+    ) {
+      return;
+    }
+
+    const waitTime = Math.max(0, this.rateLimitInfo.resetAt - Date.now());
+    if (waitTime > 0) {
+      await this.sleep(waitTime);
+    }
   }
 
   private async fetchOnce<T>(endpoint: string): Promise<T> {
@@ -231,10 +377,13 @@ export class FigmaClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
+      const headers: Record<string, string> =
+        this.authType === "oauth2"
+          ? { Authorization: `Bearer ${this.accessToken}` }
+          : { "X-Figma-Token": this.accessToken };
+
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
-        headers: {
-          "X-Figma-Token": this.accessToken,
-        },
+        headers,
         signal: controller.signal,
       });
 
@@ -243,19 +392,28 @@ export class FigmaClient {
 
       if (!response.ok) {
         const text = await response.text();
-        const error = new FigmaAPIError(
-          `Figma API error: ${response.status} ${response.statusText} - ${text}`,
-          response.status,
-          text,
-        );
+        const baseMessage = `Figma API error: ${response.status} ${response.statusText} - ${text}`;
 
-        // For rate limits, attach Retry-After info if available
-        if (response.status === 429) {
-          (error as FigmaAPIError & { retryAfter?: number }).retryAfter =
-            this.parseRetryAfter(response);
+        // Throw specific error types based on status code
+        switch (response.status) {
+          case 401:
+          case 403:
+            throw new FigmaAuthError(baseMessage, response.status, text);
+          case 404:
+            throw new FigmaNotFoundError(baseMessage, text);
+          case 429: {
+            const retryAfter = this.parseRetryAfter(response);
+            const error = new FigmaRateLimitError(baseMessage, text, retryAfter);
+            // Also attach retryAfter for retry logic compatibility
+            (error as FigmaRateLimitError & { retryAfter?: number }).retryAfter =
+              retryAfter;
+            throw error;
+          }
+          default: {
+            const error = new FigmaAPIError(baseMessage, response.status, text);
+            throw error;
+          }
         }
-
-        throw error;
       }
 
       return response.json() as Promise<T>;
@@ -426,8 +584,17 @@ export class FigmaClient {
     this.cache.clear();
   }
 
-  async getFile(fileKey: string): Promise<FigmaFile> {
-    return this.fetch<FigmaFile>(`/files/${fileKey}`);
+  /**
+   * Fetch a Figma file
+   * @param fileKey The key of the file to fetch
+   * @param options Optional parameters including version
+   */
+  async getFile(fileKey: string, options?: GetFileOptions): Promise<FigmaFile> {
+    let endpoint = `/files/${fileKey}`;
+    if (options?.version) {
+      endpoint += `?version=${encodeURIComponent(options.version)}`;
+    }
+    return this.fetch<FigmaFile>(endpoint);
   }
 
   /**
@@ -454,8 +621,45 @@ export class FigmaClient {
     return this.fetch(`/files/${fileKey}/styles`);
   }
 
+  /**
+   * Fetch component sets from a file
+   */
+  async getFileComponentSets(
+    fileKey: string,
+  ): Promise<FigmaComponentSetsResponse> {
+    return this.fetch(`/files/${fileKey}/component_sets`);
+  }
+
   async getLocalVariables(fileKey: string): Promise<FigmaVariablesResponse> {
     return this.fetch(`/files/${fileKey}/variables/local`);
+  }
+
+  /**
+   * Fetch version history for a file
+   */
+  async getFileVersions(fileKey: string): Promise<FigmaFileVersionsResponse> {
+    return this.fetch(`/files/${fileKey}/versions`);
+  }
+
+  /**
+   * Fetch comments on a file
+   */
+  async getComments(fileKey: string): Promise<FigmaCommentsResponse> {
+    return this.fetch(`/files/${fileKey}/comments`);
+  }
+
+  /**
+   * Fetch projects for a team
+   */
+  async getTeamProjects(teamId: string): Promise<FigmaTeamProjectsResponse> {
+    return this.fetch(`/teams/${teamId}/projects`);
+  }
+
+  /**
+   * Fetch files in a project
+   */
+  async getProjectFiles(projectId: string): Promise<FigmaProjectFilesResponse> {
+    return this.fetch(`/projects/${projectId}/files`);
   }
 
   /**
@@ -487,4 +691,13 @@ export class FigmaClient {
     }
     return base;
   }
+}
+
+/**
+ * Factory function to create a FigmaClient with authentication options
+ */
+export function createFigmaClient(
+  options: CreateFigmaClientOptions
+): FigmaClient {
+  return new FigmaClient(options.accessToken, options);
 }
