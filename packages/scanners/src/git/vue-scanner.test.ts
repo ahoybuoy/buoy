@@ -8,6 +8,13 @@ import {
   DEPRECATED_COMPONENT_VUE,
   OPTIONS_API_COMPONENT_VUE,
   COMPONENT_WITH_DEPENDENCIES_VUE,
+  DEFINE_PROPS_VARIABLE_VUE,
+  OPTIONS_API_EXTENDS_VUE,
+  NESTED_TYPE_PROPS_VUE,
+  WITH_DEFAULTS_PROPS_VUE,
+  DESTRUCTURED_DEFINE_PROPS_VUE,
+  ARRAY_PROPS_OPTIONS_API_VUE,
+  PROP_TYPE_IMPORT_VUE,
 } from '../__tests__/fixtures/vue-components.js';
 import { VueComponentScanner } from './vue-scanner.js';
 
@@ -184,6 +191,172 @@ describe('VueComponentScanner', () => {
       expect(result.stats.filesScanned).toBe(2);
       expect(result.stats.itemsFound).toBe(2);
       expect(result.stats.duration).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('advanced props extraction', () => {
+    it('extracts complex nested type props with callbacks', async () => {
+      vol.fromJSON({
+        '/project/src/ComplexCard.vue': NESTED_TYPE_PROPS_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(4);
+
+      const titleProp = result.items[0]!.props.find(p => p.name === 'title');
+      expect(titleProp).toBeDefined();
+      expect(titleProp!.type).toBe('string');
+      expect(titleProp!.required).toBe(true);
+
+      const onClickProp = result.items[0]!.props.find(p => p.name === 'onClick');
+      expect(onClickProp).toBeDefined();
+      expect(onClickProp!.type).toBe('() => void');
+      expect(onClickProp!.required).toBe(true);
+
+      const dataProp = result.items[0]!.props.find(p => p.name === 'data');
+      expect(dataProp).toBeDefined();
+      expect(dataProp!.type).toContain('items');
+      expect(dataProp!.required).toBe(true);
+
+      const optionalProp = result.items[0]!.props.find(p => p.name === 'optional');
+      expect(optionalProp).toBeDefined();
+      expect(optionalProp!.required).toBe(false);
+    });
+
+    it('extracts props from withDefaults pattern', async () => {
+      vol.fromJSON({
+        '/project/src/MessageCard.vue': WITH_DEFAULTS_PROPS_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(3);
+
+      const messageProp = result.items[0]!.props.find(p => p.name === 'message');
+      expect(messageProp).toBeDefined();
+      expect(messageProp!.type).toBe('string');
+      expect(messageProp!.required).toBe(true);
+
+      const countProp = result.items[0]!.props.find(p => p.name === 'count');
+      expect(countProp).toBeDefined();
+      expect(countProp!.required).toBe(false);
+    });
+
+    it('extracts props from destructured defineProps', async () => {
+      vol.fromJSON({
+        '/project/src/NameCard.vue': DESTRUCTURED_DEFINE_PROPS_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(2);
+
+      const nameProp = result.items[0]!.props.find(p => p.name === 'name');
+      expect(nameProp).toBeDefined();
+      expect(nameProp!.type).toBe('string');
+      expect(nameProp!.required).toBe(true);
+
+      const ageProp = result.items[0]!.props.find(p => p.name === 'age');
+      expect(ageProp).toBeDefined();
+      expect(ageProp!.required).toBe(false);
+    });
+
+    it('extracts props from Options API with array syntax', async () => {
+      vol.fromJSON({
+        '/project/src/SimpleCard.vue': ARRAY_PROPS_OPTIONS_API_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(3);
+
+      const titleProp = result.items[0]!.props.find(p => p.name === 'title');
+      expect(titleProp).toBeDefined();
+    });
+
+    it('extracts props from defineComponent with PropType', async () => {
+      vol.fromJSON({
+        '/project/src/ConfigButton.vue': PROP_TYPE_IMPORT_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(3);
+
+      const labelProp = result.items[0]!.props.find(p => p.name === 'label');
+      expect(labelProp).toBeDefined();
+
+      const configProp = result.items[0]!.props.find(p => p.name === 'config');
+      expect(configProp).toBeDefined();
+
+      const severityProp = result.items[0]!.props.find(p => p.name === 'severity');
+      expect(severityProp).toBeDefined();
+    });
+
+    it('detects extends pattern but still parses the component', async () => {
+      vol.fromJSON({
+        '/project/src/Button.vue': OPTIONS_API_EXTENDS_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('Button');
+      // extends components should record the base component as metadata
+      expect(result.items[0]!.metadata.extendsComponent).toBe('BaseButton');
+    });
+
+    it('detects defineOptions name override', async () => {
+      vol.fromJSON({
+        '/project/src/Button.vue': DEFINE_PROPS_VARIABLE_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // Component name should be from defineOptions, not filename
+      expect(result.items[0]!.metadata.defineOptionsName).toBe('ElButton');
     });
   });
 });

@@ -9,6 +9,13 @@ export interface VueScannerConfig extends ScannerConfig {
   designSystemPackage?: string;
 }
 
+interface VueMetadata {
+  deprecated: boolean;
+  tags: string[];
+  extendsComponent?: string;
+  defineOptionsName?: string;
+}
+
 export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
   /** Default file patterns for Vue components */
   private static readonly DEFAULT_PATTERNS = ["**/*.vue"];
@@ -44,6 +51,7 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
 
     const props = this.extractProps(scriptContent, !!scriptSetupMatch);
     const dependencies = this.extractDependencies(content);
+    const metadata = this.extractMetadata(scriptContent, content, !!scriptSetupMatch);
 
     const source: VueSource = {
       type: "vue",
@@ -61,13 +69,44 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
         variants: [],
         tokens: [],
         dependencies,
-        metadata: {
-          deprecated: this.hasDeprecatedComment(content),
-          tags: [],
-        },
+        metadata,
         scannedAt: new Date(),
       },
     ];
+  }
+
+  /**
+   * Extract metadata from component including extends, defineOptions, and deprecation
+   */
+  private extractMetadata(
+    scriptContent: string,
+    fullContent: string,
+    isSetup: boolean,
+  ): VueMetadata {
+    const metadata: VueMetadata = {
+      deprecated: this.hasDeprecatedComment(fullContent),
+      tags: [],
+    };
+
+    // Detect defineOptions({ name: 'ComponentName' }) pattern
+    const defineOptionsMatch = scriptContent.match(
+      /defineOptions\s*\(\s*\{[^}]*name:\s*['"]([^'"]+)['"]/,
+    );
+    if (defineOptionsMatch?.[1]) {
+      metadata.defineOptionsName = defineOptionsMatch[1];
+    }
+
+    // Detect extends pattern (Options API)
+    if (!isSetup) {
+      const extendsMatch = scriptContent.match(
+        /extends:\s*([A-Z][a-zA-Z0-9]*)/,
+      );
+      if (extendsMatch?.[1]) {
+        metadata.extendsComponent = extendsMatch[1];
+      }
+    }
+
+    return metadata;
   }
 
   /**
@@ -87,8 +126,8 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
       const nameMatch = propsContent.substring(i).match(/^(\w+)(\?)?:\s*/);
       if (!nameMatch || !nameMatch[1]) {
         // Skip to next comma or end
-        while (i < propsContent.length && propsContent[i] !== ",") i++;
-        i++; // skip comma
+        while (i < propsContent.length && propsContent[i] !== "," && propsContent[i] !== ";") i++;
+        i++; // skip delimiter
         continue;
       }
 
@@ -96,24 +135,25 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
       const isOptional = !!nameMatch[2];
       i += nameMatch[0].length;
 
-      // Now extract the type - need to handle nested braces, parens, and generics
+      // Now extract the type - need to handle nested braces, parens, brackets, and generics
       let typeStr = "";
       let depth = 0;
-      const depthChars: Record<string, number> = {
-        "{": 1,
-        "}": -1,
-        "(": 1,
-        ")": -1,
-        "<": 1,
-        ">": -1,
-      };
+      const openChars = new Set(["{", "(", "<", "["]);
+      const closeChars = new Set(["}", ")", "]"]);
 
       while (i < propsContent.length) {
         const char = propsContent[i];
         if (char === undefined) break;
 
-        if (char in depthChars) {
-          depth += depthChars[char] ?? 0;
+        if (openChars.has(char)) {
+          depth++;
+        } else if (closeChars.has(char)) {
+          depth--;
+        } else if (char === ">") {
+          // Only treat > as closing if we're inside a generic (depth > 0) and it's not part of =>
+          if (depth > 0 && propsContent[i - 1] !== "=") {
+            depth--;
+          }
         }
 
         // Stop at comma or semicolon only when not nested
@@ -147,19 +187,37 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
 
     if (isSetup) {
       // Vue 3 <script setup> with defineProps
+      // Handle withDefaults(defineProps<Props>(), { ... }) pattern first
+      const withDefaultsMatch = scriptContent.match(
+        /withDefaults\s*\(\s*defineProps<(\w+)>\s*\(\s*\)/,
+      );
+      if (withDefaultsMatch?.[1]) {
+        // Look for the interface definition
+        const interfaceName = withDefaultsMatch[1];
+        const interfaceMatch = scriptContent.match(
+          new RegExp(`interface\\s+${interfaceName}\\s*\\{([^}]+)\\}`),
+        );
+        if (interfaceMatch?.[1]) {
+          const parsedProps = this.parseTypeProps(interfaceMatch[1]);
+          props.push(...parsedProps);
+        }
+      }
+
       // defineProps<{ title: string, count?: number }>()
       // Need to handle nested types like: defineProps<{ cb: () => { value: string } }>()
-      const typePropsStartMatch = scriptContent.match(/defineProps<\{/);
-      if (typePropsStartMatch) {
-        const startIdx =
-          scriptContent.indexOf("defineProps<{") + "defineProps<".length;
-        const propsContent = extractBalancedBraces(
-          scriptContent,
-          startIdx,
-        );
-        if (propsContent) {
-          const parsedProps = this.parseTypeProps(propsContent);
-          props.push(...parsedProps);
+      if (props.length === 0) {
+        const typePropsStartMatch = scriptContent.match(/defineProps<\{/);
+        if (typePropsStartMatch) {
+          const startIdx =
+            scriptContent.indexOf("defineProps<{") + "defineProps<".length;
+          const propsContent = extractBalancedBraces(
+            scriptContent,
+            startIdx,
+          );
+          if (propsContent) {
+            const parsedProps = this.parseTypeProps(propsContent);
+            props.push(...parsedProps);
+          }
         }
       }
 
@@ -228,38 +286,54 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
   }
 
   private parseObjectProps(propsStr: string, props: PropDefinition[]): void {
-    // Match: propName: Type or propName: { type: Type, required: true }
-    const simpleMatch = propsStr.matchAll(
-      /(\w+):\s*(String|Number|Boolean|Array|Object|Function)/g,
-    );
-    for (const m of simpleMatch) {
-      if (m[1] && m[2]) {
-        props.push({
-          name: m[1],
-          type: m[2].toLowerCase(),
-          required: false,
-        });
-      }
-    }
+    const seenProps = new Set<string>();
 
-    // Match complex props: propName: { type: Type, required: true/false }
+    // First pass: Match complex props: propName: { type: Type, required: true/false }
+    // This includes PropType patterns like: type: String as PropType<string>
     const complexMatch = propsStr.matchAll(
-      /(\w+):\s*\{[^}]*type:\s*(\w+)[^}]*\}/g,
+      /(\w+):\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
     );
     for (const m of complexMatch) {
       if (m[1] && m[2]) {
-        const isRequired =
-          propsStr.includes(`${m[1]}:`) &&
-          propsStr
-            .substring(propsStr.indexOf(`${m[1]}:`))
-            .match(/required:\s*true/);
+        const propName = m[1];
+        const propContent = m[2];
 
-        // Avoid duplicates
-        if (!props.some((p) => p.name === m[1])) {
+        // Skip if prop name is 'type' (this is a nested type definition)
+        if (propName === 'type') continue;
+
+        // Extract type from the prop definition
+        const typeMatch = propContent.match(/type:\s*(\w+)/);
+        if (typeMatch?.[1]) {
+          const isRequired = /required:\s*true/.test(propContent);
+
+          if (!seenProps.has(propName)) {
+            seenProps.add(propName);
+            props.push({
+              name: propName,
+              type: typeMatch[1].toLowerCase(),
+              required: isRequired,
+            });
+          }
+        }
+      }
+    }
+
+    // Second pass: Match simple props: propName: Type (not followed by an object)
+    const simpleMatch = propsStr.matchAll(
+      /(\w+):\s*(String|Number|Boolean|Array|Object|Function)(?!\s*as\s+PropType)(?:\s*,|\s*$|\s*\n)/g,
+    );
+    for (const m of simpleMatch) {
+      if (m[1] && m[2]) {
+        const propName = m[1];
+        // Skip 'type' keyword (it's part of complex prop definition)
+        if (propName === 'type') continue;
+
+        if (!seenProps.has(propName)) {
+          seenProps.add(propName);
           props.push({
-            name: m[1],
+            name: propName,
             type: m[2].toLowerCase(),
-            required: !!isRequired,
+            required: false,
           });
         }
       }
