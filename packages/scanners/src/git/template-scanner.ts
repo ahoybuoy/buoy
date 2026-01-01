@@ -1,9 +1,12 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
-import type { Component } from '@buoy-design/core';
+import type { Component, PropDefinition } from '@buoy-design/core';
 import { createComponentId } from '@buoy-design/core';
 import { glob } from 'glob';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { relative, basename } from 'path';
+
+// Template types that should always be treated as components regardless of path
+const ALWAYS_COMPONENT_TYPES = ['astro', 'solid', 'qwik', 'marko', 'lit', 'fast', 'stencil'];
 
 export type TemplateType =
   // Server-side templates
@@ -478,7 +481,7 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
   }
 
   private async parseFile(filePath: string): Promise<Component | null> {
-    const content = readFileSync(filePath, 'utf-8');
+    const content = await readFile(filePath, 'utf-8');
     const relativePath = relative(this.config.projectRoot, filePath);
 
     // Generate component name from file path
@@ -493,6 +496,9 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
 
     const dependencies = this.extractDependencies(content);
 
+    // Extract props based on template type
+    const props = this.extractProps(content);
+
     const source: TemplateSource = {
       type: this.config.templateType,
       path: relativePath,
@@ -504,7 +510,7 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
       id: createComponentId(source as any, name),
       name,
       source: source as any,
-      props: [], // Templates don't have typed props in the same way
+      props,
       variants: [],
       tokens: [],
       dependencies,
@@ -516,11 +522,63 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
     };
   }
 
+  /**
+   * Extract props from template content based on template type
+   */
+  private extractProps(content: string): PropDefinition[] {
+    if (this.config.templateType === 'astro') {
+      return this.extractAstroProps(content);
+    }
+    // Other template types could be added here
+    return [];
+  }
+
+  /**
+   * Extract props from Astro component frontmatter
+   * Supports both `interface Props` and `type Props` syntax
+   */
+  private extractAstroProps(content: string): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    // Extract frontmatter (between --- delimiters)
+    const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!frontmatterMatch || !frontmatterMatch[1]) return props;
+
+    const frontmatter = frontmatterMatch[1];
+
+    // Try to match `interface Props { ... }` or `type Props = { ... }`
+    const interfaceMatch = frontmatter.match(/(?:interface|type)\s+Props\s*(?:=\s*)?\{([^}]+)\}/);
+    if (!interfaceMatch || !interfaceMatch[1]) return props;
+
+    const propsBlock = interfaceMatch[1];
+
+    // Parse individual prop definitions
+    // Matches: propName: type; or propName?: type;
+    const propPattern = /(\w+)(\?)?:\s*([^;,\n]+)/g;
+    let match;
+
+    while ((match = propPattern.exec(propsBlock)) !== null) {
+      const propName = match[1]!;
+      const isOptional = match[2] === '?';
+      const propType = match[3]!.trim();
+
+      props.push({
+        name: propName,
+        type: propType,
+        required: !isOptional,
+        defaultValue: undefined,
+      });
+    }
+
+    return props;
+  }
+
   private extractComponentName(filePath: string): string {
     let name = basename(filePath);
 
-    // Remove extensions
-    name = name.replace(/\.(blade\.php|html\.erb|html\.twig|php|html|njk)$/i, '');
+    // Remove extensions (handle compound extensions first, then simple ones)
+    name = name.replace(/\.(blade\.php|html\.erb|html\.twig|component\.ts|component\.html)$/i, '');
+    name = name.replace(/\.(php|html|njk|astro|tsx|jsx|marko|svelte|vue|ts|js)$/i, '');
 
     // Remove partial prefix (Rails convention)
     name = name.replace(/^_/, '');
@@ -537,6 +595,14 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
   private isLikelyComponent(filePath: string, _content: string): boolean {
     const lowerPath = filePath.toLowerCase();
     const pathParts = lowerPath.split('/');
+
+    // For modern JS-based template systems (Astro, Solid, Qwik, etc.),
+    // always treat files as components since they're component-first architectures
+    if (ALWAYS_COMPONENT_TYPES.includes(this.config.templateType)) {
+      // For Astro specifically, all .astro files are components (including layouts and pages)
+      // They can all be imported and reused
+      return true;
+    }
 
     // Paths that indicate reusable components
     const componentIndicators = [
