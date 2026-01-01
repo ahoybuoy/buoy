@@ -1169,4 +1169,149 @@ type SizeType = 'sm' | 'lg';
       );
     });
   });
+
+  describe("Panda CSS / Chakra UI semantic tokens", () => {
+    it("extracts tokens from defineSemanticTokens.colors pattern (Chakra UI v3)", async () => {
+      vol.fromJSON({
+        "/project/semantic-tokens/colors.ts": `
+          import { defineSemanticTokens } from "../def"
+
+          export const colors = defineSemanticTokens.colors({
+            bg: {
+              DEFAULT: {
+                value: {
+                  _light: "{colors.white}",
+                  _dark: "{colors.black}",
+                },
+              },
+              subtle: {
+                value: {
+                  _light: "{colors.gray.50}",
+                  _dark: "{colors.gray.950}",
+                },
+              },
+            },
+            fg: {
+              DEFAULT: {
+                value: {
+                  _light: "{colors.black}",
+                  _dark: "{colors.gray.50}",
+                },
+              },
+              muted: {
+                value: {
+                  _light: "{colors.gray.600}",
+                  _dark: "{colors.gray.400}",
+                },
+              },
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["semantic-tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect nested semantic tokens: bg.DEFAULT, bg.subtle, fg.DEFAULT, fg.muted
+      // Note: The light/dark value format is an alias reference, not a direct color value
+      expect(result.items.length).toBeGreaterThanOrEqual(4);
+
+      // Check that we got the bg tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: expect.stringContaining("bg"),
+          category: "color",
+        }),
+      );
+
+      // Check that we got the fg tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: expect.stringContaining("fg"),
+          category: "color",
+        }),
+      );
+    });
+
+    it("extracts tokens from defineSemanticTokens.shadows pattern", async () => {
+      vol.fromJSON({
+        "/project/semantic-tokens/shadows.ts": `
+          import { defineSemanticTokens } from "../def"
+
+          export const shadows = defineSemanticTokens.shadows({
+            xs: {
+              value: {
+                _light: "0 1px 2px rgba(0, 0, 0, 0.05)",
+                _dark: "0 1px 2px rgba(0, 0, 0, 0.2)",
+              },
+            },
+            sm: {
+              value: {
+                _light: "0 1px 3px rgba(0, 0, 0, 0.1)",
+                _dark: "0 1px 3px rgba(0, 0, 0, 0.25)",
+              },
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["semantic-tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(2);
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "xs",
+          category: "shadow",
+        }),
+      );
+    });
+
+    it("handles nested semantic tokens with deeply nested value objects", async () => {
+      vol.fromJSON({
+        "/project/semantic-tokens/colors.ts": `
+          export const colors = defineSemanticTokens.colors({
+            gray: {
+              contrast: {
+                value: {
+                  _light: "{colors.white}",
+                  _dark: "{colors.black}",
+                },
+              },
+              fg: {
+                value: {
+                  _light: "{colors.gray.800}",
+                  _dark: "{colors.gray.200}",
+                },
+              },
+              solid: {
+                value: {
+                  _light: "{colors.gray.900}",
+                  _dark: "{colors.white}",
+                },
+              },
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["semantic-tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect: gray.contrast, gray.fg, gray.solid
+      expect(result.items.length).toBeGreaterThanOrEqual(3);
+    });
+  });
 });

@@ -708,16 +708,18 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
   ): DesignToken[] {
     const tokens: DesignToken[] = [];
 
-    // Pattern 1: defineTokens.category({ ... }) - Panda CSS / Chakra UI style
-    // Match: defineTokens.colors({ ... }), defineTokens.spacing({ ... }), etc.
+    // Pattern 1: defineTokens.category({ ... }) and defineSemanticTokens.category({ ... })
+    // Match: defineTokens.colors({ ... }), defineSemanticTokens.colors({ ... }), etc.
     // Use brace matching to capture the full object
     const defineTokensMatches = this.findDefineTokensCalls(content);
-    for (const { category, objectStr, lineNumber } of defineTokensMatches) {
+    for (const { category, objectStr, lineNumber, isSemantic } of defineTokensMatches) {
       const parsedTokens = this.parseTokenObjectString(
         objectStr,
         category,
         relativePath,
         lineNumber,
+        undefined,
+        isSemantic,
       );
       tokens.push(...parsedTokens);
     }
@@ -751,6 +753,9 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
    * Parse a token object string and extract tokens.
    * Handles nested structures like:
    * { black: { value: "#000" }, gray: { "50": { value: "#fafafa" } } }
+   *
+   * For semantic tokens (isSemantic=true), also handles:
+   * { bg: { DEFAULT: { value: { _light: "...", _dark: "..." } } } }
    */
   private parseTokenObjectString(
     objectStr: string,
@@ -758,6 +763,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     relativePath: string,
     lineNumber: number,
     varName?: string,
+    isSemantic: boolean = false,
   ): DesignToken[] {
     const tokens: DesignToken[] = [];
 
@@ -769,6 +775,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         objectStr,
         "",
         category,
+        isSemantic,
       );
 
       for (const { name, value, tokenCategory } of extractedTokens) {
@@ -783,6 +790,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         const normalizedCategory = this.normalizeCategory(tokenCategory);
         const tokenValue = this.parseTokenValue(normalizedCategory, value);
 
+        const tokenTypeName = isSemantic ? "defineSemanticTokens" : "defineTokens";
         tokens.push({
           id: createTokenId(source, name),
           name,
@@ -794,7 +802,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           metadata: {
             description: varName
               ? `Token from ${varName}`
-              : `Token from defineTokens.${category}`,
+              : `Token from ${tokenTypeName}.${category}`,
           },
           scannedAt: new Date(),
         });
@@ -809,11 +817,15 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
   /**
    * Extract tokens from an object literal string using regex.
    * This avoids eval and handles the common token patterns.
+   *
+   * For semantic tokens (isSemantic=true), also handles the pattern:
+   * { value: { _light: "...", _dark: "..." } }
    */
   private extractTokensFromObjectLiteral(
     objectStr: string,
     prefix: string,
     category: string,
+    isSemantic: boolean = false,
   ): Array<{ name: string; value: string; tokenCategory: string }> {
     const results: Array<{
       name: string;
@@ -865,6 +877,24 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         continue;
       }
 
+      // Check for semantic token pattern: { value: { _light: "...", _dark: "..." } }
+      // For semantic tokens, the value contains theme-aware values
+      if (isSemantic) {
+        const semanticValueMatch = trimmedContent.match(
+          /^\{\s*value\s*:\s*\{[^}]*_light\s*:\s*["']([^"']+)["']/,
+        );
+        if (semanticValueMatch && semanticValueMatch[1]) {
+          // Use the _light value as the primary value (for now)
+          // The full semantic token structure is preserved in the raw value
+          results.push({
+            name: tokenName,
+            value: semanticValueMatch[1],
+            tokenCategory: effectiveCategory,
+          });
+          continue;
+        }
+      }
+
       // Check if this is a direct string value (for "as const" objects)
       const directValueMatch = trimmedContent.match(/^["']([^"']+)["']$/);
       if (directValueMatch && directValueMatch[1]) {
@@ -912,6 +942,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           trimmedContent,
           tokenName,
           nestedCategory,
+          isSemantic,
         );
         results.push(...nestedResults);
       }
@@ -1015,24 +1046,27 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
   }
 
   /**
-   * Find defineTokens.category({ ... }) calls in content using brace matching.
+   * Find defineTokens.category({ ... }) and defineSemanticTokens.category({ ... })
+   * calls in content using brace matching.
    */
   private findDefineTokensCalls(
     content: string,
-  ): Array<{ category: string; objectStr: string; lineNumber: number }> {
+  ): Array<{ category: string; objectStr: string; lineNumber: number; isSemantic: boolean }> {
     const results: Array<{
       category: string;
       objectStr: string;
       lineNumber: number;
+      isSemantic: boolean;
     }> = [];
 
-    // Find all defineTokens.category( patterns
-    const startRegex = /defineTokens\.(\w+)\s*\(\s*\{/g;
+    // Find both defineTokens.category( and defineSemanticTokens.category( patterns
+    const startRegex = /define(?:Semantic)?Tokens\.(\w+)\s*\(\s*\{/g;
     let match;
 
     while ((match = startRegex.exec(content)) !== null) {
       const category = match[1] || "other";
       const startIndex = match.index + match[0].length - 1; // Position of opening {
+      const isSemantic = match[0].includes("SemanticTokens");
 
       // Find matching closing brace
       let braceDepth = 1;
@@ -1046,7 +1080,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       if (braceDepth === 0) {
         const objectStr = content.slice(startIndex, i);
         const lineNumber = content.slice(0, match.index).split("\n").length;
-        results.push({ category, objectStr, lineNumber });
+        results.push({ category, objectStr, lineNumber, isSemantic });
       }
     }
 
