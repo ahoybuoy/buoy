@@ -427,3 +427,270 @@ export class DataViewer extends LitElement {
   }
 }
 `;
+
+// Lit component with SignalWatcher mixin
+export const LIT_SIGNAL_WATCHER = `
+import { html } from 'lit';
+import { customElement, property } from 'lit/decorators.js';
+import { SignalWatcher, signal } from '@lit-labs/signals';
+import { LitElement } from 'lit';
+
+const count = signal(0);
+
+@customElement('signal-counter')
+export class SignalCounter extends SignalWatcher(LitElement) {
+  @property({ type: String })
+  label = 'Count';
+
+  render() {
+    return html\`<div>\${this.label}: \${count.get()}</div>\`;
+  }
+}
+`;
+
+// Lit component with Context consume/provide decorators
+export const LIT_CONTEXT = `
+import { LitElement, html } from 'lit';
+import { customElement, property } from 'lit/decorators.js';
+import { provide, consume, createContext } from '@lit/context';
+
+export const themeContext = createContext<string>('theme');
+
+@customElement('theme-provider')
+export class ThemeProvider extends LitElement {
+  @provide({ context: themeContext })
+  @property({ type: String })
+  theme = 'light';
+
+  render() {
+    return html\`<slot></slot>\`;
+  }
+}
+
+@customElement('theme-consumer')
+export class ThemeConsumer extends LitElement {
+  @consume({ context: themeContext, subscribe: true })
+  @property({ type: String })
+  theme = '';
+
+  render() {
+    return html\`<div class=\${this.theme}>Themed content</div>\`;
+  }
+}
+`;
+
+// Lit component with @localized decorator
+export const LIT_LOCALIZED = `
+import { LitElement, html } from 'lit';
+import { customElement, property } from 'lit/decorators.js';
+import { localized, msg } from '@lit/localize';
+
+@localized()
+@customElement('localized-greeting')
+export class LocalizedGreeting extends LitElement {
+  @property({ type: String })
+  name = 'World';
+
+  render() {
+    return html\`<div>\${msg(\`Hello, \${this.name}!\`)}</div>\`;
+  }
+}
+`;
+
+// Vanilla Web Component (no framework)
+export const VANILLA_WEB_COMPONENT = `
+class MyVanillaButton extends HTMLElement {
+  static get observedAttributes() {
+    return ['label', 'disabled'];
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+  }
+
+  get label() {
+    return this.getAttribute('label') || 'Click me';
+  }
+
+  set label(value: string) {
+    this.setAttribute('label', value);
+  }
+
+  get disabled() {
+    return this.hasAttribute('disabled');
+  }
+
+  set disabled(value: boolean) {
+    if (value) {
+      this.setAttribute('disabled', '');
+    } else {
+      this.removeAttribute('disabled');
+    }
+  }
+
+  connectedCallback() {
+    this.render();
+  }
+
+  attributeChangedCallback() {
+    this.render();
+  }
+
+  render() {
+    if (this.shadowRoot) {
+      this.shadowRoot.innerHTML = \`<button \${this.disabled ? 'disabled' : ''}>\${this.label}</button>\`;
+    }
+  }
+}
+
+customElements.define('my-vanilla-button', MyVanillaButton);
+`;
+
+// TypeScript 5 standard decorators with accessor keyword
+export const LIT_STANDARD_DECORATORS = `
+import { LitElement, html } from 'lit';
+import { customElement, property } from 'lit/decorators.js';
+
+@customElement('modern-element')
+export class ModernElement extends LitElement {
+  @property({ type: String })
+  accessor title = 'Default Title';
+
+  @property({ type: Number })
+  accessor count = 0;
+
+  @property({ type: Boolean })
+  accessor active = false;
+
+  render() {
+    return html\`<div>\${this.title}: \${this.count}</div>\`;
+  }
+}
+`;
+
+// FAST Element component
+export const FAST_ELEMENT_COMPONENT = `
+import { FASTElement, customElement, attr, observable, html } from '@microsoft/fast-element';
+
+const template = html<MyFastButton>\`
+  <button ?disabled=\${x => x.disabled}>\${x => x.label}</button>
+\`;
+
+@customElement({
+  name: 'my-fast-button',
+  template
+})
+export class MyFastButton extends FASTElement {
+  @attr label: string = 'Click me';
+  @attr({ mode: 'boolean' }) disabled: boolean = false;
+  @observable count: number = 0;
+}
+`;
+
+// Stencil with Mixin pattern (Stencil 4.x)
+export const STENCIL_WITH_MIXIN = `
+import { Component, Prop, State, h, Mixin, MixedInCtor } from '@stencil/core';
+
+// Mixin factory for loading state
+function WithLoading<T extends MixedInCtor>(Base: T) {
+  return class extends Base {
+    @State() loading = false;
+    @State() error: string | null = null;
+  };
+}
+
+// Mixin factory for theming
+function WithTheme<T extends MixedInCtor>(Base: T) {
+  return class extends Base {
+    @Prop() theme: 'light' | 'dark' = 'light';
+  };
+}
+
+@Component({
+  tag: 'my-mixed-component',
+  shadow: true,
+})
+export class MyMixedComponent extends Mixin(WithLoading, WithTheme) {
+  @Prop() title: string;
+
+  render() {
+    if (this.loading) {
+      return <div class={this.theme}>Loading...</div>;
+    }
+    if (this.error) {
+      return <div class="error">{this.error}</div>;
+    }
+    return <div class={this.theme}>{this.title}</div>;
+  }
+}
+`;
+
+// Stencil functional component
+export const STENCIL_FUNCTIONAL = `
+import { h, FunctionalComponent } from '@stencil/core';
+
+interface GreetingProps {
+  name: string;
+  greeting?: string;
+}
+
+export const Greeting: FunctionalComponent<GreetingProps> = ({ name, greeting = 'Hello' }) => (
+  <div>
+    {greeting}, {name}!
+  </div>
+);
+`;
+
+// Lit with eventOptions decorator
+export const LIT_EVENT_OPTIONS = `
+import { LitElement, html } from 'lit';
+import { customElement, eventOptions, property } from 'lit/decorators.js';
+
+@customElement('scroll-listener')
+export class ScrollListener extends LitElement {
+  @property({ type: Number })
+  scrollTop = 0;
+
+  @eventOptions({ passive: true })
+  handleScroll(e: Event) {
+    this.scrollTop = (e.target as HTMLElement).scrollTop;
+  }
+
+  render() {
+    return html\`
+      <div @scroll=\${this.handleScroll} style="overflow: auto; height: 200px;">
+        <slot></slot>
+      </div>
+    \`;
+  }
+}
+`;
+
+// Lit with queryAsync decorator
+export const LIT_QUERY_ASYNC = `
+import { LitElement, html } from 'lit';
+import { customElement, queryAsync, property } from 'lit/decorators.js';
+
+@customElement('async-dialog')
+export class AsyncDialog extends LitElement {
+  @property({ type: Boolean })
+  open = false;
+
+  @queryAsync('#dialog')
+  dialogEl!: Promise<HTMLDialogElement>;
+
+  async showDialog() {
+    const dialog = await this.dialogEl;
+    dialog.showModal();
+  }
+
+  render() {
+    return html\`
+      <dialog id="dialog">
+        <slot></slot>
+      </dialog>
+    \`;
+  }
+}
+`;

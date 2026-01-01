@@ -11,7 +11,7 @@ export interface WebComponentScannerConfig extends ScannerConfig {
 }
 
 interface WebComponentSource {
-  type: 'lit' | 'stencil';
+  type: 'lit' | 'stencil' | 'vanilla' | 'fast' | 'stencil-functional';
   path: string;
   exportName: string;
   tagName: string;
@@ -102,20 +102,38 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
     // Detect framework from imports
     const isLit = content.includes('lit') || content.includes('LitElement');
     const isStencil = content.includes('@stencil/core');
+    const isFast = content.includes('@microsoft/fast-element');
 
-    // Track customElements.define() calls for non-decorator Lit patterns
+    // Track customElements.define() calls for non-decorator Lit patterns and vanilla components
     const customElementsDefines = new Map<string, string>();
     this.findCustomElementsDefines(sourceFile, customElementsDefines);
 
+    // Track interfaces for Stencil functional components
+    const interfaces = new Map<string, ts.InterfaceDeclaration>();
+    this.findInterfaces(sourceFile, interfaces);
+
     const visit = (node: ts.Node) => {
       if (ts.isClassDeclaration(node) && node.name) {
-        if (isLit) {
+        if (isFast) {
+          const comp = this.extractFastComponent(node, sourceFile, relativePath);
+          if (comp) components.push(comp);
+        } else if (isLit) {
           const comp = this.extractLitComponent(node, sourceFile, relativePath, customElementsDefines);
           if (comp) components.push(comp);
         } else if (isStencil) {
           const comp = this.extractStencilComponent(node, sourceFile, relativePath);
           if (comp) components.push(comp);
+        } else {
+          // Try vanilla web component detection
+          const comp = this.extractVanillaComponent(node, sourceFile, relativePath, customElementsDefines);
+          if (comp) components.push(comp);
         }
+      }
+
+      // Detect Stencil functional components
+      if (isStencil) {
+        const funcComp = this.extractStencilFunctionalComponent(node, sourceFile, relativePath, interfaces);
+        if (funcComp) components.push(funcComp);
       }
 
       ts.forEachChild(node, visit);
@@ -123,6 +141,19 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
 
     ts.forEachChild(sourceFile, visit);
     return components;
+  }
+
+  private findInterfaces(
+    sourceFile: ts.SourceFile,
+    interfaces: Map<string, ts.InterfaceDeclaration>
+  ): void {
+    const visit = (node: ts.Node) => {
+      if (ts.isInterfaceDeclaration(node)) {
+        interfaces.set(node.name.text, node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(sourceFile, visit);
   }
 
   private findCustomElementsDefines(
@@ -660,5 +691,336 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
       .replace(/([a-z])([A-Z])/g, '$1-$2')
       .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
       .toLowerCase();
+  }
+
+  // ============================================
+  // Vanilla Web Component Detection
+  // ============================================
+
+  private extractVanillaComponent(
+    node: ts.ClassDeclaration,
+    sourceFile: ts.SourceFile,
+    relativePath: string,
+    customElementsDefines: Map<string, string>
+  ): Component | null {
+    if (!node.name) return null;
+
+    const className = node.name.getText(sourceFile);
+
+    // Check if extends HTMLElement
+    const extendsHTMLElement = node.heritageClauses?.some(clause => {
+      return clause.types.some(type => {
+        const text = type.expression.getText(sourceFile);
+        return text === 'HTMLElement';
+      });
+    });
+
+    // Must extend HTMLElement and be registered via customElements.define()
+    if (!extendsHTMLElement) return null;
+    if (!customElementsDefines.has(className)) return null;
+
+    const tagName = customElementsDefines.get(className)!;
+    const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+
+    const source: WebComponentSource = {
+      type: 'vanilla',
+      path: relativePath,
+      exportName: className,
+      tagName,
+      line,
+    };
+
+    // Extract observedAttributes as props
+    const props = this.extractVanillaObservedAttributes(node, sourceFile);
+
+    return {
+      id: createComponentId(source as any, className),
+      name: className,
+      source: source as any,
+      props,
+      variants: [],
+      tokens: [],
+      dependencies: [],
+      metadata: {
+        deprecated: this.hasDeprecatedTag(node),
+        tags: [],
+      },
+      scannedAt: new Date(),
+    };
+  }
+
+  private extractVanillaObservedAttributes(
+    node: ts.ClassDeclaration,
+    _sourceFile: ts.SourceFile
+  ): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    for (const member of node.members) {
+      // Look for static get observedAttributes() { return [...] }
+      if (!ts.isGetAccessor(member)) continue;
+      if (!member.name || !ts.isIdentifier(member.name)) continue;
+      if (member.name.text !== 'observedAttributes') continue;
+
+      // Check if it's static
+      const isStatic = member.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword);
+      if (!isStatic) continue;
+
+      // Find the return statement with array
+      if (member.body) {
+        for (const statement of member.body.statements) {
+          if (ts.isReturnStatement(statement) && statement.expression) {
+            if (ts.isArrayLiteralExpression(statement.expression)) {
+              for (const element of statement.expression.elements) {
+                if (ts.isStringLiteral(element)) {
+                  props.push({
+                    name: element.text,
+                    type: 'string',
+                    required: false,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return props;
+  }
+
+  // ============================================
+  // FAST Element Detection
+  // ============================================
+
+  private extractFastComponent(
+    node: ts.ClassDeclaration,
+    sourceFile: ts.SourceFile,
+    relativePath: string
+  ): Component | null {
+    if (!node.name) return null;
+
+    // Check for @customElement decorator
+    const customElementDecorator = this.findFastCustomElementDecorator(node);
+    if (!customElementDecorator) return null;
+
+    // Check if extends FASTElement
+    const extendsFast = node.heritageClauses?.some(clause => {
+      return clause.types.some(type => {
+        const text = type.expression.getText(sourceFile);
+        return text === 'FASTElement' || text.endsWith('Element');
+      });
+    });
+
+    if (!extendsFast && !customElementDecorator) return null;
+
+    const className = node.name.getText(sourceFile);
+    const tagName = this.extractFastTagName(customElementDecorator, sourceFile) || this.toKebabCase(className);
+    const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+
+    const source: WebComponentSource = {
+      type: 'fast',
+      path: relativePath,
+      exportName: className,
+      tagName,
+      line,
+    };
+
+    // Extract @attr and @observable properties
+    const props = this.extractFastProperties(node, sourceFile);
+
+    return {
+      id: createComponentId(source as any, className),
+      name: className,
+      source: source as any,
+      props,
+      variants: [],
+      tokens: [],
+      dependencies: [],
+      metadata: {
+        deprecated: this.hasDeprecatedTag(node),
+        tags: [],
+      },
+      scannedAt: new Date(),
+    };
+  }
+
+  private findFastCustomElementDecorator(node: ts.ClassDeclaration): ts.Decorator | undefined {
+    const decorators = ts.getDecorators(node);
+    if (!decorators) return undefined;
+
+    return decorators.find(d => {
+      if (ts.isCallExpression(d.expression)) {
+        const expr = d.expression.expression;
+        return ts.isIdentifier(expr) && expr.text === 'customElement';
+      }
+      return false;
+    });
+  }
+
+  private extractFastTagName(decorator: ts.Decorator, _sourceFile: ts.SourceFile): string | null {
+    if (!ts.isCallExpression(decorator.expression)) return null;
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return null;
+
+    const arg = args[0];
+    // String literal: @customElement('my-element')
+    if (arg && ts.isStringLiteral(arg)) {
+      return arg.text;
+    }
+    // Object literal: @customElement({ name: 'my-element', ... })
+    if (arg && ts.isObjectLiteralExpression(arg)) {
+      for (const prop of arg.properties) {
+        if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+          if (prop.name.text === 'name' && ts.isStringLiteral(prop.initializer)) {
+            return prop.initializer.text;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private extractFastProperties(node: ts.ClassDeclaration, sourceFile: ts.SourceFile): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    for (const member of node.members) {
+      if (!ts.isPropertyDeclaration(member)) continue;
+      if (!member.name || !ts.isIdentifier(member.name)) continue;
+
+      const decorators = ts.getDecorators(member);
+      if (!decorators) continue;
+
+      for (const decorator of decorators) {
+        let decoratorName: string | null = null;
+
+        if (ts.isCallExpression(decorator.expression)) {
+          const expr = decorator.expression.expression;
+          if (ts.isIdentifier(expr)) {
+            decoratorName = expr.text;
+          }
+        } else if (ts.isIdentifier(decorator.expression)) {
+          decoratorName = decorator.expression.text;
+        }
+
+        if (decoratorName === 'attr' || decoratorName === 'observable') {
+          const propName = member.name.getText(sourceFile);
+          const propType = member.type ? member.type.getText(sourceFile) : 'unknown';
+
+          props.push({
+            name: propName,
+            type: propType,
+            required: !member.initializer && !member.questionToken,
+            defaultValue: member.initializer?.getText(sourceFile),
+            description: decoratorName === 'observable' ? 'Observable property' : undefined,
+          });
+        }
+      }
+    }
+
+    return props;
+  }
+
+  // ============================================
+  // Stencil Functional Component Detection
+  // ============================================
+
+  private extractStencilFunctionalComponent(
+    node: ts.Node,
+    sourceFile: ts.SourceFile,
+    relativePath: string,
+    interfaces: Map<string, ts.InterfaceDeclaration>
+  ): Component | null {
+    // Look for: export const Name: FunctionalComponent<Props> = ...
+    if (!ts.isVariableStatement(node)) return null;
+
+    const exportModifier = node.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword);
+    if (!exportModifier) return null;
+
+    for (const decl of node.declarationList.declarations) {
+      if (!ts.isVariableDeclaration(decl)) continue;
+      if (!decl.name || !ts.isIdentifier(decl.name)) continue;
+
+      // Check type annotation for FunctionalComponent
+      if (!decl.type) continue;
+
+      const typeText = decl.type.getText(sourceFile);
+      if (!typeText.includes('FunctionalComponent')) continue;
+
+      const name = decl.name.getText(sourceFile);
+      const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+
+      // Extract props interface name from FunctionalComponent<Props>
+      let propsInterfaceName: string | null = null;
+      if (ts.isTypeReferenceNode(decl.type)) {
+        const typeArgs = decl.type.typeArguments;
+        if (typeArgs && typeArgs.length > 0) {
+          const typeArg = typeArgs[0];
+          if (typeArg && ts.isTypeReferenceNode(typeArg)) {
+            const typeName = typeArg.typeName;
+            if (ts.isIdentifier(typeName)) {
+              propsInterfaceName = typeName.getText(sourceFile);
+            }
+          }
+        }
+      }
+
+      const source: WebComponentSource = {
+        type: 'stencil-functional',
+        path: relativePath,
+        exportName: name,
+        tagName: this.toKebabCase(name),
+        line,
+      };
+
+      // Extract props from interface
+      const props = propsInterfaceName
+        ? this.extractPropsFromInterface(interfaces.get(propsInterfaceName), sourceFile)
+        : [];
+
+      return {
+        id: createComponentId(source as any, name),
+        name,
+        source: source as any,
+        props,
+        variants: [],
+        tokens: [],
+        dependencies: [],
+        metadata: {
+          deprecated: false,
+          tags: [],
+        },
+        scannedAt: new Date(),
+      };
+    }
+
+    return null;
+  }
+
+  private extractPropsFromInterface(
+    iface: ts.InterfaceDeclaration | undefined,
+    sourceFile: ts.SourceFile
+  ): PropDefinition[] {
+    if (!iface) return [];
+
+    const props: PropDefinition[] = [];
+
+    for (const member of iface.members) {
+      if (!ts.isPropertySignature(member)) continue;
+      if (!member.name || !ts.isIdentifier(member.name)) continue;
+
+      const propName = member.name.getText(sourceFile);
+      const propType = member.type ? member.type.getText(sourceFile) : 'unknown';
+      const isOptional = !!member.questionToken;
+
+      props.push({
+        name: propName,
+        type: propType,
+        required: !isOptional,
+      });
+    }
+
+    return props;
   }
 }

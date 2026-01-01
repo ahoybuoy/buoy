@@ -17,6 +17,16 @@ import {
   STENCIL_SCOPED,
   STENCIL_FORM_ASSOCIATED,
   STENCIL_DEPRECATED,
+  LIT_SIGNAL_WATCHER,
+  LIT_CONTEXT,
+  LIT_LOCALIZED,
+  VANILLA_WEB_COMPONENT,
+  LIT_STANDARD_DECORATORS,
+  FAST_ELEMENT_COMPONENT,
+  STENCIL_WITH_MIXIN,
+  STENCIL_FUNCTIONAL,
+  LIT_EVENT_OPTIONS,
+  LIT_QUERY_ASYNC,
 } from '../__tests__/fixtures/webcomponent-components.js';
 import { WebComponentScanner } from './webcomponent-scanner.js';
 
@@ -468,6 +478,244 @@ describe('WebComponentScanner', () => {
       const types = result.items.map(c => c.source.type);
       expect(types).toContain('lit');
       expect(types).toContain('stencil');
+    });
+  });
+
+  describe('modern Lit patterns', () => {
+    it('detects Lit components using SignalWatcher mixin', async () => {
+      vol.fromJSON({
+        '/project/src/signal-counter.ts': LIT_SIGNAL_WATCHER,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('SignalCounter');
+      expect(result.items[0]!.source.tagName).toBe('signal-counter');
+      expect(result.items[0]!.source.type).toBe('lit');
+    });
+
+    it('detects Lit components with @provide and @consume context decorators', async () => {
+      vol.fromJSON({
+        '/project/src/theme.ts': LIT_CONTEXT,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(2);
+      expect(result.items.map(c => c.name)).toContain('ThemeProvider');
+      expect(result.items.map(c => c.name)).toContain('ThemeConsumer');
+      // Should detect provide/consume decorated properties
+      const provider = result.items.find(c => c.name === 'ThemeProvider');
+      expect(provider!.props.some(p => p.name === 'theme')).toBe(true);
+    });
+
+    it('detects Lit components with @localized decorator', async () => {
+      vol.fromJSON({
+        '/project/src/greeting.ts': LIT_LOCALIZED,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('LocalizedGreeting');
+      expect(result.items[0]!.source.tagName).toBe('localized-greeting');
+    });
+
+    it('detects TypeScript 5 standard decorators with accessor keyword', async () => {
+      vol.fromJSON({
+        '/project/src/modern.ts': LIT_STANDARD_DECORATORS,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('ModernElement');
+      // Should detect accessor properties
+      const props = result.items[0]!.props;
+      expect(props).toContainEqual(expect.objectContaining({ name: 'title' }));
+      expect(props).toContainEqual(expect.objectContaining({ name: 'count' }));
+      expect(props).toContainEqual(expect.objectContaining({ name: 'active' }));
+    });
+
+    it('detects Lit components with @eventOptions decorator', async () => {
+      vol.fromJSON({
+        '/project/src/scroll.ts': LIT_EVENT_OPTIONS,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('ScrollListener');
+    });
+
+    it('detects Lit components with @queryAsync decorator', async () => {
+      vol.fromJSON({
+        '/project/src/async-dialog.ts': LIT_QUERY_ASYNC,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('AsyncDialog');
+    });
+  });
+
+  describe('vanilla web components', () => {
+    it('detects vanilla web components extending HTMLElement', async () => {
+      vol.fromJSON({
+        '/project/src/vanilla-button.ts': VANILLA_WEB_COMPONENT,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('MyVanillaButton');
+      expect(result.items[0]!.source.tagName).toBe('my-vanilla-button');
+      expect(result.items[0]!.source.type).toBe('vanilla');
+    });
+
+    it('extracts observedAttributes as props from vanilla components', async () => {
+      vol.fromJSON({
+        '/project/src/vanilla-button.ts': VANILLA_WEB_COMPONENT,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+      const props = result.items[0]!.props;
+
+      expect(props).toContainEqual(expect.objectContaining({ name: 'label' }));
+      expect(props).toContainEqual(expect.objectContaining({ name: 'disabled' }));
+    });
+  });
+
+  describe('FAST Element detection', () => {
+    it('detects FAST Element components with @customElement decorator', async () => {
+      vol.fromJSON({
+        '/project/src/fast-button.ts': FAST_ELEMENT_COMPONENT,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('MyFastButton');
+      expect(result.items[0]!.source.tagName).toBe('my-fast-button');
+      expect(result.items[0]!.source.type).toBe('fast');
+    });
+
+    it('detects @attr and @observable decorators in FAST components', async () => {
+      vol.fromJSON({
+        '/project/src/fast-button.ts': FAST_ELEMENT_COMPONENT,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+      const props = result.items[0]!.props;
+
+      expect(props).toContainEqual(expect.objectContaining({ name: 'label' }));
+      expect(props).toContainEqual(expect.objectContaining({ name: 'disabled' }));
+      expect(props).toContainEqual(expect.objectContaining({ name: 'count' }));
+    });
+  });
+
+  describe('advanced Stencil patterns', () => {
+    it('detects Stencil components using Mixin pattern', async () => {
+      vol.fromJSON({
+        '/project/src/mixed.tsx': STENCIL_WITH_MIXIN,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('MyMixedComponent');
+      expect(result.items[0]!.source.tagName).toBe('my-mixed-component');
+    });
+
+    it('detects Stencil functional components', async () => {
+      vol.fromJSON({
+        '/project/src/greeting.tsx': STENCIL_FUNCTIONAL,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('Greeting');
+      expect(result.items[0]!.source.type).toBe('stencil-functional');
+    });
+
+    it('extracts props from Stencil functional component interface', async () => {
+      vol.fromJSON({
+        '/project/src/greeting.tsx': STENCIL_FUNCTIONAL,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const props = result.items[0]!.props;
+
+      expect(props).toContainEqual(expect.objectContaining({ name: 'name', required: true }));
+      expect(props).toContainEqual(expect.objectContaining({ name: 'greeting', required: false }));
     });
   });
 });
