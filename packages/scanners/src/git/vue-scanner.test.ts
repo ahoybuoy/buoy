@@ -31,6 +31,8 @@ import {
   DEFINE_MODEL_VUE,
   DEFINE_MODEL_REQUIRED_VUE,
   DEFINE_MODEL_WITH_PROPS_VUE,
+  OPTIONS_API_IMPORTED_PROPS_VUE,
+  OPTIONS_API_IMPORTED_PROPS_TS,
 } from '../__tests__/fixtures/vue-components.js';
 import { VueComponentScanner } from './vue-scanner.js';
 
@@ -745,6 +747,38 @@ describe('VueComponentScanner', () => {
 
       const placeholderProp = result.items[0]!.props.find(p => p.name === 'placeholder');
       expect(placeholderProp).toBeDefined();
+    });
+
+    it('resolves props from Options API with imported props variable (Element Plus defineComponent pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/tree/Tree.vue': OPTIONS_API_IMPORTED_PROPS_VUE,
+        '/project/src/tree/tree.ts': OPTIONS_API_IMPORTED_PROPS_TS,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('ElTree');
+
+      // Should resolve props from external file
+      expect(result.items[0]!.props.length).toBeGreaterThan(0);
+
+      const dataProp = result.items[0]!.props.find(p => p.name === 'data');
+      expect(dataProp).toBeDefined();
+
+      const nodeKeyProp = result.items[0]!.props.find(p => p.name === 'nodeKey');
+      expect(nodeKeyProp).toBeDefined();
+
+      const showCheckboxProp = result.items[0]!.props.find(p => p.name === 'showCheckbox');
+      expect(showCheckboxProp).toBeDefined();
+
+      const lazyProp = result.items[0]!.props.find(p => p.name === 'lazy');
+      expect(lazyProp).toBeDefined();
     });
   });
 });

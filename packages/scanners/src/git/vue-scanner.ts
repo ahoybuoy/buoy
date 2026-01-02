@@ -94,10 +94,19 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     let props = this.extractProps(scriptContent, isSetup);
 
     // If no props found inline, try to resolve from external file (Element Plus pattern)
-    if (props.length === 0 && isSetup) {
-      const externalProps = await this.resolveExternalProps(scriptContent, filePath);
-      if (externalProps.length > 0) {
-        props = externalProps;
+    if (props.length === 0) {
+      if (isSetup) {
+        // Script setup: defineProps(variableName) pattern
+        const externalProps = await this.resolveExternalProps(scriptContent, filePath);
+        if (externalProps.length > 0) {
+          props = externalProps;
+        }
+      } else {
+        // Options API: props: variableName pattern
+        const externalProps = await this.resolveExternalPropsOptionsApi(scriptContent, filePath);
+        if (externalProps.length > 0) {
+          props = externalProps;
+        }
       }
     }
 
@@ -518,7 +527,7 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
         }
       }
     } else {
-      // Options API: props: { ... } or props: [...]
+      // Options API: props: { ... } or props: [...] or props: variableName
       const propsObjStartMatch = scriptContent.match(/props:\s*\{/);
       if (propsObjStartMatch && propsObjStartMatch.index !== undefined) {
         const braceIdx = scriptContent.indexOf("{", propsObjStartMatch.index);
@@ -544,9 +553,33 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
           }
         }
       }
+
+      // Note: props: variableName pattern is handled in parseFile via resolveExternalPropsOptionsApi
     }
 
     return props;
+  }
+
+  /**
+   * Resolve props from external TypeScript file for Options API
+   * Handles: props: variableName where variableName is imported from a .ts file
+   * This is common in Element Plus's defineComponent pattern.
+   */
+  private async resolveExternalPropsOptionsApi(
+    scriptContent: string,
+    vueFilePath: string,
+  ): Promise<PropDefinition[]> {
+    // Match props: identifier (but not props: { or props: [)
+    // Also match defineComponent({ props: identifier })
+    const externalPropsMatch = scriptContent.match(
+      /props:\s*([a-zA-Z_]\w*)(?:\s*,|\s*\})/,
+    );
+    if (!externalPropsMatch?.[1]) {
+      return [];
+    }
+
+    const propsVarName = externalPropsMatch[1];
+    return this.resolveExternalPropsFromImport(scriptContent, vueFilePath, propsVarName);
   }
 
   /**
@@ -566,6 +599,17 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     }
 
     const propsVarName = externalPropsMatch[1];
+    return this.resolveExternalPropsFromImport(scriptContent, vueFilePath, propsVarName);
+  }
+
+  /**
+   * Common logic to resolve props from an imported variable name
+   */
+  private async resolveExternalPropsFromImport(
+    scriptContent: string,
+    vueFilePath: string,
+    propsVarName: string,
+  ): Promise<PropDefinition[]> {
 
     // Find the import statement for this variable
     // Match: import { rateProps } from './rate' or import { rateProps } from "./rate"

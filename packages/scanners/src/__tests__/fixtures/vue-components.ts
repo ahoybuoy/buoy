@@ -593,3 +593,42 @@ const props = defineProps<{
 }>();
 </script>
 `;
+
+// Options API with imported props variable (Element Plus defineComponent pattern)
+export const OPTIONS_API_IMPORTED_PROPS_VUE = `
+<template>
+  <div class="tree">
+    <slot></slot>
+  </div>
+</template>
+
+<script lang="ts">
+import { defineComponent } from 'vue'
+import { treeProps } from './tree'
+
+export default defineComponent({
+  name: 'ElTree',
+  props: treeProps,
+  setup(props) {
+    return {}
+  }
+})
+</script>
+`;
+
+// Options API imported props definition file (separate .ts file)
+export const OPTIONS_API_IMPORTED_PROPS_TS = `
+import { buildProps } from '@element-plus/utils'
+
+export const treeProps = buildProps({
+  data: {
+    type: Array,
+    default: () => [],
+  },
+  nodeKey: String,
+  showCheckbox: Boolean,
+  lazy: Boolean,
+  draggable: Boolean,
+  accordion: Boolean,
+} as const)
+`;
