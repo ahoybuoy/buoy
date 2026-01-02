@@ -23,6 +23,8 @@ import {
   SVELTE5_BINDABLE_VALUE_PATTERN,
   SVELTE5_NON_DESTRUCTURED_TYPE_ALIAS,
   SVELTE5_NON_DESTRUCTURED_TYPE_ALIAS_WITH_SEMICOLONS,
+  SVELTE5_DERIVED_ONLY_EXTENDS_INTERFACE,
+  SVELTE5_DERIVED_WITH_DEFAULTS,
 } from '../__tests__/fixtures/svelte-components.js';
 import { SvelteComponentScanner } from './svelte-scanner.js';
 
@@ -617,6 +619,52 @@ describe('SvelteComponentScanner', () => {
 
       const colorProp = result.items[0]!.props.find(p => p.name === 'color');
       expect(colorProp).toBeDefined();
+    });
+
+    it('extracts props from $derived(props) destructuring when interface only extends (Skeleton pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/TabsIndicator.svelte': SVELTE5_DERIVED_ONLY_EXTENDS_INTERFACE,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // Should detect 'element' from $derived destructuring
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(1);
+
+      const elementProp = result.items[0]!.props.find(p => p.name === 'element');
+      expect(elementProp).toBeDefined();
+    });
+
+    it('extracts props from $derived(props) with defaults (Skeleton code pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/Code.svelte': SVELTE5_DERIVED_WITH_DEFAULTS,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(2);
+
+      // code is required (no default in $derived)
+      const codeProp = result.items[0]!.props.find(p => p.name === 'code');
+      expect(codeProp).toBeDefined();
+      expect(codeProp!.type).toBe('string');
+
+      // lang has default value in $derived
+      const langProp = result.items[0]!.props.find(p => p.name === 'lang');
+      expect(langProp).toBeDefined();
+      expect(langProp!.required).toBe(false);
     });
   });
 

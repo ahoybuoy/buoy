@@ -499,18 +499,32 @@ export class SvelteComponentScanner extends Scanner<
     // If we still haven't found props, check for interface + $derived pattern
     // Example: const props: Props = $props(); const { a, b } = $derived(props);
     if (props.length === 0 && scriptContent.includes("$derived(")) {
-      // Find interface used with $props()
-      const propsTypeMatch = scriptContent.match(
-        /(?:const|let)\s+\w+\s*:\s*(\w+)\s*=\s*\$props\(\)/,
+      // Find the variable name used with $props()
+      const propsVarMatch = scriptContent.match(
+        /(?:const|let)\s+(\w+)\s*(?::\s*(\w+))?\s*=\s*\$props\(\)/,
       );
-      if (propsTypeMatch && propsTypeMatch[1]) {
-        const typeName = propsTypeMatch[1];
-        const allScript = moduleScriptContent + "\n" + scriptContent;
-        const typeProps = this.extractPropsFromTypeDefinition(
-          allScript,
-          typeName,
-        );
-        props.push(...typeProps);
+      if (propsVarMatch && propsVarMatch[1]) {
+        const propsVarName = propsVarMatch[1];
+        const typeName = propsVarMatch[2];
+
+        // First try to get props from interface/type definition
+        if (typeName) {
+          const allScript = moduleScriptContent + "\n" + scriptContent;
+          const typeProps = this.extractPropsFromTypeDefinition(
+            allScript,
+            typeName,
+          );
+          props.push(...typeProps);
+        }
+
+        // If we still have no props (interface body was empty), extract from $derived destructuring
+        if (props.length === 0) {
+          const derivedProps = this.extractPropsFromDerivedDestructuring(
+            scriptContent,
+            propsVarName,
+          );
+          props.push(...derivedProps);
+        }
       }
     }
 
@@ -659,6 +673,91 @@ export class SvelteComponentScanner extends Scanner<
           defaultValue: undefined,
         });
       }
+    }
+
+    return props;
+  }
+
+  /**
+   * Extract props from $derived(varName) destructuring pattern.
+   * Handles: const { element, children = null, ...rest } = $derived(props);
+   * This is useful when the interface only extends other types and has an empty body.
+   */
+  private extractPropsFromDerivedDestructuring(
+    scriptContent: string,
+    propsVarName: string,
+  ): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    // Match: const { ... } = $derived(propsVarName);
+    // Need to escape the variable name for regex
+    const derivedPattern = new RegExp(
+      `(?:const|let)\\s*\\{([^}]+)\\}\\s*=\\s*\\$derived\\(\\s*${propsVarName}\\s*\\)`,
+    );
+    const derivedMatch = scriptContent.match(derivedPattern);
+
+    if (!derivedMatch || !derivedMatch[1]) {
+      return props;
+    }
+
+    const destructuredContent = derivedMatch[1];
+
+    // Parse the destructuring content, handling defaults and rest patterns
+    // Similar to parseSvelte5Props but for $derived
+    let i = 0;
+    const charAt = (idx: number): string => destructuredContent.charAt(idx);
+
+    while (i < destructuredContent.length) {
+      // Skip whitespace and newlines
+      while (i < destructuredContent.length && /\s/.test(charAt(i))) i++;
+      if (i >= destructuredContent.length) break;
+
+      // Skip rest spread (...rest)
+      if (destructuredContent.substring(i).startsWith("...")) {
+        // Skip to end
+        break;
+      }
+
+      // Match prop name
+      const nameMatch = destructuredContent.substring(i).match(/^(\w+)/);
+      if (!nameMatch || !nameMatch[1]) {
+        // Skip to next comma or end
+        while (i < destructuredContent.length && charAt(i) !== ",") i++;
+        if (charAt(i) === ",") i++;
+        continue;
+      }
+
+      const propName = nameMatch[1];
+      i += nameMatch[0].length;
+
+      // Skip whitespace
+      while (i < destructuredContent.length && /\s/.test(charAt(i))) i++;
+
+      let defaultValue: string | undefined;
+
+      // Check for default value (= value)
+      if (charAt(i) === "=") {
+        i++; // skip '='
+        // Skip whitespace
+        while (i < destructuredContent.length && /\s/.test(charAt(i))) i++;
+
+        const { value, endIndex } = this.extractBalancedValue(
+          destructuredContent,
+          i,
+        );
+        defaultValue = value;
+        i = endIndex;
+      }
+
+      // Skip comma
+      if (charAt(i) === ",") i++;
+
+      props.push({
+        name: propName,
+        type: "unknown",
+        required: !defaultValue,
+        defaultValue,
+      });
     }
 
     return props;

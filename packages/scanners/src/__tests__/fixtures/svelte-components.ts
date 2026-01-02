@@ -382,3 +382,36 @@ export const SVELTE5_NON_DESTRUCTURED_TYPE_ALIAS_WITH_SEMICOLONS = `
 
 <svg {...props}>path</svg>
 `;
+
+// Svelte 5 with $derived(props) destructuring but empty interface body (extends only)
+// This is a common pattern in Skeleton where the interface only extends other types
+export const SVELTE5_DERIVED_ONLY_EXTENDS_INTERFACE = `
+<script lang="ts" module>
+  import type { HTMLAttributes } from '../internal/html-attributes.js';
+  import type { PropsWithElement } from '../internal/props-with-element.js';
+
+  export interface TabsIndicatorProps extends PropsWithElement<'div'>, HTMLAttributes<'div', 'children'> {}
+</script>
+
+<script lang="ts">
+  const props: TabsIndicatorProps = $props();
+  const { element, ...rest } = $derived(props);
+</script>
+
+<div {...rest}></div>
+`;
+
+// Svelte 5 with $derived(props) destructuring and defaults (Skeleton code pattern)
+export const SVELTE5_DERIVED_WITH_DEFAULTS = `
+<script lang="ts">
+  interface Props {
+    code: string;
+    lang?: string;
+  }
+
+  const props: Props = $props();
+  const { code, lang = 'txt' } = $derived(props);
+</script>
+
+<pre>{code}</pre>
+`;
