@@ -830,6 +830,20 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     }
   }
 
+  /**
+   * Check if a position in a string is inside a nested brace block.
+   * Used to distinguish `type: String` as a prop name vs. inside `{ type: String }`.
+   */
+  private isInsideNestedBraces(content: string, position: number): boolean {
+    let depth = 0;
+    for (let i = 0; i < position; i++) {
+      if (content[i] === '{') depth++;
+      else if (content[i] === '}') depth--;
+    }
+    // If depth > 0, we're inside a nested brace block
+    return depth > 0;
+  }
+
   private parseObjectProps(propsStr: string, props: PropDefinition[]): void {
     const seenProps = new Set<string>();
 
@@ -881,16 +895,46 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
       /(\w+):\s*(String|Number|Boolean|Array|Object|Function)(?!\s*as\s+PropType)(?:\s*,|\s*$|\s*\n)/g,
     );
     for (const m of simpleMatch) {
-      if (m[1] && m[2]) {
+      if (m[1] && m[2] && m.index !== undefined) {
         const propName = m[1];
-        // Skip 'type' keyword (it's part of complex prop definition)
-        if (propName === 'type') continue;
+
+        // Only skip 'type' if it's inside a nested brace block (i.e., part of a complex prop definition)
+        // Don't skip if it's at the top level (i.e., 'type' is the actual prop name)
+        if (propName === 'type' && this.isInsideNestedBraces(propsStr, m.index)) {
+          continue;
+        }
 
         if (!seenProps.has(propName)) {
           seenProps.add(propName);
           props.push({
             name: propName,
             type: m[2].toLowerCase(),
+            required: false,
+          });
+        }
+      }
+    }
+
+    // Third pass: Match props with null type (any type): propName: null
+    // Skip Vue prop option keywords (type, default, required, validator)
+    const reservedPropKeywords = new Set(['type', 'default', 'required', 'validator']);
+    const nullMatch = propsStr.matchAll(
+      /(\w+):\s*null(?:\s*,|\s*$|\s*\n)/g,
+    );
+    for (const m of nullMatch) {
+      if (m[1] && m.index !== undefined) {
+        const propName = m[1];
+
+        // Skip reserved keywords when inside nested braces (they're prop options, not prop names)
+        if (reservedPropKeywords.has(propName) && this.isInsideNestedBraces(propsStr, m.index)) {
+          continue;
+        }
+
+        if (!seenProps.has(propName)) {
+          seenProps.add(propName);
+          props.push({
+            name: propName,
+            type: 'any',
             required: false,
           });
         }

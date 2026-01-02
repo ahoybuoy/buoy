@@ -725,3 +725,38 @@ export default {
   },
 }
 `;
+
+// Vuetify pattern: prop named 'type' with simple type definition
+// This is a common pattern where 'type' is the prop name, not a type definition keyword
+export const PROP_NAMED_TYPE_VUE = `
+<template>
+  <div :class="type">{{ type }}</div>
+</template>
+
+<script setup>
+  const props = defineProps({ type: String })
+</script>
+`;
+
+// Multiple shorthand props pattern (Vuetify docs pattern)
+export const MULTIPLE_SHORTHAND_PROPS_VUE = `
+<template>
+  <div>{{ resource }} - {{ code }}</div>
+</template>
+
+<script setup lang="ts">
+  const props = defineProps({
+    resource: String,
+    code: null,
+    inline: Boolean,
+    language: {
+      type: String,
+      default: 'markup',
+    },
+    rounded: {
+      type: Boolean,
+      default: true,
+    },
+  })
+</script>
+`;

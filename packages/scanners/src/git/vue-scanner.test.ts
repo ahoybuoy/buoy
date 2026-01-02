@@ -37,6 +37,8 @@ import {
   DEFAULT_EXPORT_PROPS_TS,
   SCRIPT_SETUP_DEFAULT_EXPORT_PROPS_VUE,
   SCRIPT_SETUP_DEFAULT_EXPORT_PROPS_TS,
+  PROP_NAMED_TYPE_VUE,
+  MULTIPLE_SHORTHAND_PROPS_VUE,
 } from '../__tests__/fixtures/vue-components.js';
 import { VueComponentScanner } from './vue-scanner.js';
 
@@ -851,6 +853,65 @@ describe('VueComponentScanner', () => {
 
       const disabledProp = result.items[0]!.props.find(p => p.name === 'disabled');
       expect(disabledProp).toBeDefined();
+    });
+
+    it('extracts props named "type" correctly (Vuetify pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/Alert.vue': PROP_NAMED_TYPE_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(1);
+
+      // 'type' should be recognized as a prop name, not filtered out
+      const typeProp = result.items[0]!.props.find(p => p.name === 'type');
+      expect(typeProp).toBeDefined();
+      expect(typeProp!.type).toBe('string');
+    });
+
+    it('extracts multiple shorthand and complex props (Vuetify Markup pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/Markup.vue': MULTIPLE_SHORTHAND_PROPS_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // resource, code, inline, language, rounded = 5 props
+      expect(result.items[0]!.props.length).toBe(5);
+
+      const resourceProp = result.items[0]!.props.find(p => p.name === 'resource');
+      expect(resourceProp).toBeDefined();
+      expect(resourceProp!.type).toBe('string');
+
+      // code: null should be recognized as 'any' type
+      const codeProp = result.items[0]!.props.find(p => p.name === 'code');
+      expect(codeProp).toBeDefined();
+      expect(codeProp!.type).toBe('any');
+
+      const inlineProp = result.items[0]!.props.find(p => p.name === 'inline');
+      expect(inlineProp).toBeDefined();
+      expect(inlineProp!.type).toBe('boolean');
+
+      const languageProp = result.items[0]!.props.find(p => p.name === 'language');
+      expect(languageProp).toBeDefined();
+      expect(languageProp!.type).toBe('string');
+
+      const roundedProp = result.items[0]!.props.find(p => p.name === 'rounded');
+      expect(roundedProp).toBeDefined();
+      expect(roundedProp!.type).toBe('boolean');
     });
   });
 });
