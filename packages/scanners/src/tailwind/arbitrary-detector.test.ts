@@ -1147,4 +1147,171 @@ describe("ArbitraryValueDetector", () => {
       expect(sizeValues.map((v) => v.value)).toContain("1.05rem");
     });
   });
+
+  describe("border width arbitrary values", () => {
+    it("detects border-[1.5px] as border width", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Border.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="border-[1.5px] border-[2px] border-[0.5rem]">
+          Border widths
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const borderValues = values.filter((v) => v.type === "border");
+      expect(borderValues).toHaveLength(3);
+      expect(borderValues.map((v) => v.fullClass)).toContain("border-[1.5px]");
+      expect(borderValues.map((v) => v.fullClass)).toContain("border-[2px]");
+      expect(borderValues.map((v) => v.fullClass)).toContain("border-[0.5rem]");
+    });
+
+    it("detects directional border widths", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/DirectionalBorder.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="border-t-[2px] border-r-[1.5px] border-b-[3px] border-l-[1px]">
+          Directional borders
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const borderValues = values.filter((v) => v.type === "border");
+      expect(borderValues).toHaveLength(4);
+      expect(borderValues.map((v) => v.fullClass)).toContain("border-t-[2px]");
+    });
+
+    it("does not treat border-[#color] as width", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/BorderColor.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="border-[#ff0000] border-[rgb(0,0,0)]">
+          Border colors
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const colorValues = values.filter((v) => v.type === "color");
+      expect(colorValues).toHaveLength(2);
+      // Should not have any border-type values for color patterns
+      const borderValues = values.filter((v) => v.type === "border");
+      expect(borderValues).toHaveLength(0);
+    });
+  });
+
+  describe("transform-origin arbitrary values", () => {
+    it("detects origin-[...] values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Origin.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="origin-[--radix-dropdown-menu-content-transform-origin] origin-[center_bottom] origin-[50%_50%]">
+          Transform origins
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const transformValues = values.filter((v) => v.type === "transform");
+      expect(transformValues).toHaveLength(3);
+      expect(transformValues.map((v) => v.fullClass)).toContain("origin-[--radix-dropdown-menu-content-transform-origin]");
+      expect(transformValues.map((v) => v.fullClass)).toContain("origin-[center_bottom]");
+    });
+  });
+
+  describe("grid shorthand arbitrary values", () => {
+    it("detects cols-[...] shorthand for grid-template-columns", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/GridShort.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="cols-[repeat(auto-fill,minmax(350px,1fr))] cols-[1fr_2fr_1fr]">
+          Grid columns shorthand
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const gridValues = values.filter((v) => v.type === "grid");
+      expect(gridValues).toHaveLength(2);
+      expect(gridValues.map((v) => v.fullClass)).toContain("cols-[repeat(auto-fill,minmax(350px,1fr))]");
+    });
+
+    it("detects rows-[...] shorthand for grid-template-rows", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/GridRowsShort.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="rows-[auto_1fr_auto] rows-[100px_auto]">
+          Grid rows shorthand
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const gridValues = values.filter((v) => v.type === "grid");
+      expect(gridValues).toHaveLength(2);
+      expect(gridValues.map((v) => v.fullClass)).toContain("rows-[auto_1fr_auto]");
+    });
+  });
+
+  describe("content arbitrary values", () => {
+    it("detects content-[''] and content-[...] values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Content.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="before:content-[''] after:content-['*'] content-['Hello']">
+          Content values
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const contentValues = values.filter((v) => v.type === "other" || v.type === "css-property");
+      expect(contentValues.length).toBeGreaterThanOrEqual(3);
+      expect(values.some((v) => v.fullClass.includes("content-['']"))).toBe(true);
+    });
+  });
+
+  describe("size-[...] arbitrary values", () => {
+    it("detects size-[...] for width and height simultaneously", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Size.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="size-[100px] size-[50%] size-[--cell-size]">
+          Size values
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const sizeValues = values.filter((v) => v.type === "size");
+      expect(sizeValues).toHaveLength(3);
+      expect(sizeValues.map((v) => v.fullClass)).toContain("size-[100px]");
+    });
+  });
 });

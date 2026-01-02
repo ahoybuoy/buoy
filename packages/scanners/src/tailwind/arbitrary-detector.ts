@@ -44,8 +44,9 @@ const ARBITRARY_PATTERNS = {
   // Font size: text-[14px], text-[1.5rem]
   fontSize: new RegExp(`${MODIFIER_PREFIX}text-\\[(\\d+(?:\\.\\d+)?(?:px|rem|em))\\]`, 'g'),
 
-  // Grid templates: grid-cols-[...], grid-rows-[...]
-  grid: new RegExp(`${MODIFIER_PREFIX}(?:grid-cols|grid-rows)-\\[([^\\]]+)\\]`, 'g'),
+  // Grid templates: grid-cols-[...], grid-rows-[...], cols-[...], rows-[...]
+  // Note: cols-[...] and rows-[...] are Tailwind shorthands for grid-template-columns/rows
+  grid: new RegExp(`${MODIFIER_PREFIX}(?:grid-cols|grid-rows|cols|rows)-\\[([^\\]]+)\\]`, 'g'),
 
   // Timing/animation: duration-[5s], delay-[200ms], transition-[...]
   timing: new RegExp(`${MODIFIER_PREFIX}(?:duration|delay|transition|ease)-\\[([^\\]]+)\\]`, 'g'),
@@ -65,6 +66,10 @@ const ARBITRARY_PATTERNS = {
   // Outline width and offset: outline-[3px], outline-offset-[4px]
   outline: new RegExp(`${MODIFIER_PREFIX}outline(?:-offset)?-\\[(\\d+(?:\\.\\d+)?(?:px|rem|em)?)\\]`, 'g'),
 
+  // Border width: border-[1.5px], border-t-[2px], border-x-[3px], etc.
+  // Matches only size values (px, rem, em), not colors
+  borderWidth: new RegExp(`${MODIFIER_PREFIX}border(?:-(?:t|r|b|l|x|y|s|e))?-\\[(\\d+(?:\\.\\d+)?(?:px|rem|em))\\]`, 'g'),
+
   // Aspect ratio: aspect-[2/0.5], aspect-[16/9]
   aspect: new RegExp(`${MODIFIER_PREFIX}aspect-\\[([^\\]]+)\\]`, 'g'),
 
@@ -74,8 +79,8 @@ const ARBITRARY_PATTERNS = {
   // Flex/layout: basis-[25%], grow-[2], shrink-[0], order-[13], columns-[3]
   flexLayout: new RegExp(`${MODIFIER_PREFIX}${NEGATIVE_PREFIX}(?:basis|grow|shrink|order|columns)-\\[([^\\]]+)\\]`, 'g'),
 
-  // Transform: translate-x-[10px], rotate-[45deg], scale-[1.1], skew-x-[12deg]
-  transform: new RegExp(`${MODIFIER_PREFIX}${NEGATIVE_PREFIX}(?:translate-x|translate-y|rotate|scale|scale-x|scale-y|skew-x|skew-y)-\\[([^\\]]+)\\]`, 'g'),
+  // Transform: translate-x-[10px], rotate-[45deg], scale-[1.1], skew-x-[12deg], origin-[center_bottom]
+  transform: new RegExp(`${MODIFIER_PREFIX}${NEGATIVE_PREFIX}(?:translate-x|translate-y|rotate|scale|scale-x|scale-y|skew-x|skew-y|origin)-\\[([^\\]]+)\\]`, 'g'),
 
   // Filters: blur-[2px], brightness-[1.25], contrast-[1.1], saturate-[1.2], hue-rotate-[90deg], invert-[0.5], sepia-[0.75]
   // Note: Uses negative lookbehind to avoid matching backdrop-* variants
@@ -98,6 +103,10 @@ const ARBITRARY_PATTERNS = {
   // Box shadow: shadow-[0_0_0_1px_hsl(...)], shadow-[0_35px_60px_-15px_rgba(...)]
   // Matches arbitrary box-shadow values (not color-only patterns)
   boxShadow: new RegExp(`${MODIFIER_PREFIX}shadow-\\[(\\d[^\\]]+)\\]`, 'g'),
+
+  // Content: content-[''], content-['*'], content-['Hello']
+  // Used with ::before and ::after pseudo-elements
+  content: new RegExp(`${MODIFIER_PREFIX}content-\\[('[^']*'|"[^"]*"|[^\\]]+)\\]`, 'g'),
 
   // Arbitrary CSS properties: [--custom-prop:value], [color:red]
   cssProperty: /\[(-{0,2}[\w-]+:[^\]]+)\]/g,
@@ -366,6 +375,23 @@ export class ArbitraryValueDetector {
         }
       }
 
+      // Check for border width arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.borderWidth)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'border',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
       // Check for aspect ratio arbitrary values
       for (const match of line.matchAll(ARBITRARY_PATTERNS.aspect)) {
         const fullClass = match[0];
@@ -561,6 +587,23 @@ export class ArbitraryValueDetector {
           seen.add(key);
           values.push({
             type: 'visual',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for content arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.content)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'other',
             value: match[1]!,
             fullClass,
             file: relativePath,
