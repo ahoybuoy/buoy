@@ -44,9 +44,9 @@ const ARBITRARY_PATTERNS = {
   // Font size: text-[14px], text-[1.5rem]
   fontSize: new RegExp(`${MODIFIER_PREFIX}text-\\[(\\d+(?:\\.\\d+)?(?:px|rem|em))\\]`, 'g'),
 
-  // Grid templates: grid-cols-[...], grid-rows-[...], cols-[...], rows-[...]
+  // Grid templates: grid-cols-[...], grid-rows-[...], cols-[...], rows-[...], auto-cols-[...], auto-rows-[...]
   // Note: cols-[...] and rows-[...] are Tailwind shorthands for grid-template-columns/rows
-  grid: new RegExp(`${MODIFIER_PREFIX}(?:grid-cols|grid-rows|cols|rows)-\\[([^\\]]+)\\]`, 'g'),
+  grid: new RegExp(`${MODIFIER_PREFIX}(?:grid-cols|grid-rows|cols|rows|auto-cols|auto-rows)-\\[([^\\]]+)\\]`, 'g'),
 
   // Timing/animation: duration-[5s], delay-[200ms], transition-[...]
   timing: new RegExp(`${MODIFIER_PREFIX}(?:duration|delay|transition|ease)-\\[([^\\]]+)\\]`, 'g'),
@@ -92,10 +92,12 @@ const ARBITRARY_PATTERNS = {
   // Opacity: opacity-[0.85], opacity-[.5], opacity-[33%]
   opacity: new RegExp(`${MODIFIER_PREFIX}opacity-\\[([^\\]]+)\\]`, 'g'),
 
-  // Typography: leading-[1.5], tracking-[0.02em], font-[500]
+  // Typography: leading-[1.5], tracking-[0.02em], font-[500], underline-offset-[4px], indent-[2em]
   leading: new RegExp(`${MODIFIER_PREFIX}leading-\\[([^\\]]+)\\]`, 'g'),
   tracking: new RegExp(`${MODIFIER_PREFIX}tracking-\\[([^\\]]+)\\]`, 'g'),
   fontWeight: new RegExp(`${MODIFIER_PREFIX}font-\\[(\\d+)\\]`, 'g'),
+  underlineOffset: new RegExp(`${MODIFIER_PREFIX}underline-offset-\\[([^\\]]+)\\]`, 'g'),
+  indent: new RegExp(`${MODIFIER_PREFIX}indent-\\[([^\\]]+)\\]`, 'g'),
 
   // Line clamp: line-clamp-[3], line-clamp-[5]
   lineClamp: new RegExp(`${MODIFIER_PREFIX}line-clamp-\\[([^\\]]+)\\]`, 'g'),
@@ -107,6 +109,21 @@ const ARBITRARY_PATTERNS = {
   // Content: content-[''], content-['*'], content-['Hello']
   // Used with ::before and ::after pseudo-elements
   content: new RegExp(`${MODIFIER_PREFIX}content-\\[('[^']*'|"[^"]*"|[^\\]]+)\\]`, 'g'),
+
+  // Stroke width: stroke-[2px], stroke-[1.5px] (not stroke color which matches color pattern)
+  strokeWidth: new RegExp(`${MODIFIER_PREFIX}stroke-\\[(\\d+(?:\\.\\d+)?(?:px|rem|em))\\]`, 'g'),
+
+  // Will-change: will-change-[transform], will-change-[opacity,transform]
+  willChange: new RegExp(`${MODIFIER_PREFIX}will-change-\\[([^\\]]+)\\]`, 'g'),
+
+  // List style: list-[upper-roman], list-[lower-alpha]
+  listStyle: new RegExp(`${MODIFIER_PREFIX}list-\\[([^\\]]+)\\]`, 'g'),
+
+  // Object position: object-[center_top], object-[25%_75%]
+  objectPosition: new RegExp(`${MODIFIER_PREFIX}object-\\[([^\\]]+)\\]`, 'g'),
+
+  // Cursor: cursor-[pointer], cursor-[url(hand.cur),_pointer], cursor-[grab]
+  cursor: new RegExp(`${MODIFIER_PREFIX}cursor-\\[([^\\]]+)\\]`, 'g'),
 
   // Arbitrary CSS properties: [--custom-prop:value], [color:red]
   cssProperty: /\[(-{0,2}[\w-]+:[^\]]+)\]/g,
@@ -604,6 +621,125 @@ export class ArbitraryValueDetector {
           seen.add(key);
           values.push({
             type: 'other',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for stroke width arbitrary values (not stroke color)
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.strokeWidth)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'border',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for will-change arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.willChange)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'other',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for list style arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.listStyle)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'other',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for object position arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.objectPosition)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'layout',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for cursor arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.cursor)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'other',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for underline-offset arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.underlineOffset)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'typography',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for text indent arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.indent)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'typography',
             value: match[1]!,
             fullClass,
             file: relativePath,

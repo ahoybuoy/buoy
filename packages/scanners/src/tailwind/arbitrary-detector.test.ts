@@ -1314,4 +1314,204 @@ describe("ArbitraryValueDetector", () => {
       expect(sizeValues.map((v) => v.fullClass)).toContain("size-[100px]");
     });
   });
+
+  describe("stroke arbitrary values", () => {
+    it("detects stroke-[width] as border type (not color)", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SVG.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <svg className="stroke-[2px] stroke-[1.5px] stroke-[0.5rem]">
+          SVG strokes
+        </svg>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const borderValues = values.filter((v) => v.type === "border");
+      expect(borderValues).toHaveLength(3);
+      expect(borderValues.map((v) => v.fullClass)).toContain("stroke-[2px]");
+      expect(borderValues.map((v) => v.fullClass)).toContain("stroke-[1.5px]");
+    });
+
+    it("detects stroke-[#color] as color type", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SVGColor.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <svg className="stroke-[#333333] stroke-[rgb(0,0,0)]">
+          SVG stroke colors
+        </svg>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const colorValues = values.filter((v) => v.type === "color");
+      expect(colorValues).toHaveLength(2);
+    });
+  });
+
+  describe("text decoration arbitrary values", () => {
+    it("detects underline-offset with arbitrary values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Underline.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <span className="underline-offset-[4px] underline-offset-[0.5em]">
+          Underline offset
+        </span>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const typographyValues = values.filter((v) => v.type === "typography");
+      expect(typographyValues.length).toBeGreaterThanOrEqual(2);
+      expect(typographyValues.map((v) => v.fullClass)).toContain("underline-offset-[4px]");
+    });
+  });
+
+  describe("text indent arbitrary values", () => {
+    it("detects indent-[...] values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Indent.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <p className="indent-[2em] indent-[20px]">
+          Text indent
+        </p>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const typographyValues = values.filter((v) => v.type === "typography");
+      expect(typographyValues.length).toBeGreaterThanOrEqual(2);
+      expect(typographyValues.map((v) => v.fullClass)).toContain("indent-[2em]");
+    });
+  });
+
+  describe("will-change arbitrary values", () => {
+    it("detects will-change-[...] values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/WillChange.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="will-change-[transform] will-change-[opacity,transform]">
+          Will change
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(2);
+      expect(values.some((v) => v.fullClass === "will-change-[transform]")).toBe(true);
+    });
+  });
+
+  describe("list style arbitrary values", () => {
+    it("detects list-[...] values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/List.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <ul className="list-[upper-roman] list-[lower-alpha]">
+          List styles
+        </ul>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(2);
+      expect(values.some((v) => v.fullClass === "list-[upper-roman]")).toBe(true);
+    });
+  });
+
+  describe("auto-cols and auto-rows arbitrary values", () => {
+    it("detects auto-cols-[...] values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/AutoGrid.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="auto-cols-[minmax(0,2fr)] auto-cols-[min-content]">
+          Auto columns
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const gridValues = values.filter((v) => v.type === "grid");
+      expect(gridValues.length).toBeGreaterThanOrEqual(2);
+      expect(gridValues.map((v) => v.fullClass)).toContain("auto-cols-[minmax(0,2fr)]");
+    });
+
+    it("detects auto-rows-[...] values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/AutoRows.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="auto-rows-[min-content] auto-rows-[auto]">
+          Auto rows
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const gridValues = values.filter((v) => v.type === "grid");
+      expect(gridValues.length).toBeGreaterThanOrEqual(2);
+      expect(gridValues.map((v) => v.fullClass)).toContain("auto-rows-[min-content]");
+    });
+  });
+
+  describe("object position arbitrary values", () => {
+    it("detects object-[...] position values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/ObjectPos.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <img className="object-[center_top] object-[25%_75%]" />
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(2);
+      expect(values.some((v) => v.fullClass === "object-[center_top]")).toBe(true);
+    });
+  });
+
+  describe("cursor arbitrary values", () => {
+    it("detects cursor-[...] values", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Cursor.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="cursor-[pointer] cursor-[url(hand.cur),_pointer] cursor-[grab]">
+          Cursor values
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(3);
+      expect(values.some((v) => v.fullClass === "cursor-[pointer]")).toBe(true);
+    });
+  });
 });
