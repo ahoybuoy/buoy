@@ -915,6 +915,27 @@ Adjust behavior:
 
 ---
 
+## Scaling & Multi-Tenancy (Future)
+
+**Current:** SQLite file per project (`.buoy/buoy.db`), local only.
+
+**When needed:** For GitHub App / team use, migrate to:
+
+| Option | Best For | Cost |
+|--------|----------|------|
+| **Turso (libSQL)** | Fast edge queries, many repos | Free tier: 500 DBs |
+| **S3/R2 + SQLite** | Cheapest persistence | ~$0.015/GB |
+| **Postgres** | Enterprise, complex queries | Always-on cost |
+
+**Migration path:**
+1. Schema already uses `projectId` for multi-tenancy
+2. Drizzle ORM supports Turso with minimal changes
+3. Add cloud layer when PR guardian ships as GitHub App
+
+**Decision:** Defer until local graph is working. Revisit when building GitHub App.
+
+---
+
 ## Success Criteria
 
 1. **Graph captures full design system** - Tokens, components, usages, history
