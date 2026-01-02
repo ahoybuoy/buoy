@@ -852,4 +852,348 @@ describe('FigmaClient', () => {
       expect(result).toEqual(componentSetsData);
     });
   });
+
+  describe('file metadata endpoint', () => {
+    it('fetches lightweight file metadata', async () => {
+      const metaData = {
+        name: 'Design System',
+        role: 'owner',
+        createdAt: '2024-01-01T00:00:00Z',
+        lastModified: '2024-12-01T00:00:00Z',
+        thumbnailUrl: 'https://...',
+        branches: [],
+      };
+      mockSuccessResponse(metaData);
+
+      const client = createClient();
+      const result = await client.getFileMeta('abc123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/meta',
+        expect.any(Object)
+      );
+      expect(result).toEqual(metaData);
+    });
+  });
+
+  describe('image fills endpoint', () => {
+    it('fetches all image fill URLs from a file', async () => {
+      const imageFillsData = {
+        images: {
+          'img-hash-1': 'https://s3.amazonaws.com/img1.png',
+          'img-hash-2': 'https://s3.amazonaws.com/img2.jpg',
+        },
+      };
+      mockSuccessResponse(imageFillsData);
+
+      const client = createClient();
+      const result = await client.getImageFills('abc123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/images',
+        expect.any(Object)
+      );
+      expect(result).toEqual(imageFillsData);
+    });
+  });
+
+  describe('user info endpoint', () => {
+    it('fetches current authenticated user info', async () => {
+      const userData = {
+        id: 'user123',
+        handle: 'designer',
+        email: 'designer@example.com',
+        img_url: 'https://...',
+      };
+      mockSuccessResponse(userData);
+
+      const client = createClient();
+      const result = await client.getMe();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/me',
+        expect.any(Object)
+      );
+      expect(result).toEqual(userData);
+    });
+  });
+
+  describe('individual component/style fetching', () => {
+    it('fetches a single component by key', async () => {
+      const componentData = {
+        meta: {
+          key: 'btn-primary',
+          file_key: 'abc123',
+          node_id: '1:1',
+          name: 'Button',
+          description: 'Primary button component',
+        },
+      };
+      mockSuccessResponse(componentData);
+
+      const client = createClient();
+      const result = await client.getComponent('btn-primary');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/components/btn-primary',
+        expect.any(Object)
+      );
+      expect(result).toEqual(componentData);
+    });
+
+    it('fetches a single style by key', async () => {
+      const styleData = {
+        meta: {
+          key: 'primary-color',
+          file_key: 'abc123',
+          node_id: '2:1',
+          name: 'Primary',
+          style_type: 'FILL',
+        },
+      };
+      mockSuccessResponse(styleData);
+
+      const client = createClient();
+      const result = await client.getStyle('primary-color');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/styles/primary-color',
+        expect.any(Object)
+      );
+      expect(result).toEqual(styleData);
+    });
+
+    it('fetches team components with pagination', async () => {
+      const teamComponentsData = {
+        meta: {
+          components: [
+            { key: 'comp1', name: 'Button' },
+            { key: 'comp2', name: 'Card' },
+          ],
+          cursor: { after: 'cursor123' },
+        },
+      };
+      mockSuccessResponse(teamComponentsData);
+
+      const client = createClient();
+      const result = await client.getTeamComponents('team123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/teams/team123/components',
+        expect.any(Object)
+      );
+      expect(result).toEqual(teamComponentsData);
+    });
+
+    it('fetches team components with pagination cursor', async () => {
+      mockSuccessResponse({ meta: { components: [], cursor: null } });
+
+      const client = createClient();
+      await client.getTeamComponents('team123', { after: 'cursor123', page_size: 50 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/teams/team123/components?after=cursor123&page_size=50',
+        expect.any(Object)
+      );
+    });
+
+    it('fetches team styles', async () => {
+      const teamStylesData = {
+        meta: {
+          styles: [
+            { key: 'style1', name: 'Primary', style_type: 'FILL' },
+          ],
+        },
+      };
+      mockSuccessResponse(teamStylesData);
+
+      const client = createClient();
+      const result = await client.getTeamStyles('team123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/teams/team123/styles',
+        expect.any(Object)
+      );
+      expect(result).toEqual(teamStylesData);
+    });
+  });
+
+  describe('file fetching with depth and geometry', () => {
+    it('fetches file with depth parameter', async () => {
+      mockSuccessResponse({ name: 'Test', document: {} });
+
+      const client = createClient();
+      await client.getFile('abc123', { depth: 2 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123?depth=2',
+        expect.any(Object)
+      );
+    });
+
+    it('fetches file with geometry paths', async () => {
+      mockSuccessResponse({ name: 'Test', document: {} });
+
+      const client = createClient();
+      await client.getFile('abc123', { geometry: 'paths' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123?geometry=paths',
+        expect.any(Object)
+      );
+    });
+
+    it('fetches file with plugin data', async () => {
+      mockSuccessResponse({ name: 'Test', document: {} });
+
+      const client = createClient();
+      await client.getFile('abc123', { plugin_data: 'shared' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123?plugin_data=shared',
+        expect.any(Object)
+      );
+    });
+
+    it('fetches file with branch data', async () => {
+      mockSuccessResponse({ name: 'Test', document: {} });
+
+      const client = createClient();
+      await client.getFile('abc123', { branch_data: true });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123?branch_data=true',
+        expect.any(Object)
+      );
+    });
+
+    it('combines multiple file options', async () => {
+      mockSuccessResponse({ name: 'Test', document: {} });
+
+      const client = createClient();
+      await client.getFile('abc123', { depth: 1, geometry: 'paths', version: 'v123' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123?version=v123&depth=1&geometry=paths',
+        expect.any(Object)
+      );
+    });
+  });
+
+  describe('nodes fetching with additional options', () => {
+    it('fetches nodes with depth parameter', async () => {
+      mockSuccessResponse({ name: 'Test', nodes: {} });
+
+      const client = createClient();
+      await client.getNodes('abc123', ['1:1'], { depth: 2 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/nodes?ids=1%3A1&depth=2',
+        expect.any(Object)
+      );
+    });
+
+    it('fetches nodes with geometry paths', async () => {
+      mockSuccessResponse({ name: 'Test', nodes: {} });
+
+      const client = createClient();
+      await client.getNodes('abc123', ['1:1'], { geometry: 'paths' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/nodes?ids=1%3A1&geometry=paths',
+        expect.any(Object)
+      );
+    });
+
+    it('fetches nodes with plugin data', async () => {
+      mockSuccessResponse({ name: 'Test', nodes: {} });
+
+      const client = createClient();
+      await client.getNodes('abc123', ['1:1'], { plugin_data: 'shared' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/nodes?ids=1%3A1&plugin_data=shared',
+        expect.any(Object)
+      );
+    });
+  });
+
+  describe('published variables', () => {
+    it('fetches published variables from a file', async () => {
+      const publishedVarsData = {
+        meta: {
+          variables: { 'var1': { id: 'var1', name: 'primary-color' } },
+          variableCollections: {},
+        },
+      };
+      mockSuccessResponse(publishedVarsData);
+
+      const client = createClient();
+      const result = await client.getPublishedVariables('abc123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/variables/published',
+        expect.any(Object)
+      );
+      expect(result).toEqual(publishedVarsData);
+    });
+  });
+
+  describe('component set by key', () => {
+    it('fetches a single component set by key', async () => {
+      const componentSetData = {
+        meta: {
+          key: 'btn-set',
+          name: 'Button',
+          description: 'Button component set with variants',
+        },
+      };
+      mockSuccessResponse(componentSetData);
+
+      const client = createClient();
+      const result = await client.getComponentSet('btn-set');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/component_sets/btn-set',
+        expect.any(Object)
+      );
+      expect(result).toEqual(componentSetData);
+    });
+  });
+
+  describe('team component sets', () => {
+    it('fetches team component sets with pagination', async () => {
+      const teamComponentSetsData = {
+        meta: {
+          component_sets: [
+            { key: 'set1', name: 'Buttons' },
+            { key: 'set2', name: 'Cards' },
+          ],
+          cursor: { after: 'cursor456' },
+        },
+      };
+      mockSuccessResponse(teamComponentSetsData);
+
+      const client = createClient();
+      const result = await client.getTeamComponentSets('team123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/teams/team123/component_sets',
+        expect.any(Object)
+      );
+      expect(result).toEqual(teamComponentSetsData);
+    });
+
+    it('fetches team component sets with pagination options', async () => {
+      mockSuccessResponse({ meta: { component_sets: [] } });
+
+      const client = createClient();
+      await client.getTeamComponentSets('team123', { after: 'cursor456', page_size: 30 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/teams/team123/component_sets?after=cursor456&page_size=30',
+        expect.any(Object)
+      );
+    });
+  });
 });

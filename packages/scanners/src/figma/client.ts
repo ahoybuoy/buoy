@@ -201,6 +201,62 @@ export interface GetFileOptions {
    * Specific version ID to fetch
    */
   version?: string;
+
+  /**
+   * Depth of the node tree to return (1-4)
+   * Useful for getting only top-level structure
+   */
+  depth?: number;
+
+  /**
+   * Set to "paths" to include vector paths in the response
+   */
+  geometry?: "paths";
+
+  /**
+   * Include plugin data. Set to "shared" for shared plugin data
+   */
+  plugin_data?: string;
+
+  /**
+   * Include branch metadata if true
+   */
+  branch_data?: boolean;
+}
+
+/**
+ * Options for fetching nodes
+ */
+export interface GetNodesOptions {
+  /**
+   * Depth of the node tree to return (1-4)
+   */
+  depth?: number;
+
+  /**
+   * Set to "paths" to include vector paths
+   */
+  geometry?: "paths";
+
+  /**
+   * Include plugin data
+   */
+  plugin_data?: string;
+}
+
+/**
+ * Pagination options for team endpoints
+ */
+export interface PaginationOptions {
+  /**
+   * Cursor for pagination - fetches results after this cursor
+   */
+  after?: string;
+
+  /**
+   * Number of items per page (max 100)
+   */
+  page_size?: number;
 }
 
 /**
@@ -241,6 +297,124 @@ export interface FigmaCommentsResponse {
 export interface FigmaComponentSetsResponse {
   meta: {
     component_sets: Array<{ key: string; name: string; description: string }>;
+  };
+}
+
+/**
+ * Response from file meta endpoint - lightweight file metadata
+ */
+export interface FigmaFileMetaResponse {
+  name: string;
+  role: string;
+  createdAt: string;
+  lastModified: string;
+  thumbnailUrl?: string;
+  branches?: Array<{ key: string; name: string }>;
+}
+
+/**
+ * Response from image fills endpoint
+ */
+export interface FigmaImageFillsResponse {
+  images: Record<string, string>;
+}
+
+/**
+ * Response from /me endpoint - current user info
+ */
+export interface FigmaUserResponse {
+  id: string;
+  handle: string;
+  email?: string;
+  img_url?: string;
+}
+
+/**
+ * Response from single component endpoint
+ */
+export interface FigmaComponentResponse {
+  meta: {
+    key: string;
+    file_key: string;
+    node_id: string;
+    name: string;
+    description: string;
+    thumbnail_url?: string;
+    created_at: string;
+    updated_at: string;
+  };
+}
+
+/**
+ * Response from single style endpoint
+ */
+export interface FigmaStyleResponse {
+  meta: {
+    key: string;
+    file_key: string;
+    node_id: string;
+    name: string;
+    style_type: string;
+    thumbnail_url?: string;
+    created_at: string;
+    updated_at: string;
+  };
+}
+
+/**
+ * Response from team components endpoint with pagination
+ */
+export interface FigmaTeamComponentsResponse {
+  meta: {
+    components: Array<{
+      key: string;
+      name: string;
+      description?: string;
+      file_key?: string;
+    }>;
+    cursor?: { after: string } | null;
+  };
+}
+
+/**
+ * Response from team styles endpoint with pagination
+ */
+export interface FigmaTeamStylesResponse {
+  meta: {
+    styles: Array<{
+      key: string;
+      name: string;
+      style_type: string;
+      description?: string;
+    }>;
+    cursor?: { after: string } | null;
+  };
+}
+
+/**
+ * Response from single component set endpoint
+ */
+export interface FigmaComponentSetResponse {
+  meta: {
+    key: string;
+    name: string;
+    description: string;
+    file_key?: string;
+    thumbnail_url?: string;
+  };
+}
+
+/**
+ * Response from team component sets endpoint with pagination
+ */
+export interface FigmaTeamComponentSetsResponse {
+  meta: {
+    component_sets: Array<{
+      key: string;
+      name: string;
+      description?: string;
+    }>;
+    cursor?: { after: string } | null;
   };
 }
 
@@ -594,10 +768,24 @@ export class FigmaClient {
    * @param options Optional parameters including version
    */
   async getFile(fileKey: string, options?: GetFileOptions): Promise<FigmaFile> {
-    let endpoint = `/files/${fileKey}`;
+    const params = new URLSearchParams();
     if (options?.version) {
-      endpoint += `?version=${encodeURIComponent(options.version)}`;
+      params.append("version", options.version);
     }
+    if (options?.depth !== undefined) {
+      params.append("depth", String(options.depth));
+    }
+    if (options?.geometry) {
+      params.append("geometry", options.geometry);
+    }
+    if (options?.plugin_data) {
+      params.append("plugin_data", options.plugin_data);
+    }
+    if (options?.branch_data) {
+      params.append("branch_data", "true");
+    }
+    const query = params.toString();
+    const endpoint = `/files/${fileKey}${query ? `?${query}` : ""}`;
     return this.fetch<FigmaFile>(endpoint);
   }
 
@@ -608,9 +796,21 @@ export class FigmaClient {
   async getNodes(
     fileKey: string,
     nodeIds: string[],
+    options?: GetNodesOptions,
   ): Promise<FigmaNodesResponse> {
+    // URL encode node IDs manually and join with comma (which doesn't need encoding)
     const ids = nodeIds.map(encodeURIComponent).join(",");
-    return this.fetch<FigmaNodesResponse>(`/files/${fileKey}/nodes?ids=${ids}`);
+    let url = `/files/${fileKey}/nodes?ids=${ids}`;
+    if (options?.depth !== undefined) {
+      url += `&depth=${options.depth}`;
+    }
+    if (options?.geometry) {
+      url += `&geometry=${options.geometry}`;
+    }
+    if (options?.plugin_data) {
+      url += `&plugin_data=${encodeURIComponent(options.plugin_data)}`;
+    }
+    return this.fetch<FigmaNodesResponse>(url);
   }
 
   async getFileComponents(
@@ -686,6 +886,125 @@ export class FigmaClient {
     }
 
     return this.fetch<FigmaImageResponse>(url);
+  }
+
+  /**
+   * Fetch lightweight file metadata (faster than getFile)
+   * Tier 3 endpoint - useful for checking file existence and basic info
+   */
+  async getFileMeta(fileKey: string): Promise<FigmaFileMetaResponse> {
+    return this.fetch<FigmaFileMetaResponse>(`/files/${fileKey}/meta`);
+  }
+
+  /**
+   * Fetch all image fill URLs from a file
+   * Returns download links for images used in image fills
+   * Note: URLs expire within 14 days
+   */
+  async getImageFills(fileKey: string): Promise<FigmaImageFillsResponse> {
+    return this.fetch<FigmaImageFillsResponse>(`/files/${fileKey}/images`);
+  }
+
+  /**
+   * Fetch current authenticated user information
+   */
+  async getMe(): Promise<FigmaUserResponse> {
+    return this.fetch<FigmaUserResponse>("/me");
+  }
+
+  /**
+   * Fetch a single component by its key
+   * @param componentKey The unique key of the component
+   */
+  async getComponent(componentKey: string): Promise<FigmaComponentResponse> {
+    return this.fetch<FigmaComponentResponse>(`/components/${componentKey}`);
+  }
+
+  /**
+   * Fetch a single style by its key
+   * @param styleKey The unique key of the style
+   */
+  async getStyle(styleKey: string): Promise<FigmaStyleResponse> {
+    return this.fetch<FigmaStyleResponse>(`/styles/${styleKey}`);
+  }
+
+  /**
+   * Fetch a single component set by its key
+   * @param componentSetKey The unique key of the component set
+   */
+  async getComponentSet(componentSetKey: string): Promise<FigmaComponentSetResponse> {
+    return this.fetch<FigmaComponentSetResponse>(`/component_sets/${componentSetKey}`);
+  }
+
+  /**
+   * Fetch all components for a team with pagination
+   * @param teamId The team ID
+   * @param options Pagination options (after cursor, page_size)
+   */
+  async getTeamComponents(
+    teamId: string,
+    options?: PaginationOptions,
+  ): Promise<FigmaTeamComponentsResponse> {
+    const params = new URLSearchParams();
+    if (options?.after) {
+      params.append("after", options.after);
+    }
+    if (options?.page_size !== undefined) {
+      params.append("page_size", String(options.page_size));
+    }
+    const query = params.toString();
+    const endpoint = `/teams/${teamId}/components${query ? `?${query}` : ""}`;
+    return this.fetch<FigmaTeamComponentsResponse>(endpoint);
+  }
+
+  /**
+   * Fetch all styles for a team with pagination
+   * @param teamId The team ID
+   * @param options Pagination options (after cursor, page_size)
+   */
+  async getTeamStyles(
+    teamId: string,
+    options?: PaginationOptions,
+  ): Promise<FigmaTeamStylesResponse> {
+    const params = new URLSearchParams();
+    if (options?.after) {
+      params.append("after", options.after);
+    }
+    if (options?.page_size !== undefined) {
+      params.append("page_size", String(options.page_size));
+    }
+    const query = params.toString();
+    const endpoint = `/teams/${teamId}/styles${query ? `?${query}` : ""}`;
+    return this.fetch<FigmaTeamStylesResponse>(endpoint);
+  }
+
+  /**
+   * Fetch all component sets for a team with pagination
+   * @param teamId The team ID
+   * @param options Pagination options (after cursor, page_size)
+   */
+  async getTeamComponentSets(
+    teamId: string,
+    options?: PaginationOptions,
+  ): Promise<FigmaTeamComponentSetsResponse> {
+    const params = new URLSearchParams();
+    if (options?.after) {
+      params.append("after", options.after);
+    }
+    if (options?.page_size !== undefined) {
+      params.append("page_size", String(options.page_size));
+    }
+    const query = params.toString();
+    const endpoint = `/teams/${teamId}/component_sets${query ? `?${query}` : ""}`;
+    return this.fetch<FigmaTeamComponentSetsResponse>(endpoint);
+  }
+
+  /**
+   * Fetch published variables from a file (for library consumption)
+   * Enterprise feature - returns variables that have been published
+   */
+  async getPublishedVariables(fileKey: string): Promise<FigmaVariablesResponse> {
+    return this.fetch<FigmaVariablesResponse>(`/files/${fileKey}/variables/published`);
   }
 
   getFigmaUrl(fileKey: string, nodeId?: string): string {
