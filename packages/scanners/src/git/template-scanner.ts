@@ -204,8 +204,16 @@ const TEMPLATE_CONFIG: Record<string, { ext: string; patterns: RegExp[] }> = {
     ext: 'astro',
     patterns: [
       /import\s+(\w+)\s+from\s+['"][^'"]+\.astro['"]/g, // import Component from './Component.astro'
+      /import\s+(\w+)\s+from\s+['"][^'"]+\.(tsx|jsx|vue|svelte)['"]/g, // Framework component imports
       /<([A-Z]\w+)/g,                            // <ComponentName
       /Astro\.slots/g,                           // Astro.slots
+      /Astro\.self/g,                            // Recursive component pattern
+      /Astro\.props/g,                           // Props access pattern
+      /client:(load|idle|visible|media|only)/g, // Island architecture directives
+      /transition:(name|animate|persist)/g,      // View Transitions API
+      /set:(html|text)/g,                        // Content directives
+      /define:vars/g,                            // Variable passing to scripts/styles
+      /<slot\s*(?:name=['"]([^'"]+)['"])?/gi,   // Named and default slots
     ],
   },
   markdown: {
@@ -218,26 +226,45 @@ const TEMPLATE_CONFIG: Record<string, { ext: string; patterns: RegExp[] }> = {
   mdx: {
     ext: 'mdx',
     patterns: [
-      /import\s+(\w+)\s+from\s+['"]([^'"]+)['"]/g, // import Component from './Component'
-      /<([A-Z]\w+)/g,                            // <ComponentName
-      /export\s+(const|function|default)/g,     // export const/function/default
+      /import\s+(\w+)\s+from\s+['"]([^'"]+)['"]/g,       // import Component from './Component'
+      /import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g, // import { Component } from './Component'
+      /<([A-Z]\w+)/g,                                    // <ComponentName
+      /export\s+(const|function|default)/g,              // export const/function/default
+      /export\s+const\s+(\w+)/g,                         // Named exports
+      /^---[\s\S]*?---/m,                                // Frontmatter block
+      /\{\/\*.*?\*\/\}/g,                                // JSX comments
+      /<\s*Fragment\s*>/gi,                              // Fragment component
     ],
   },
   // Additional JS frameworks
   solid: {
     ext: 'tsx',
     patterns: [
-      /import\s+.*from\s+['"]solid-js['"]/g,     // Solid imports
-      /createSignal|createEffect|createMemo/g,   // Solid primitives
-      /<([A-Z]\w+)/g,                            // JSX components
+      /import\s+.*from\s+['"]solid-js['"]/g,                    // Solid core imports
+      /import\s+.*from\s+['"]solid-js\/store['"]/g,             // Solid store imports
+      /import\s+.*from\s+['"]solid-js\/web['"]/g,               // Solid web imports
+      /createSignal|createEffect|createMemo|createResource/g,    // Reactivity primitives
+      /createStore|createMutable|produce|reconcile/g,            // Store primitives
+      /createContext|useContext/g,                               // Context API
+      /onMount|onCleanup|onError/g,                              // Lifecycle hooks
+      /Show|For|Switch|Match|Index|ErrorBoundary|Suspense/g,    // Control flow components
+      /Dynamic|Portal/g,                                         // Special components
+      /batch|untrack|on|startTransition/g,                       // Reactive utilities
+      /<([A-Z]\w+)/g,                                            // JSX components
     ],
   },
   qwik: {
     ext: 'tsx',
     patterns: [
-      /import\s+.*from\s+['"]@builder\.io\/qwik['"]/g, // Qwik imports
-      /component\$|useSignal|useStore/g,         // Qwik primitives
-      /<([A-Z]\w+)/g,                            // JSX components
+      /import\s+.*from\s+['"]@builder\.io\/qwik['"]/g,           // Qwik core imports
+      /import\s+.*from\s+['"]@builder\.io\/qwik-city['"]/g,      // Qwik City imports
+      /component\$|useSignal|useStore|useComputed\$/g,            // Core reactivity
+      /useTask\$|useVisibleTask\$|useResource\$/g,                // Tasks and resources
+      /useNavigate|useLocation|useContent/g,                      // Qwik City hooks
+      /routeLoader\$|routeAction\$|server\$/g,                    // Server functions
+      /Slot|SSRStream|Resource/g,                                 // Built-in components
+      /\$\s*\(/g,                                                 // Inline $ handlers
+      /<([A-Z]\w+)/g,                                            // JSX components
     ],
   },
   marko: {
@@ -246,6 +273,13 @@ const TEMPLATE_CONFIG: Record<string, { ext: string; patterns: RegExp[] }> = {
       /<(\w+)\s+\.\.\./g,                        // <component ...>
       /\$\{.*\}/g,                               // ${expression}
       /<await>/g,                                // <await>
+      /<if\(.*\)>/g,                             // <if(condition)>
+      /<for\(.*\)>/g,                            // <for(item of items)>
+      /<while\(.*\)>/g,                          // <while(condition)>
+      /<macro\|([^|]+)\|/g,                      // <macro|name|>
+      /<include\(['"]([^'"]+)['"]\)/g,           // <include('path')>
+      /class\s+{\s*\n/g,                         // Marko class component
+      /static\s+component/g,                     // Static component marker
     ],
   },
   lit: {
