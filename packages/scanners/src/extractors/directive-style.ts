@@ -8,28 +8,58 @@ import type { StyleMatch } from './html-style.js';
 
 /**
  * CSS units supported by Angular [style.property.unit] syntax
+ * Includes modern CSS units from CSS Level 4 and Container Queries
  */
 const CSS_UNITS = new Set([
+  // Absolute length units
   'px',
-  'em',
-  'rem',
-  'vh',
-  'vw',
-  'vmin',
-  'vmax',
-  '%',
   'pt',
   'pc',
   'in',
   'cm',
   'mm',
+  // Relative length units
+  'em',
+  'rem',
   'ex',
   'ch',
+  // Viewport units (CSS Level 3)
+  'vh',
+  'vw',
+  'vmin',
+  'vmax',
+  // Dynamic viewport units (CSS Level 4)
+  'dvh',
+  'dvw',
+  'dvmin',
+  'dvmax',
+  // Small viewport units (CSS Level 4)
+  'svh',
+  'svw',
+  'svmin',
+  'svmax',
+  // Large viewport units (CSS Level 4)
+  'lvh',
+  'lvw',
+  'lvmin',
+  'lvmax',
+  // Container query units (CSS Container Queries)
+  'cqw',
+  'cqh',
+  'cqi',
+  'cqb',
+  'cqmin',
+  'cqmax',
+  // Percentage
+  '%',
+  // Flex
   'fr',
+  // Angle units
   'deg',
   'rad',
   'grad',
   'turn',
+  // Time units
   's',
   'ms',
 ]);

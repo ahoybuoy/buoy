@@ -698,3 +698,127 @@ describe('Angular @HostBinding style decorator patterns', () => {
     });
   });
 });
+
+// =====================================
+// MODERN CSS UNITS
+// =====================================
+
+describe('Angular modern CSS units', () => {
+  describe('dynamic viewport units (CSS Level 4)', () => {
+    it('extracts [style.height.dvh] with dynamic viewport height', () => {
+      const content = `<div [style.height.dvh]="100"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('height: 100dvh');
+    });
+
+    it('extracts [style.height.svh] with small viewport height', () => {
+      const content = `<div [style.height.svh]="100"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('height: 100svh');
+    });
+
+    it('extracts [style.height.lvh] with large viewport height', () => {
+      const content = `<div [style.height.lvh]="100"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('height: 100lvh');
+    });
+
+    it('extracts [style.width.dvw] with dynamic viewport width', () => {
+      const content = `<div [style.width.dvw]="50"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('width: 50dvw');
+    });
+
+    it('extracts [style.width.svw] with small viewport width', () => {
+      const content = `<div [style.width.svw]="100"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('width: 100svw');
+    });
+
+    it('extracts [style.width.lvw] with large viewport width', () => {
+      const content = `<div [style.width.lvw]="100"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('width: 100lvw');
+    });
+
+    it('extracts [style.min-height.dvmin] with dynamic viewport minimum', () => {
+      const content = `<div [style.min-height.dvmin]="50"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('min-height: 50dvmin');
+    });
+
+    it('extracts [style.max-width.dvmax] with dynamic viewport maximum', () => {
+      const content = `<div [style.max-width.dvmax]="100"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('max-width: 100dvmax');
+    });
+  });
+
+  describe('container query units (CSS Container Queries)', () => {
+    it('extracts [style.width.cqw] with container query width', () => {
+      const content = `<div [style.width.cqw]="50"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('width: 50cqw');
+    });
+
+    it('extracts [style.height.cqh] with container query height', () => {
+      const content = `<div [style.height.cqh]="100"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('height: 100cqh');
+    });
+
+    it('extracts [style.font-size.cqi] with container query inline size', () => {
+      const content = `<div [style.font-size.cqi]="5"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('font-size: 5cqi');
+    });
+
+    it('extracts [style.padding.cqb] with container query block size', () => {
+      const content = `<div [style.padding.cqb]="2"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('padding: 2cqb');
+    });
+
+    it('extracts [style.margin.cqmin] with container query minimum', () => {
+      const content = `<div [style.margin.cqmin]="5"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('margin: 5cqmin');
+    });
+
+    it('extracts [style.width.cqmax] with container query maximum', () => {
+      const content = `<div [style.width.cqmax]="50"></div>`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('width: 50cqmax');
+    });
+  });
+
+  describe('host binding with modern units', () => {
+    it('extracts host binding with dvh unit', () => {
+      const content = `'[style.height.dvh]': 'height',`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('dvh');
+    });
+
+    it('extracts host binding with cqi unit', () => {
+      const content = `'[style.font-size.cqi]': 'fontSize',`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('cqi');
+    });
+  });
+});
