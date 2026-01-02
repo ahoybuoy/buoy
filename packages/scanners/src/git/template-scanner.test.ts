@@ -20,6 +20,9 @@ import {
   COMPONENT_WITH_INTERSECTION_PROPS_ASTRO,
   COMPONENT_WITH_SIMPLE_INTERSECTION_ASTRO,
   COMPONENT_WITH_UNION_TYPE_ASTRO,
+  COMPONENT_WITH_EXTENDS_PROPS_ASTRO,
+  COMPONENT_WITH_EXTENDS_EMPTY_PROPS_ASTRO,
+  COMPONENT_WITH_EXTENDS_AND_EXTRA_PROPS_ASTRO,
 } from '../__tests__/fixtures/astro-components.js';
 import {
   SIMPLE_COUNTER_SOLID,
@@ -395,6 +398,88 @@ describe('TemplateScanner - Astro', () => {
 
       // Pure union type with no inline props - cannot extract prop definitions
       expect(result.items[0]!.props).toHaveLength(0);
+    });
+
+    it('extracts props from interface Props extends pattern', async () => {
+      vol.fromJSON({
+        '/project/src/components/Code.astro': COMPONENT_WITH_EXTENDS_PROPS_ASTRO,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.astro'],
+        templateType: 'astro',
+      });
+
+      const result = await scanner.scan();
+
+      // Should extract the 4 inline props from the interface body
+      expect(result.items[0]!.props).toHaveLength(4);
+
+      const codeProp = result.items[0]!.props.find(p => p.name === 'code');
+      expect(codeProp).toBeDefined();
+      expect(codeProp!.required).toBe(true);
+      expect(codeProp!.type).toBe('string');
+
+      const langProp = result.items[0]!.props.find(p => p.name === 'lang');
+      expect(langProp).toBeDefined();
+      expect(langProp!.required).toBe(false);
+
+      const themeProp = result.items[0]!.props.find(p => p.name === 'theme');
+      expect(themeProp).toBeDefined();
+      expect(themeProp!.required).toBe(false);
+
+      const wrapProp = result.items[0]!.props.find(p => p.name === 'wrap');
+      expect(wrapProp).toBeDefined();
+      expect(wrapProp!.required).toBe(false);
+    });
+
+    it('returns empty props for interface Props extends with empty body', async () => {
+      vol.fromJSON({
+        '/project/src/components/HeaderLink.astro': COMPONENT_WITH_EXTENDS_EMPTY_PROPS_ASTRO,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.astro'],
+        templateType: 'astro',
+      });
+
+      const result = await scanner.scan();
+
+      // Empty interface body - no inline props to extract
+      expect(result.items[0]!.props).toHaveLength(0);
+    });
+
+    it('extracts props from interface Props extends with additional inline props', async () => {
+      vol.fromJSON({
+        '/project/src/components/ToggleDiv.astro': COMPONENT_WITH_EXTENDS_AND_EXTRA_PROPS_ASTRO,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.astro'],
+        templateType: 'astro',
+      });
+
+      const result = await scanner.scan();
+
+      // Should extract the 3 inline props from the interface body
+      expect(result.items[0]!.props).toHaveLength(3);
+
+      const isActiveProp = result.items[0]!.props.find(p => p.name === 'isActive');
+      expect(isActiveProp).toBeDefined();
+      expect(isActiveProp!.required).toBe(true);
+      expect(isActiveProp!.type).toBe('boolean');
+
+      const countProp = result.items[0]!.props.find(p => p.name === 'count');
+      expect(countProp).toBeDefined();
+      expect(countProp!.required).toBe(false);
+      expect(countProp!.type).toBe('number');
+
+      const onToggleProp = result.items[0]!.props.find(p => p.name === 'onToggle');
+      expect(onToggleProp).toBeDefined();
+      expect(onToggleProp!.required).toBe(true);
     });
   });
 

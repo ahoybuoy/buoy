@@ -571,6 +571,7 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
    * Extract props from Astro component frontmatter
    * Supports:
    * - `interface Props { ... }`
+   * - `interface Props extends SomeType { ... }` (interface with extends clause)
    * - `type Props = { ... }`
    * - `export type Props = { ... }`
    * - `type Props = (SomeType | OtherType) & { ... }` (intersection with inline object)
@@ -597,7 +598,18 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
       }
     }
 
-    // Pattern 2: Intersection type with inline props at the end
+    // Pattern 2: Interface with extends clause - interface Props extends SomeType { ... }
+    // Supports generic types like: interface Props extends Omit<HTMLAttributes<'pre'>, 'lang'> { ... }
+    const interfaceExtendsMatch = frontmatter.match(/interface\s+Props\s+extends\s+[^{]+\{/);
+    if (interfaceExtendsMatch && interfaceExtendsMatch.index !== undefined) {
+      const matchEnd = interfaceExtendsMatch.index + interfaceExtendsMatch[0].length;
+      const propsBlock = this.extractBalancedBraces(frontmatter, matchEnd);
+      if (propsBlock) {
+        return this.parseTopLevelProps(propsBlock);
+      }
+    }
+
+    // Pattern 3: Intersection type with inline props at the end
     // e.g., type Props = (SomeType | OtherType) & { formats?: string[] }
     // or: export type Props = SomeType & { extraProp: string }
     const intersectionMatch = frontmatter.match(/(?:export\s+)?type\s+Props\s*=\s*[^;{]+&\s*\{/);
@@ -610,7 +622,7 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
       }
     }
 
-    // Pattern 3: Union or external type reference (no inline props to extract)
+    // Pattern 4: Union or external type reference (no inline props to extract)
     // e.g., type Props = LocalImageProps | RemoteImageProps
     // We can still record the type reference for traceability
     const typeRefMatch = frontmatter.match(/(?:export\s+)?type\s+Props\s*=\s*([^;{]+);/);

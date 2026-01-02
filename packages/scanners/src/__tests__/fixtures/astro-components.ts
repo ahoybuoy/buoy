@@ -416,3 +416,55 @@ const props = Astro.props;
 ---
 <img src={props.src} />
 `;
+
+/**
+ * Astro component with interface Props extends pattern
+ * Like Code.astro: interface Props extends Omit<HTMLAttributes<'pre'>, 'lang'> { ... }
+ */
+export const COMPONENT_WITH_EXTENDS_PROPS_ASTRO = `---
+import type { HTMLAttributes } from '../types';
+
+interface Props extends Omit<HTMLAttributes<'pre'>, 'lang'> {
+  code: string;
+  lang?: string;
+  theme?: string;
+  wrap?: boolean;
+}
+
+const { code, lang = 'plaintext', theme = 'github-dark', wrap = false, ...rest } = Astro.props;
+---
+<pre {...rest}><code class={lang}>{code}</code></pre>
+`;
+
+/**
+ * Astro component with interface Props extends and empty body
+ * Like HeaderLink.astro: interface Props extends astroHTML.JSX.AnchorHTMLAttributes {}
+ */
+export const COMPONENT_WITH_EXTENDS_EMPTY_PROPS_ASTRO = `---
+interface Props extends astroHTML.JSX.AnchorHTMLAttributes {}
+
+const { href, class: className, ...props } = Astro.props;
+---
+<a href={href} class={className} {...props}><slot /></a>
+`;
+
+/**
+ * Astro component with interface Props extends and additional inline props
+ * Mixed pattern with external type extension and inline additions
+ */
+export const COMPONENT_WITH_EXTENDS_AND_EXTRA_PROPS_ASTRO = `---
+import type { HTMLAttributes } from 'astro/types';
+
+interface Props extends HTMLAttributes<'div'> {
+  isActive: boolean;
+  count?: number;
+  onToggle: () => void;
+}
+
+const { isActive, count = 0, onToggle, ...rest } = Astro.props;
+---
+<div {...rest} data-active={isActive}>
+  <span>{count}</span>
+  <button onclick={onToggle}>Toggle</button>
+</div>
+`;
