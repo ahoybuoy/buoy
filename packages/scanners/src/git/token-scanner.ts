@@ -844,6 +844,10 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     const keyframeTokens = this.extractKeyframeTokens(content, relativePath);
     tokens.push(...keyframeTokens);
 
+    // Extract style definition tokens (defineTextStyles, defineLayerStyles, defineAnimationStyles)
+    const styleDefTokens = this.extractStyleDefinitionTokens(content, relativePath);
+    tokens.push(...styleDefTokens);
+
     return tokens;
   }
 
@@ -998,6 +1002,144 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     }
 
     return results;
+  }
+
+  /**
+   * Extract tokens from style definition patterns:
+   * - defineTextStyles({ name: { value: {...} } })
+   * - defineLayerStyles({ name: { value: {...} } })
+   * - defineAnimationStyles({ name: { value: {...} } })
+   *
+   * These are Chakra UI/Panda CSS patterns for defining semantic style tokens.
+   */
+  private extractStyleDefinitionTokens(
+    content: string,
+    relativePath: string,
+  ): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Find all style definition function calls
+    const styleDefMatches = this.findStyleDefinitionCalls(content);
+
+    for (const { styleType, objectStr, lineNumber } of styleDefMatches) {
+      // Determine the category based on the style definition type
+      let category: string;
+      switch (styleType) {
+        case "TextStyles":
+          category = "typography";
+          break;
+        case "AnimationStyles":
+          category = "motion";
+          break;
+        case "LayerStyles":
+        default:
+          category = "other";
+          break;
+      }
+
+      // Parse the style names from the object
+      const styleNames = this.extractStyleDefinitionNames(objectStr);
+
+      for (const name of styleNames) {
+        const source: TypeScriptTokenSource = {
+          type: "typescript",
+          path: relativePath,
+          typeName: `define${styleType}`,
+          line: lineNumber,
+        };
+
+        tokens.push({
+          id: createTokenId(source, name),
+          name,
+          category: this.normalizeCategory(category),
+          value: {
+            type: "raw",
+            value: name,
+          },
+          source,
+          aliases: [],
+          usedBy: [],
+          metadata: {
+            description: `Style token from define${styleType}`,
+          },
+          scannedAt: new Date(),
+        });
+      }
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Find defineTextStyles, defineLayerStyles, defineAnimationStyles calls in content.
+   */
+  private findStyleDefinitionCalls(
+    content: string,
+  ): Array<{ styleType: string; objectStr: string; lineNumber: number }> {
+    const results: Array<{
+      styleType: string;
+      objectStr: string;
+      lineNumber: number;
+    }> = [];
+
+    // Match: defineTextStyles({ ... }), defineLayerStyles({ ... }), defineAnimationStyles({ ... })
+    const startRegex = /define(TextStyles|LayerStyles|AnimationStyles)\s*\(\s*\{/g;
+    let match;
+
+    while ((match = startRegex.exec(content)) !== null) {
+      const styleType = match[1] || "TextStyles";
+      const startIndex = match.index + match[0].length - 1; // Position of opening {
+
+      // Find matching closing brace
+      let braceDepth = 1;
+      let i = startIndex + 1;
+      while (i < content.length && braceDepth > 0) {
+        if (content[i] === "{") braceDepth++;
+        if (content[i] === "}") braceDepth--;
+        i++;
+      }
+
+      if (braceDepth === 0) {
+        const objectStr = content.slice(startIndex, i);
+        const lineNumber = content.slice(0, match.index).split("\n").length;
+        results.push({ styleType, objectStr, lineNumber });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Extract style definition names from a style object string.
+   * These are the top-level keys that represent style names.
+   *
+   * Example: { "2xs": { value: {...} }, xs: { value: {...} } }
+   * Returns: ["2xs", "xs"]
+   */
+  private extractStyleDefinitionNames(objectStr: string): string[] {
+    const names: string[] = [];
+
+    // Remove outer braces
+    let inner = objectStr.trim();
+    if (inner.startsWith("{")) inner = inner.slice(1);
+    if (inner.endsWith("}")) inner = inner.slice(0, -1);
+
+    // Parse top-level entries
+    const entries = this.parseObjectEntries(inner);
+
+    for (const { key, content } of entries) {
+      const trimmedContent = content.trim();
+
+      // Check if this is a style definition object (has { value: ... } structure)
+      if (trimmedContent.startsWith("{") && trimmedContent.endsWith("}")) {
+        // Check if it contains a "value" key (required for style definitions)
+        if (trimmedContent.includes("value")) {
+          names.push(key);
+        }
+      }
+    }
+
+    return names;
   }
 
   /**

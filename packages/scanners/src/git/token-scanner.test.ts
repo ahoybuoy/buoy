@@ -1948,4 +1948,267 @@ type SizeType = 'sm' | 'lg';
       expect(shadowTokens.length).toBeGreaterThanOrEqual(4);
     });
   });
+
+  describe("Chakra/Panda style definition patterns", () => {
+    it("extracts tokens from defineTextStyles pattern", async () => {
+      vol.fromJSON({
+        "/project/theme/text-styles.ts": `
+          import { defineTextStyles } from "../styled-system"
+
+          export const textStyles = defineTextStyles({
+            "2xs": { value: { fontSize: "2xs", lineHeight: "0.75rem" } },
+            xs: { value: { fontSize: "xs", lineHeight: "1rem" } },
+            sm: { value: { fontSize: "sm", lineHeight: "1.25rem" } },
+            md: { value: { fontSize: "md", lineHeight: "1.5rem" } },
+            lg: { value: { fontSize: "lg", lineHeight: "1.75rem" } },
+            xl: { value: { fontSize: "xl", lineHeight: "1.875rem" } },
+            "2xl": { value: { fontSize: "2xl", lineHeight: "2rem" } },
+            none: { value: {} },
+            label: {
+              value: {
+                fontSize: "sm",
+                lineHeight: "1.25rem",
+                fontWeight: "medium",
+              },
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["theme/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect all text style tokens: 2xs, xs, sm, md, lg, xl, 2xl, none, label = 9 tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(9);
+
+      // Check that we got typography tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "xs",
+          category: "typography",
+        }),
+      );
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "label",
+          category: "typography",
+        }),
+      );
+    });
+
+    it("extracts tokens from defineLayerStyles pattern", async () => {
+      vol.fromJSON({
+        "/project/theme/layer-styles.ts": `
+          import { defineLayerStyles } from "../styled-system"
+
+          export const layerStyles = defineLayerStyles({
+            "fill.muted": {
+              value: {
+                background: "colorPalette.muted",
+                color: "colorPalette.fg",
+              },
+            },
+            "fill.subtle": {
+              value: {
+                background: "colorPalette.subtle",
+                color: "colorPalette.fg",
+              },
+            },
+            "fill.solid": {
+              value: {
+                background: "colorPalette.solid",
+                color: "colorPalette.contrast",
+              },
+            },
+            "outline.solid": {
+              value: {
+                borderWidth: "1px",
+                borderColor: "colorPalette.solid",
+                color: "colorPalette.fg",
+              },
+            },
+            disabled: {
+              value: {
+                opacity: "0.5",
+                cursor: "not-allowed",
+              },
+            },
+            none: { value: {} },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["theme/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect all layer style tokens: 6 tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(6);
+
+      // Check that we got layer style tokens (categorized as "other")
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "fill.muted",
+        }),
+      );
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "disabled",
+        }),
+      );
+    });
+
+    it("extracts tokens from defineAnimationStyles pattern", async () => {
+      vol.fromJSON({
+        "/project/theme/motion-styles.ts": `
+          import { defineAnimationStyles } from "../styled-system"
+
+          export const animationStyles = defineAnimationStyles({
+            "slide-fade-in": {
+              value: {
+                transformOrigin: "var(--transform-origin)",
+                animationName: "slide-in, fade-in",
+              },
+            },
+            "slide-fade-out": {
+              value: {
+                transformOrigin: "var(--transform-origin)",
+                animationName: "slide-out, fade-out",
+              },
+            },
+            "scale-fade-in": {
+              value: {
+                transformOrigin: "var(--transform-origin)",
+                animationName: "scale-in, fade-in",
+              },
+            },
+            "scale-fade-out": {
+              value: {
+                transformOrigin: "var(--transform-origin)",
+                animationName: "scale-out, fade-out",
+              },
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["theme/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect all animation style tokens: 4 tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(4);
+
+      // Check that we got motion tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "slide-fade-in",
+          category: "motion",
+        }),
+      );
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "scale-fade-out",
+          category: "motion",
+        }),
+      );
+    });
+
+    it("handles all three style definition patterns in one scan", async () => {
+      vol.fromJSON({
+        "/project/theme/text-styles.ts": `
+          export const textStyles = defineTextStyles({
+            sm: { value: { fontSize: "sm" } },
+            md: { value: { fontSize: "md" } },
+            lg: { value: { fontSize: "lg" } },
+          })
+        `,
+        "/project/theme/layer-styles.ts": `
+          export const layerStyles = defineLayerStyles({
+            "fill.muted": { value: { background: "gray.100" } },
+            "fill.solid": { value: { background: "gray.900" } },
+          })
+        `,
+        "/project/theme/motion-styles.ts": `
+          export const animationStyles = defineAnimationStyles({
+            "fade-in": { value: { animationName: "fade-in" } },
+            "fade-out": { value: { animationName: "fade-out" } },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["theme/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect all tokens from all three patterns: 3 + 2 + 2 = 7 tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(7);
+
+      // Verify we got typography tokens from text-styles
+      const typographyTokens = result.items.filter(
+        (t) => t.category === "typography",
+      );
+      expect(typographyTokens.length).toBeGreaterThanOrEqual(3);
+
+      // Verify we got motion tokens from animation-styles
+      const motionTokens = result.items.filter((t) => t.category === "motion");
+      expect(motionTokens.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("extracts tokens from defineTokens.animations pattern", async () => {
+      vol.fromJSON({
+        "/project/tokens/animations.ts": `
+          import { defineTokens } from "../styled-system"
+
+          export const animations = defineTokens.animations({
+            spin: { value: "spin 1s linear infinite" },
+            ping: { value: "ping 1s cubic-bezier(0, 0, 0.2, 1) infinite" },
+            pulse: { value: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite" },
+            bounce: { value: "bounce 1s infinite" },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect all animation tokens: 4 tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(4);
+
+      // Check that animations are categorized as motion
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "spin",
+          category: "motion",
+        }),
+      );
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "bounce",
+          category: "motion",
+        }),
+      );
+    });
+  });
 });
