@@ -966,6 +966,9 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
 
   /**
    * Find exported keyframes/animations objects in content.
+   * Handles both patterns:
+   * - export const keyframes = { ... }
+   * - export const keyframes = defineKeyframes({ ... })
    */
   private findKeyframesExports(
     content: string,
@@ -976,12 +979,41 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       varName: string;
     }> = [];
 
-    // Match: export const keyframes = { ... } or export const animations = { ... }
-    const startRegex =
+    // Pattern 1: export const keyframes = { ... } or export const animations = { ... }
+    const directAssignRegex =
       /(?:export\s+)?const\s+(keyframes|animations)\s*=\s*\{/gi;
     let match;
 
-    while ((match = startRegex.exec(content)) !== null) {
+    while ((match = directAssignRegex.exec(content)) !== null) {
+      const varName = match[1] || "keyframes";
+      const startIndex = match.index + match[0].length - 1; // Position of opening {
+
+      // Check if this is part of a defineKeyframes call - if so, skip (handled below)
+      const beforeMatch = content.slice(Math.max(0, match.index - 30), match.index);
+      if (beforeMatch.includes("defineKeyframes(")) continue;
+
+      // Find matching closing brace
+      let braceDepth = 1;
+      let i = startIndex + 1;
+      while (i < content.length && braceDepth > 0) {
+        if (content[i] === "{") braceDepth++;
+        if (content[i] === "}") braceDepth--;
+        i++;
+      }
+
+      if (braceDepth === 0) {
+        const objectStr = content.slice(startIndex, i);
+        const lineNumber = content.slice(0, match.index).split("\n").length;
+        results.push({ objectStr, lineNumber, varName });
+      }
+    }
+
+    // Pattern 2: export const keyframes = defineKeyframes({ ... })
+    // Match: defineKeyframes({ ... })
+    const defineKeyframesRegex =
+      /(?:export\s+)?const\s+(keyframes|animations)\s*=\s*defineKeyframes\s*\(\s*\{/gi;
+
+    while ((match = defineKeyframesRegex.exec(content)) !== null) {
       const varName = match[1] || "keyframes";
       const startIndex = match.index + match[0].length - 1; // Position of opening {
 

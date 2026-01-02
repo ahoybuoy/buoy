@@ -2211,4 +2211,109 @@ type SizeType = 'sm' | 'lg';
       );
     });
   });
+
+  describe("defineKeyframes pattern (Chakra UI)", () => {
+    it("extracts keyframe names from defineKeyframes pattern", async () => {
+      vol.fromJSON({
+        "/project/tokens/keyframes.ts": `
+          import { defineKeyframes } from "../../styled-system"
+
+          export const keyframes = defineKeyframes({
+            spin: {
+              "0%": { transform: "rotate(0deg)" },
+              "100%": { transform: "rotate(360deg)" },
+            },
+            pulse: {
+              "50%": { opacity: "0.5" },
+            },
+            bounce: {
+              "0%, 100%": { transform: "translateY(-25%)" },
+              "50%": { transform: "none" },
+            },
+            "fade-in": {
+              from: { opacity: 0 },
+              to: { opacity: 1 },
+            },
+            "slide-from-left": {
+              "0%": { translate: "-0.5rem 0" },
+              to: { translate: "0" },
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect all keyframe animation names: 5 tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(5);
+
+      // Check that keyframes are categorized as motion
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "spin",
+          category: "motion",
+        }),
+      );
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "fade-in",
+          category: "motion",
+        }),
+      );
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "slide-from-left",
+          category: "motion",
+        }),
+      );
+    });
+
+    it("handles defineKeyframes with mixed keyframe selectors (%, from, to)", async () => {
+      vol.fromJSON({
+        "/project/tokens/keyframes.ts": `
+          export const keyframes = defineKeyframes({
+            "expand-height": {
+              from: { height: "var(--collapsed-height, 0)" },
+              to: { height: "var(--height)" },
+            },
+            "circular-progress": {
+              "0%": { strokeDasharray: "1, 400" },
+              "50%": { strokeDasharray: "400, 400" },
+              "100%": { strokeDasharray: "400, 400" },
+            },
+          })
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(2);
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "expand-height",
+          category: "motion",
+        }),
+      );
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "circular-progress",
+          category: "motion",
+        }),
+      );
+    });
+  });
 });
