@@ -6,7 +6,65 @@ import { readFile } from 'fs/promises';
 import { relative, basename } from 'path';
 
 // Template types that should always be treated as components regardless of path
-const ALWAYS_COMPONENT_TYPES = ['astro', 'solid', 'qwik', 'marko', 'lit', 'fast', 'stencil'];
+// (based on file extension matching the framework)
+const ALWAYS_COMPONENT_TYPES = ['astro', 'marko'];
+
+// Template types that need content validation to confirm framework usage
+// (because .tsx/.ts files could be any framework)
+const NEEDS_CONTENT_VALIDATION = ['solid', 'qwik', 'lit', 'fast', 'stencil'];
+
+// Framework-specific validation patterns
+const FRAMEWORK_VALIDATION: Record<string, { patterns: RegExp[]; minMatches: number }> = {
+  solid: {
+    patterns: [
+      /import\s+.*from\s+['"]solid-js/,                    // Solid imports
+      /@jsxImportSource\s+solid-js/,                       // JSX pragma
+      /createSignal|createEffect|createMemo|createResource/,
+      /createStore|createMutable/,
+      /import\s+.*from\s+['"]solid-js\/store/,
+      /import\s+.*from\s+['"]solid-js\/web/,
+    ],
+    minMatches: 1,  // Need at least one solid-specific pattern
+  },
+  qwik: {
+    patterns: [
+      /import\s+.*from\s+['"]@builder\.io\/qwik/,          // Qwik imports
+      /import\s+.*from\s+['"]@qwik/,                       // Qwik short imports
+      /component\$/,                                        // Qwik component marker
+      /useSignal|useStore|useComputed\$/,
+      /useTask\$|useVisibleTask\$/,
+      /routeLoader\$|routeAction\$|server\$/,
+    ],
+    minMatches: 1,
+  },
+  lit: {
+    patterns: [
+      /import\s+.*from\s+['"]lit/,                         // Lit imports
+      /@customElement\(/,                                   // Decorator
+      /extends\s+LitElement/,                               // Base class
+      /html`/,                                              // Template literal
+    ],
+    minMatches: 2,  // Need Lit import + one of the patterns
+  },
+  fast: {
+    patterns: [
+      /import\s+.*from\s+['"]@microsoft\/fast-element/,    // FAST imports
+      /@customElement\(/,
+      /extends\s+FASTElement/,
+    ],
+    minMatches: 1,
+  },
+  stencil: {
+    patterns: [
+      /import\s+.*from\s+['"]@stencil\/core/,              // Stencil imports
+      /@Component\(\s*\{/,                                  // Decorator
+      /tag:\s*['"]/,                                        // Tag definition
+      /@Prop\(\)/,                                          // Property decorator
+      /@State\(\)/,                                         // State decorator
+    ],
+    minMatches: 1,
+  },
+};
 
 export type TemplateType =
   // Server-side templates
@@ -767,16 +825,35 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
     return name;
   }
 
-  private isLikelyComponent(filePath: string, _content: string): boolean {
+  private isLikelyComponent(filePath: string, content: string): boolean {
     const lowerPath = filePath.toLowerCase();
     const pathParts = lowerPath.split('/');
 
-    // For modern JS-based template systems (Astro, Solid, Qwik, etc.),
-    // always treat files as components since they're component-first architectures
+    // For framework-specific file extensions (Astro, Marko),
+    // always treat files as components since the extension confirms the framework
     if (ALWAYS_COMPONENT_TYPES.includes(this.config.templateType)) {
       // For Astro specifically, all .astro files are components (including layouts and pages)
       // They can all be imported and reused
       return true;
+    }
+
+    // For frameworks that use generic .tsx/.ts extensions,
+    // validate the file actually uses that framework
+    if (NEEDS_CONTENT_VALIDATION.includes(this.config.templateType)) {
+      const validation = FRAMEWORK_VALIDATION[this.config.templateType];
+      if (validation) {
+        let matchCount = 0;
+        for (const pattern of validation.patterns) {
+          if (pattern.test(content)) {
+            matchCount++;
+            if (matchCount >= validation.minMatches) {
+              return true;
+            }
+          }
+        }
+        // File doesn't use this framework
+        return false;
+      }
     }
 
     // Paths that indicate reusable components

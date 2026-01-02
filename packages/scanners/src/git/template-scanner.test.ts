@@ -33,6 +33,8 @@ import {
   COMPONENT_WITH_ADVANCED_SOLID,
   COMPONENT_WITH_JSX_PRAGMA_SOLID,
   DEPRECATED_COMPONENT_SOLID,
+  REACT_COMPONENT_NOT_SOLID,
+  PLAIN_TYPESCRIPT_NOT_SOLID,
 } from '../__tests__/fixtures/solid-components.js';
 import {
   SIMPLE_COUNTER_QWIK,
@@ -738,6 +740,62 @@ describe('TemplateScanner - Solid', () => {
       const result = await scanner.scan();
 
       expect(result.items[0]!.metadata.deprecated).toBe(true);
+    });
+  });
+
+  describe('framework filtering', () => {
+    it('does NOT detect React components when scanning for Solid', async () => {
+      vol.fromJSON({
+        '/project/src/components/ReactCounter.tsx': REACT_COMPONENT_NOT_SOLID,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+        templateType: 'solid',
+      });
+
+      const result = await scanner.scan();
+
+      // React component should NOT be detected as a Solid component
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('does NOT detect plain TypeScript files when scanning for Solid', async () => {
+      vol.fromJSON({
+        '/project/src/utils/user.ts': PLAIN_TYPESCRIPT_NOT_SOLID,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+        templateType: 'solid',
+      });
+
+      const result = await scanner.scan();
+
+      // Plain TypeScript should NOT be detected as a Solid component
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('only detects Solid components when multiple frameworks are present', async () => {
+      vol.fromJSON({
+        '/project/src/components/SolidCounter.tsx': SIMPLE_COUNTER_SOLID,
+        '/project/src/components/ReactCounter.tsx': REACT_COMPONENT_NOT_SOLID,
+        '/project/src/utils/user.ts': PLAIN_TYPESCRIPT_NOT_SOLID,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx', 'src/**/*.ts'],
+        templateType: 'solid',
+      });
+
+      const result = await scanner.scan();
+
+      // Only the Solid component should be detected
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('SolidCounter');
     });
   });
 });

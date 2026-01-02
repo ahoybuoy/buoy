@@ -189,3 +189,28 @@ export function OldCounter() {
   return <button onClick={() => setCount(c => c + 1)}>{count()}</button>;
 }
 `;
+
+/**
+ * React component (should NOT be detected as Solid)
+ */
+export const REACT_COMPONENT_NOT_SOLID = `import React, { useState } from 'react';
+
+export function ReactCounter() {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount(c => c + 1)}>Count: {count}</button>;
+}
+`;
+
+/**
+ * Plain TypeScript utility (should NOT be detected as Solid)
+ */
+export const PLAIN_TYPESCRIPT_NOT_SOLID = `export interface User {
+  id: string;
+  name: string;
+}
+
+export function getUserById(id: string): User | undefined {
+  // Some logic
+  return undefined;
+}
+`;
