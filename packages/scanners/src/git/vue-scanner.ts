@@ -610,18 +610,33 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     vueFilePath: string,
     propsVarName: string,
   ): Promise<PropDefinition[]> {
+    let importPath: string | undefined;
+    let isDefaultImport = false;
 
-    // Find the import statement for this variable
-    // Match: import { rateProps } from './rate' or import { rateProps } from "./rate"
-    const importRegex = new RegExp(
+    // First, try to match named import: import { rateProps } from './rate'
+    const namedImportRegex = new RegExp(
       `import\\s*\\{[^}]*\\b${propsVarName}\\b[^}]*\\}\\s*from\\s*['"]([^'"]+)['"]`,
     );
-    const importMatch = scriptContent.match(importRegex);
-    if (!importMatch?.[1]) {
-      return [];
+    const namedImportMatch = scriptContent.match(namedImportRegex);
+    if (namedImportMatch?.[1]) {
+      importPath = namedImportMatch[1];
     }
 
-    const importPath = importMatch[1];
+    // If not found, try to match default import: import defaultProps from './defaults'
+    if (!importPath) {
+      const defaultImportRegex = new RegExp(
+        `import\\s+${propsVarName}\\s+from\\s*['"]([^'"]+)['"]`,
+      );
+      const defaultImportMatch = scriptContent.match(defaultImportRegex);
+      if (defaultImportMatch?.[1]) {
+        importPath = defaultImportMatch[1];
+        isDefaultImport = true;
+      }
+    }
+
+    if (!importPath) {
+      return [];
+    }
 
     // Resolve the TypeScript file path
     const vueDir = dirname(vueFilePath);
@@ -646,10 +661,45 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
 
     try {
       const tsContent = await readFile(tsFilePath, "utf-8");
+      if (isDefaultImport) {
+        return this.parseDefaultExportPropsFile(tsContent);
+      }
       return this.parseExternalPropsFile(tsContent, propsVarName);
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Parse props from an external TypeScript file with default export
+   * Handles patterns like:
+   *   export default { data: { type: Array }, ... }
+   */
+  private parseDefaultExportPropsFile(content: string): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    // Match: export default { ... }
+    const defaultExportMatch = content.match(/export\s+default\s*\{/);
+    if (!defaultExportMatch || defaultExportMatch.index === undefined) {
+      return [];
+    }
+
+    // Find the opening brace position
+    const braceStart = content.indexOf('{', defaultExportMatch.index);
+    if (braceStart === -1) {
+      return [];
+    }
+
+    // Extract the balanced braces content
+    const propsContent = extractBalancedBraces(content, braceStart);
+    if (!propsContent) {
+      return [];
+    }
+
+    // Parse the props from the object
+    this.parseElementPlusProps(propsContent, props);
+
+    return props;
   }
 
   /**
@@ -698,6 +748,7 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
    *   modelValue: { type: Number, default: 0 }
    *   disabled: { type: Boolean, default: undefined }
    *   allowHalf: Boolean
+   *   height: [String, Number]
    */
   private parseElementPlusProps(propsStr: string, props: PropDefinition[]): void {
     const seenProps = new Set<string>();
@@ -744,6 +795,34 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
           props.push({
             name: propName,
             type: m[2].toLowerCase(),
+            required: false,
+          });
+        }
+      }
+    }
+
+    // Third pass: Match array type shorthand (propName: [Type1, Type2])
+    // height: [String, Number], maxHeight: [String, Number]
+    const arrayTypeRegex = /(\w+):\s*\[([^\]]+)\](?:\s*,|\s*$|\s*\n)/g;
+    for (const m of propsStr.matchAll(arrayTypeRegex)) {
+      if (m[1] && m[2]) {
+        const propName = m[1];
+        const typesContent = m[2];
+
+        // Skip 'type' keyword
+        if (propName === 'type') continue;
+
+        if (!seenProps.has(propName)) {
+          // Extract type names from the array
+          const types = typesContent
+            .split(',')
+            .map(t => t.trim().toLowerCase())
+            .filter(t => t.length > 0);
+
+          seenProps.add(propName);
+          props.push({
+            name: propName,
+            type: types.join(' | '),
             required: false,
           });
         }

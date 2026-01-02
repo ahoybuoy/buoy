@@ -33,6 +33,10 @@ import {
   DEFINE_MODEL_WITH_PROPS_VUE,
   OPTIONS_API_IMPORTED_PROPS_VUE,
   OPTIONS_API_IMPORTED_PROPS_TS,
+  OPTIONS_API_DEFAULT_EXPORT_PROPS_VUE,
+  DEFAULT_EXPORT_PROPS_TS,
+  SCRIPT_SETUP_DEFAULT_EXPORT_PROPS_VUE,
+  SCRIPT_SETUP_DEFAULT_EXPORT_PROPS_TS,
 } from '../__tests__/fixtures/vue-components.js';
 import { VueComponentScanner } from './vue-scanner.js';
 
@@ -779,6 +783,74 @@ describe('VueComponentScanner', () => {
 
       const lazyProp = result.items[0]!.props.find(p => p.name === 'lazy');
       expect(lazyProp).toBeDefined();
+    });
+
+    it('resolves props from default export file (Element Plus Table pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/table/Table.vue': OPTIONS_API_DEFAULT_EXPORT_PROPS_VUE,
+        '/project/src/table/defaults.ts': DEFAULT_EXPORT_PROPS_TS,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('ElTable');
+
+      // Should resolve props from default export file
+      expect(result.items[0]!.props.length).toBeGreaterThan(0);
+
+      const dataProp = result.items[0]!.props.find(p => p.name === 'data');
+      expect(dataProp).toBeDefined();
+
+      const heightProp = result.items[0]!.props.find(p => p.name === 'height');
+      expect(heightProp).toBeDefined();
+
+      const fitProp = result.items[0]!.props.find(p => p.name === 'fit');
+      expect(fitProp).toBeDefined();
+      expect(fitProp!.type).toBe('boolean');
+
+      const stripeProp = result.items[0]!.props.find(p => p.name === 'stripe');
+      expect(stripeProp).toBeDefined();
+
+      const lazyProp = result.items[0]!.props.find(p => p.name === 'lazy');
+      expect(lazyProp).toBeDefined();
+    });
+
+    it('resolves props from default export in script setup (defineProps with default import)', async () => {
+      vol.fromJSON({
+        '/project/src/form/Form.vue': SCRIPT_SETUP_DEFAULT_EXPORT_PROPS_VUE,
+        '/project/src/form/form-props.ts': SCRIPT_SETUP_DEFAULT_EXPORT_PROPS_TS,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('ElForm');
+
+      // Should resolve props from default export file
+      expect(result.items[0]!.props.length).toBeGreaterThan(0);
+
+      const modelProp = result.items[0]!.props.find(p => p.name === 'model');
+      expect(modelProp).toBeDefined();
+
+      const rulesProp = result.items[0]!.props.find(p => p.name === 'rules');
+      expect(rulesProp).toBeDefined();
+
+      const labelPositionProp = result.items[0]!.props.find(p => p.name === 'labelPosition');
+      expect(labelPositionProp).toBeDefined();
+
+      const disabledProp = result.items[0]!.props.find(p => p.name === 'disabled');
+      expect(disabledProp).toBeDefined();
     });
   });
 });

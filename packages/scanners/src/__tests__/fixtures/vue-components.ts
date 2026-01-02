@@ -632,3 +632,96 @@ export const treeProps = buildProps({
   accordion: Boolean,
 } as const)
 `;
+
+// Element Plus Table pattern: props: defaultProps where defaultProps is a default export
+export const OPTIONS_API_DEFAULT_EXPORT_PROPS_VUE = `
+<template>
+  <div class="table">
+    <slot></slot>
+  </div>
+</template>
+
+<script lang="ts">
+import { defineComponent } from 'vue'
+import defaultProps from './defaults'
+
+export default defineComponent({
+  name: 'ElTable',
+  props: defaultProps,
+  emits: ['select', 'sort-change'],
+  setup(props) {
+    return {}
+  }
+})
+</script>
+`;
+
+// Default export props file (Element Plus table/defaults.ts pattern)
+export const DEFAULT_EXPORT_PROPS_TS = `
+import type { PropType } from 'vue'
+
+export default {
+  data: {
+    type: Array as PropType<any[]>,
+    default: () => [],
+  },
+  height: [String, Number],
+  maxHeight: [String, Number],
+  fit: {
+    type: Boolean,
+    default: true,
+  },
+  stripe: Boolean,
+  border: Boolean,
+  rowKey: [String, Function] as PropType<string | ((row: any) => string)>,
+  showHeader: {
+    type: Boolean,
+    default: true,
+  },
+  showSummary: Boolean,
+  highlightCurrentRow: Boolean,
+  lazy: Boolean,
+  flexible: Boolean,
+}
+`;
+
+// Script setup with default export imported props
+export const SCRIPT_SETUP_DEFAULT_EXPORT_PROPS_VUE = `
+<template>
+  <div class="form">
+    <slot></slot>
+  </div>
+</template>
+
+<script lang="ts" setup>
+import formDefaultProps from './form-props'
+
+defineOptions({
+  name: 'ElForm',
+})
+
+const props = defineProps(formDefaultProps)
+</script>
+`;
+
+// Default export props file for script setup pattern
+export const SCRIPT_SETUP_DEFAULT_EXPORT_PROPS_TS = `
+export default {
+  model: Object,
+  rules: Object,
+  labelPosition: {
+    type: String,
+    default: 'right',
+  },
+  labelWidth: {
+    type: [String, Number],
+    default: '',
+  },
+  inline: Boolean,
+  disabled: Boolean,
+  showMessage: {
+    type: Boolean,
+    default: true,
+  },
+}
+`;
