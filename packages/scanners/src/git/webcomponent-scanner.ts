@@ -41,6 +41,15 @@ interface JsDocCssPart {
   description?: string;
 }
 
+interface QueryDefinition {
+  name: string;
+  type: 'query' | 'queryAll' | 'queryAsync' | 'queryAssignedElements' | 'queryAssignedNodes';
+  selector?: string;
+  slot?: string;
+  flatten?: boolean;
+  cached?: boolean;
+}
+
 interface ComponentMetadataExtended {
   deprecated?: boolean;
   tags: string[];
@@ -53,6 +62,7 @@ interface ComponentMetadataExtended {
   assetsDirs?: string[];
   styleUrls?: string | Record<string, string>;
   controllers?: string[];
+  queries?: QueryDefinition[];
   // JSDoc metadata
   summary?: string;
   events?: JsDocEvent[];
@@ -307,6 +317,9 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
     // Detect reactive controllers used in the component
     const controllers = this.extractLitControllers(node, sourceFile);
 
+    // Extract query decorators (@query, @queryAll, @queryAssignedElements, etc.)
+    const queries = this.extractLitQueries(node, sourceFile);
+
     // Extract JSDoc metadata
     const jsDocMetadata = this.extractJsDocMetadata(node);
 
@@ -314,6 +327,7 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
       deprecated: this.hasDeprecatedTag(node),
       tags: [],
       controllers: controllers.length > 0 ? controllers : undefined,
+      queries: queries.length > 0 ? queries : undefined,
       ...jsDocMetadata,
     };
 
@@ -1461,6 +1475,129 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
     }
 
     return controllers;
+  }
+
+  // ============================================
+  // Lit Query Decorator Extraction
+  // ============================================
+
+  private extractLitQueries(node: ts.ClassDeclaration, sourceFile: ts.SourceFile): QueryDefinition[] {
+    const queries: QueryDefinition[] = [];
+
+    for (const member of node.members) {
+      if (!ts.isPropertyDeclaration(member)) continue;
+      if (!member.name || !ts.isIdentifier(member.name)) continue;
+
+      const decorators = ts.getDecorators(member);
+      if (!decorators) continue;
+
+      for (const decorator of decorators) {
+        if (!ts.isCallExpression(decorator.expression)) continue;
+        const expr = decorator.expression.expression;
+        if (!ts.isIdentifier(expr)) continue;
+
+        const decoratorName = expr.text;
+        const propName = member.name.getText(sourceFile);
+
+        switch (decoratorName) {
+          case 'query': {
+            const query = this.parseQueryDecorator(decorator, propName, 'query');
+            if (query) queries.push(query);
+            break;
+          }
+          case 'queryAll': {
+            const query = this.parseQueryDecorator(decorator, propName, 'queryAll');
+            if (query) queries.push(query);
+            break;
+          }
+          case 'queryAsync': {
+            const query = this.parseQueryDecorator(decorator, propName, 'queryAsync');
+            if (query) queries.push(query);
+            break;
+          }
+          case 'queryAssignedElements': {
+            const query = this.parseQueryAssignedDecorator(decorator, propName, 'queryAssignedElements');
+            if (query) queries.push(query);
+            break;
+          }
+          case 'queryAssignedNodes': {
+            const query = this.parseQueryAssignedDecorator(decorator, propName, 'queryAssignedNodes');
+            if (query) queries.push(query);
+            break;
+          }
+        }
+      }
+    }
+
+    return queries;
+  }
+
+  private parseQueryDecorator(
+    decorator: ts.Decorator,
+    propName: string,
+    type: 'query' | 'queryAll' | 'queryAsync'
+  ): QueryDefinition | null {
+    if (!ts.isCallExpression(decorator.expression)) return null;
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return null;
+
+    // First arg is the selector
+    const selectorArg = args[0];
+    if (!selectorArg || !ts.isStringLiteral(selectorArg)) return null;
+
+    const query: QueryDefinition = {
+      name: propName,
+      type,
+      selector: selectorArg.text,
+    };
+
+    // Second arg (optional) is the cache flag for @query
+    if (type === 'query' && args.length > 1) {
+      const cacheArg = args[1];
+      if (cacheArg && cacheArg.kind === ts.SyntaxKind.TrueKeyword) {
+        query.cached = true;
+      }
+    }
+
+    return query;
+  }
+
+  private parseQueryAssignedDecorator(
+    decorator: ts.Decorator,
+    propName: string,
+    type: 'queryAssignedElements' | 'queryAssignedNodes'
+  ): QueryDefinition | null {
+    if (!ts.isCallExpression(decorator.expression)) return null;
+
+    const query: QueryDefinition = {
+      name: propName,
+      type,
+    };
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return query;
+
+    // First arg is options object { slot?: string, flatten?: boolean }
+    const optionsArg = args[0];
+    if (optionsArg && ts.isObjectLiteralExpression(optionsArg)) {
+      for (const prop of optionsArg.properties) {
+        if (!ts.isPropertyAssignment(prop) || !ts.isIdentifier(prop.name)) continue;
+
+        const propKey = prop.name.text;
+        if (propKey === 'slot' && ts.isStringLiteral(prop.initializer)) {
+          query.slot = prop.initializer.text;
+        }
+        if (propKey === 'flatten' && prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+          query.flatten = true;
+        }
+        if (propKey === 'selector' && ts.isStringLiteral(prop.initializer)) {
+          query.selector = prop.initializer.text;
+        }
+      }
+    }
+
+    return query;
   }
 
   // ============================================

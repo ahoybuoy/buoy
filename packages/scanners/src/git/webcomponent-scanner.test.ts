@@ -176,6 +176,44 @@ describe('WebComponentScanner', () => {
       );
     });
 
+    it('extracts @query, @queryAll, @queryAssignedElements metadata', async () => {
+      vol.fromJSON({
+        '/project/src/my-dialog.ts': LIT_WITH_QUERY,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+      const queries = result.items[0]!.metadata.queries;
+
+      expect(queries).toBeDefined();
+      expect(queries).toHaveLength(3);
+      expect(queries).toContainEqual(
+        expect.objectContaining({
+          name: '_titleEl',
+          type: 'query',
+          selector: '#title',
+        })
+      );
+      expect(queries).toContainEqual(
+        expect.objectContaining({
+          name: '_items',
+          type: 'queryAll',
+          selector: '.item',
+        })
+      );
+      expect(queries).toContainEqual(
+        expect.objectContaining({
+          name: '_headerSlot',
+          type: 'queryAssignedElements',
+          slot: 'header',
+        })
+      );
+    });
+
     it('detects components extending custom base classes', async () => {
       vol.fromJSON({
         '/project/src/my-special-button.ts': LIT_EXTENDS_CUSTOM_BASE,
