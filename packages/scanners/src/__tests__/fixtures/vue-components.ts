@@ -552,3 +552,44 @@ interface CardProps {
 const props = defineProps<CardProps>();
 </script>
 `;
+
+// Vue 3.4+ defineModel pattern for two-way binding
+export const DEFINE_MODEL_VUE = `
+<template>
+  <input v-model="model" />
+</template>
+
+<script setup lang="ts">
+const model = defineModel<string>();
+const count = defineModel('count', { type: Number, default: 0 });
+const search = defineModel<string>('search', { default: '' });
+</script>
+`;
+
+// defineModel with required option (Vue 3.4+)
+export const DEFINE_MODEL_REQUIRED_VUE = `
+<template>
+  <div>{{ value }}</div>
+</template>
+
+<script setup lang="ts">
+const value = defineModel<string>({ required: true });
+const items = defineModel<string[]>('items', { required: true });
+</script>
+`;
+
+// Combined defineModel and defineProps
+export const DEFINE_MODEL_WITH_PROPS_VUE = `
+<template>
+  <input v-model="model" :disabled="disabled" />
+</template>
+
+<script setup lang="ts">
+const model = defineModel<string>();
+
+const props = defineProps<{
+  disabled?: boolean;
+  placeholder?: string;
+}>();
+</script>
+`;

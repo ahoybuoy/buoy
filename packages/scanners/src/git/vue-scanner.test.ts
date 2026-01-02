@@ -28,6 +28,9 @@ import {
   RUNTIME_PROPS_OBJECT_VUE,
   WITH_DEFAULTS_COMPLEX_VUE,
   TYPED_INTERFACE_PROPS_VUE,
+  DEFINE_MODEL_VUE,
+  DEFINE_MODEL_REQUIRED_VUE,
+  DEFINE_MODEL_WITH_PROPS_VUE,
 } from '../__tests__/fixtures/vue-components.js';
 import { VueComponentScanner } from './vue-scanner.js';
 
@@ -662,6 +665,86 @@ describe('VueComponentScanner', () => {
       const variantProp = result.items[0]!.props.find(p => p.name === 'variant');
       expect(variantProp).toBeDefined();
       expect(variantProp!.required).toBe(false);
+    });
+
+    it('extracts props from defineModel (Vue 3.4+ two-way binding)', async () => {
+      vol.fromJSON({
+        '/project/src/Input.vue': DEFINE_MODEL_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // defineModel creates modelValue prop by default, plus named models
+      expect(result.items[0]!.props.length).toBe(3);
+
+      const modelProp = result.items[0]!.props.find(p => p.name === 'modelValue');
+      expect(modelProp).toBeDefined();
+      expect(modelProp!.type).toBe('string');
+      expect(modelProp!.required).toBe(false);
+
+      const countProp = result.items[0]!.props.find(p => p.name === 'count');
+      expect(countProp).toBeDefined();
+      expect(countProp!.type).toBe('number');
+
+      const searchProp = result.items[0]!.props.find(p => p.name === 'search');
+      expect(searchProp).toBeDefined();
+      expect(searchProp!.type).toBe('string');
+    });
+
+    it('extracts required props from defineModel', async () => {
+      vol.fromJSON({
+        '/project/src/Display.vue': DEFINE_MODEL_REQUIRED_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBe(2);
+
+      const valueProp = result.items[0]!.props.find(p => p.name === 'modelValue');
+      expect(valueProp).toBeDefined();
+      expect(valueProp!.required).toBe(true);
+
+      const itemsProp = result.items[0]!.props.find(p => p.name === 'items');
+      expect(itemsProp).toBeDefined();
+      expect(itemsProp!.required).toBe(true);
+    });
+
+    it('extracts both defineModel and defineProps', async () => {
+      vol.fromJSON({
+        '/project/src/FormInput.vue': DEFINE_MODEL_WITH_PROPS_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // 1 from defineModel + 2 from defineProps
+      expect(result.items[0]!.props.length).toBe(3);
+
+      const modelProp = result.items[0]!.props.find(p => p.name === 'modelValue');
+      expect(modelProp).toBeDefined();
+
+      const disabledProp = result.items[0]!.props.find(p => p.name === 'disabled');
+      expect(disabledProp).toBeDefined();
+
+      const placeholderProp = result.items[0]!.props.find(p => p.name === 'placeholder');
+      expect(placeholderProp).toBeDefined();
     });
   });
 });

@@ -101,6 +101,14 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
       }
     }
 
+    // Extract defineModel props (Vue 3.4+) - these create two-way bound props
+    if (isSetup) {
+      const modelProps = this.extractDefineModel(scriptContent);
+      if (modelProps.length > 0) {
+        props = [...props, ...modelProps];
+      }
+    }
+
     const dependencies = this.extractDependencies(content);
     const metadata = this.extractMetadata(scriptContent, content, isSetup, scriptAttrs, props);
 
@@ -277,6 +285,54 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     }
 
     return emits;
+  }
+
+  /**
+   * Extract props from defineModel declarations (Vue 3.4+)
+   * defineModel creates two-way binding props that map to modelValue by default
+   *
+   * Patterns:
+   *   defineModel<string>()                    -> modelValue: string (optional)
+   *   defineModel('count', { type: Number })   -> count: number (optional)
+   *   defineModel<string>('search')            -> search: string (optional)
+   *   defineModel<string>({ required: true })  -> modelValue: string (required)
+   */
+  private extractDefineModel(scriptContent: string): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    // Match all defineModel calls
+    // Pattern 1: defineModel<Type>() or defineModel<Type>({ ... })
+    // Pattern 2: defineModel('name', { ... }) or defineModel<Type>('name', { ... })
+    const defineModelRegex = /defineModel\s*(?:<([^>]+)>)?\s*\(\s*(?:['"]([^'"]+)['"])?\s*(?:,?\s*\{([^}]*)\})?\s*\)/g;
+
+    for (const match of scriptContent.matchAll(defineModelRegex)) {
+      const genericType = match[1]?.trim();
+      const propName = match[2]?.trim() || 'modelValue';
+      const optionsStr = match[3] || '';
+
+      // Determine the type
+      let type = 'unknown';
+      if (genericType) {
+        type = genericType;
+      } else {
+        // Check for type in options: { type: Number }
+        const typeMatch = optionsStr.match(/type:\s*(\w+)/);
+        if (typeMatch?.[1]) {
+          type = typeMatch[1].toLowerCase();
+        }
+      }
+
+      // Check if required
+      const isRequired = /required:\s*true/.test(optionsStr);
+
+      props.push({
+        name: propName,
+        type,
+        required: isRequired,
+      });
+    }
+
+    return props;
   }
 
   /**
