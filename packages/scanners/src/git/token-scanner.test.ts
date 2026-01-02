@@ -1541,6 +1541,190 @@ type SizeType = 'sm' | 'lg';
     });
   });
 
+  describe("Generated token files (*.gen.ts)", () => {
+    it("extracts tokens from generated Token union types in .gen.ts files", async () => {
+      vol.fromJSON({
+        "/project/generated/token.gen.ts": `
+          export type Token =
+            | "aspectRatios.square"
+            | "aspectRatios.landscape"
+            | "animations.spin"
+            | "animations.bounce"
+            | "colors.transparent"
+            | "colors.black"
+            | "colors.white"
+            | "colors.gray.50"
+            | "colors.gray.100"
+            | "spacing.1"
+            | "spacing.2"
+            | "fontSizes.xs"
+            | "fontSizes.sm"
+            | "shadows.xs"
+            | "shadows.sm"
+            | "radii.none"
+            | "radii.sm"
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["generated/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect all token paths from the Token union type
+      expect(result.items.length).toBeGreaterThanOrEqual(17);
+
+      // Check color tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "colors.gray.50",
+          category: "color",
+        }),
+      );
+
+      // Check animation tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "animations.spin",
+          category: "motion",
+        }),
+      );
+
+      // Check spacing tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "spacing.1",
+          category: "spacing",
+        }),
+      );
+    });
+
+    it("handles Token union types with categorization based on path prefix", async () => {
+      vol.fromJSON({
+        "/project/styled-system/generated/token.gen.ts": `
+          export type Token =
+            | "blurs.none"
+            | "blurs.sm"
+            | "borders.xs"
+            | "durations.fast"
+            | "easings.ease-in"
+            | "zIndex.hide"
+            | "zIndex.base"
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["styled-system/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(7);
+
+      // Check durations are categorized as motion
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "durations.fast",
+          category: "motion",
+        }),
+      );
+
+      // Check easings are categorized as motion
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "easings.ease-in",
+          category: "motion",
+        }),
+      );
+    });
+  });
+
+  describe("Keyframes without defineTokens wrapper", () => {
+    it("extracts keyframe animation tokens from plain exported objects", async () => {
+      vol.fromJSON({
+        "/project/tokens/keyframes.ts": `
+          export const keyframes = {
+            spin: {
+              "0%": { transform: "rotate(0deg)" },
+              "100%": { transform: "rotate(360deg)" },
+            },
+            pulse: {
+              "50%": { opacity: "0.5" },
+            },
+            bounce: {
+              "0%, 100%": { transform: "translateY(-25%)" },
+              "50%": { transform: "none" },
+            },
+            "fade-in": {
+              from: { opacity: 0 },
+              to: { opacity: 1 },
+            },
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect keyframe names as animation tokens
+      expect(result.items.length).toBeGreaterThanOrEqual(4);
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "spin",
+          category: "motion",
+        }),
+      );
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "fade-in",
+          category: "motion",
+        }),
+      );
+    });
+
+    it("handles keyframes with animation object structure (from/to)", async () => {
+      vol.fromJSON({
+        "/project/tokens/animations.ts": `
+          export const keyframes = {
+            "expand-height": {
+              from: { height: "var(--collapsed-height, 0)" },
+              to: { height: "var(--height)" },
+            },
+            "collapse-width": {
+              from: { width: "var(--width)" },
+              to: { width: "var(--collapsed-width, 0)" },
+            },
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(2);
+
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "expand-height",
+          category: "motion",
+        }),
+      );
+    });
+  });
+
   describe("JSON array format parsing", () => {
     it("extracts tokens from JSON arrays with token names (Chakra UI generated format)", async () => {
       vol.fromJSON({

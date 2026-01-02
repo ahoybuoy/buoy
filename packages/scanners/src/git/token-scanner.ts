@@ -83,6 +83,12 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         "**/default-colors.ts",
         "**/*Provider/**/*.ts",
         "**/*Provider/**/*.tsx",
+        // Generated token files (Chakra UI v3, Panda CSS)
+        "**/*.gen.ts",
+        "**/generated/**/*.ts",
+        // Keyframes/animations files
+        "**/keyframes.ts",
+        "**/animations.ts",
       ]);
       filesToScan = [...jsonFiles, ...cssFiles, ...tsFiles];
     }
@@ -752,6 +758,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
    * - type ButtonVariant = 'primary' | 'secondary' | 'success';
    * - type Color = 'primary' | 'secondary' | 'warning';
    * - export type Size = 'sm' | 'md' | 'lg';
+   * - export type Token = "colors.gray.50" | "spacing.1" | ... (in .gen.ts files)
    *
    * These are semantic tokens representing allowed variant values in a design system.
    */
@@ -762,19 +769,30 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     const relativePath = relative(this.config.projectRoot, filePath);
     const tokens: DesignToken[] = [];
 
+    // Check if this is a generated file (*.gen.ts) - treat all union types as tokens
+    const isGeneratedFile = filePath.endsWith(".gen.ts");
+
     // Extract union type definitions
     const unionTypes = this.extractTypeScriptUnionTypes(content);
 
     for (const { typeName, values, lineNumber } of unionTypes) {
-      // Only process types that look like design tokens (semantic naming patterns)
-      if (!this.isDesignTokenUnionType(typeName)) {
+      // For generated files, accept any union type named "Token" or "Tokens"
+      // For regular files, only process types that look like design tokens
+      const isTokenUnionInGenFile =
+        isGeneratedFile &&
+        (typeName === "Token" || typeName === "Tokens" || typeName.endsWith("Token"));
+
+      if (!isTokenUnionInGenFile && !this.isDesignTokenUnionType(typeName)) {
         continue;
       }
 
-      const category = this.inferCategoryFromTypeName(typeName);
-
-      // Create a token for each value in the union
+      // For generated token files, infer category from the token path (e.g., "colors.gray.50")
+      // For regular union types, infer from the type name
       for (const value of values) {
+        const category = isGeneratedFile
+          ? this.inferCategoryFromTokenPath(value) || "other"
+          : this.inferCategoryFromTypeName(typeName);
+
         const source: TypeScriptTokenSource = {
           type: "typescript",
           path: relativePath,
@@ -793,7 +811,9 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           aliases: [],
           usedBy: [],
           metadata: {
-            description: `Value from ${typeName} union type`,
+            description: isGeneratedFile
+              ? `Generated token from ${typeName}`
+              : `Value from ${typeName} union type`,
           },
           scannedAt: new Date(),
         });
@@ -806,6 +826,10 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       relativePath,
     );
     tokens.push(...objectTokens);
+
+    // Extract keyframe tokens (export const keyframes = {...})
+    const keyframeTokens = this.extractKeyframeTokens(content, relativePath);
+    tokens.push(...keyframeTokens);
 
     return tokens;
   }
@@ -863,6 +887,149 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     }
 
     return tokens;
+  }
+
+  /**
+   * Extract keyframe animation tokens from TypeScript files.
+   *
+   * Detects patterns like:
+   * export const keyframes = {
+   *   spin: { "0%": { transform: "rotate(0deg)" }, ... },
+   *   pulse: { "50%": { opacity: "0.5" } },
+   *   "fade-in": { from: { opacity: 0 }, to: { opacity: 1 } },
+   * }
+   *
+   * Keyframe objects are identified by:
+   * - Variable named "keyframes" or "animations"
+   * - Object keys that look like animation names (not "0%", "from", "to", etc.)
+   * - Nested objects with keyframe selectors (%, from, to)
+   */
+  private extractKeyframeTokens(
+    content: string,
+    relativePath: string,
+  ): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Find exported keyframes objects
+    const keyframesMatches = this.findKeyframesExports(content);
+
+    for (const { objectStr, lineNumber, varName } of keyframesMatches) {
+      // Parse the keyframe names from the object
+      const keyframeNames = this.extractKeyframeNames(objectStr);
+
+      for (const keyframeName of keyframeNames) {
+        const source: TypeScriptTokenSource = {
+          type: "typescript",
+          path: relativePath,
+          typeName: varName,
+          line: lineNumber,
+        };
+
+        tokens.push({
+          id: createTokenId(source, keyframeName),
+          name: keyframeName,
+          category: "motion",
+          value: {
+            type: "raw",
+            value: keyframeName,
+          },
+          source,
+          aliases: [],
+          usedBy: [],
+          metadata: {
+            description: `Keyframe animation from ${varName}`,
+          },
+          scannedAt: new Date(),
+        });
+      }
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Find exported keyframes/animations objects in content.
+   */
+  private findKeyframesExports(
+    content: string,
+  ): Array<{ objectStr: string; lineNumber: number; varName: string }> {
+    const results: Array<{
+      objectStr: string;
+      lineNumber: number;
+      varName: string;
+    }> = [];
+
+    // Match: export const keyframes = { ... } or export const animations = { ... }
+    const startRegex =
+      /(?:export\s+)?const\s+(keyframes|animations)\s*=\s*\{/gi;
+    let match;
+
+    while ((match = startRegex.exec(content)) !== null) {
+      const varName = match[1] || "keyframes";
+      const startIndex = match.index + match[0].length - 1; // Position of opening {
+
+      // Find matching closing brace
+      let braceDepth = 1;
+      let i = startIndex + 1;
+      while (i < content.length && braceDepth > 0) {
+        if (content[i] === "{") braceDepth++;
+        if (content[i] === "}") braceDepth--;
+        i++;
+      }
+
+      if (braceDepth === 0) {
+        const objectStr = content.slice(startIndex, i);
+        const lineNumber = content.slice(0, match.index).split("\n").length;
+        results.push({ objectStr, lineNumber, varName });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Extract keyframe animation names from a keyframes object string.
+   * Returns the top-level keys that represent animation names.
+   */
+  private extractKeyframeNames(objectStr: string): string[] {
+    const names: string[] = [];
+
+    // Remove outer braces
+    let inner = objectStr.trim();
+    if (inner.startsWith("{")) inner = inner.slice(1);
+    if (inner.endsWith("}")) inner = inner.slice(0, -1);
+
+    // Parse top-level entries
+    const entries = this.parseObjectEntries(inner);
+
+    // Keyframe selector patterns to exclude (these are not animation names)
+    const keyframeSelectorPattern = /^(\d+%|from|to|\d+%,\s*\d+%)$/i;
+
+    for (const { key, content } of entries) {
+      // Skip if this looks like a keyframe selector, not an animation name
+      if (keyframeSelectorPattern.test(key)) continue;
+
+      // Check if the value is an object (keyframes have nested objects with selectors)
+      const trimmedContent = content.trim();
+      if (trimmedContent.startsWith("{") && trimmedContent.endsWith("}")) {
+        // Verify this looks like a keyframe definition by checking for selector keys
+        const nestedEntries = this.parseObjectEntries(
+          trimmedContent.slice(1, -1),
+        );
+        const hasKeyframeSelectors = nestedEntries.some(
+          (e) =>
+            e.key.includes("%") ||
+            e.key.toLowerCase() === "from" ||
+            e.key.toLowerCase() === "to",
+        );
+
+        if (hasKeyframeSelectors) {
+          names.push(key);
+        }
+      }
+    }
+
+    return names;
   }
 
   /**
@@ -1499,11 +1666,16 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       nameLower.includes("animation") ||
       nameLower.includes("duration") ||
       nameLower.includes("easing") ||
-      nameLower.includes("motion")
+      nameLower.includes("motion") ||
+      nameLower === "keyframes"
     )
       return "motion";
     if (nameLower.includes("breakpoint")) return "sizing";
     if (nameLower.includes("zindex") || nameLower === "z") return "other";
+    // Blur tokens
+    if (nameLower.includes("blur")) return "other";
+    // Aspect ratio tokens
+    if (nameLower.includes("aspect")) return "other";
 
     return "other";
   }
@@ -1515,6 +1687,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
    * - type Name = 'value1' | 'value2' | ...
    * - export type Name = 'value1' | 'value2' | ...
    * - type Name = "value1" | "value2" | ...
+   * - Multi-line unions (for generated files like token.gen.ts)
    */
   private extractTypeScriptUnionTypes(
     content: string,
@@ -1525,7 +1698,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       lineNumber: number;
     }> = [];
 
-    // Match type declarations with string literal unions
+    // Match type declarations with string literal unions (single-line)
     // Handles: type Name = 'a' | 'b' | 'c';
     // Also handles: export type Name = 'a' | 'b' | 'c';
     // Supports both single and double quotes
@@ -1546,6 +1719,32 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         // Calculate line number
         const lineNumber = content.slice(0, match.index).split("\n").length;
         results.push({ typeName, values, lineNumber });
+      }
+    }
+
+    // Also match multi-line union types (common in generated files)
+    // Pattern: export type Token =
+    //   | "value1"
+    //   | "value2"
+    const multiLineTypeRegex =
+      /(?:export\s+)?type\s+([A-Z][a-zA-Z0-9]*)\s*=\s*\n?((?:\s*\|\s*["'][^"']+["']\s*\n?)+)/g;
+
+    while ((match = multiLineTypeRegex.exec(content)) !== null) {
+      const typeName = match[1];
+      const valuesStr = match[2];
+
+      if (!typeName || !valuesStr) continue;
+
+      // Extract individual string values from the union
+      const values = this.parseUnionValues(valuesStr);
+
+      if (values.length > 0) {
+        // Calculate line number
+        const lineNumber = content.slice(0, match.index).split("\n").length;
+        // Check if we already have this type (avoid duplicates)
+        if (!results.some((r) => r.typeName === typeName)) {
+          results.push({ typeName, values, lineNumber });
+        }
       }
     }
 
