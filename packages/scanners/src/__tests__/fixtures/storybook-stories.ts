@@ -771,3 +771,53 @@ export const Default = meta.story({
   },
 });
 `;
+
+// Story with inline arrow function as component (no imported component reference)
+export const STORY_WITH_INLINE_COMPONENT = `
+import type { Meta, StoryObj } from '@storybook/react';
+
+const meta = {
+  title: 'Example/InlineComponent',
+  args: {
+    errorType: null,
+    forceFailure: false,
+  },
+  component: ({ errorType, forceFailure }) => {
+    if (forceFailure) {
+      console.log(errorType);
+    }
+    return 'Hello world';
+  },
+} as Meta<{ errorType: string | null; forceFailure?: boolean }>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {};
+
+export const WithError: Story = {
+  args: {
+    errorType: 'error',
+  },
+};
+`;
+
+// Story with inline function expression as component (function keyword)
+export const STORY_WITH_INLINE_FUNCTION_COMPONENT = `
+import type { Meta, StoryObj } from '@storybook/react';
+
+const meta: Meta = {
+  title: 'Example/FunctionComponent',
+  component: function MyRenderer({ name }: { name: string }) {
+    return <div>Hello {name}</div>;
+  },
+  args: {
+    name: 'World',
+  },
+};
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {};
+`;

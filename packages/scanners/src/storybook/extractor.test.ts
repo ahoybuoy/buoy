@@ -27,6 +27,8 @@ import {
   CSF4_PREVIEW_STORY,
   CSF4_AUTO_TITLE,
   CSF4_STORYBOOK_IMPORT,
+  STORY_WITH_INLINE_COMPONENT,
+  STORY_WITH_INLINE_FUNCTION_COMPONENT,
 } from '../__tests__/fixtures/storybook-stories.js';
 import { StorybookScanner, StoryFileScanner } from './extractor.js';
 
@@ -901,6 +903,79 @@ describe('StoryFileScanner', () => {
       expect(cardStories).toBeDefined();
       expect(cardStories?.metadata?.tags).toContain('storybook-title:Components/Card');
       expect(cardStories?.metadata?.tags).toContain('autodocs');
+    });
+  });
+
+  describe('inline component detection', () => {
+    it('extracts component name from title when component is inline arrow function', async () => {
+      vol.fromJSON({
+        '/project/src/UnhandledErrors.stories.tsx': STORY_WITH_INLINE_COMPONENT,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.items.length).toBeGreaterThan(0);
+
+      // Should use title-derived name, NOT the inline function body
+      const stories = result.items.find(c => c.name === 'InlineComponent');
+      expect(stories).toBeDefined();
+      // Should NOT have the function body as the name
+      expect(stories?.name).not.toContain('errorType');
+      expect(stories?.name).not.toContain('forceFailure');
+      expect(stories?.name).not.toContain('=>');
+    });
+
+    it('extracts component name from inline function expression name', async () => {
+      vol.fromJSON({
+        '/project/src/FunctionComponent.stories.tsx': STORY_WITH_INLINE_FUNCTION_COMPONENT,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.items.length).toBeGreaterThan(0);
+
+      // Should extract name from the named function expression (MyRenderer)
+      const stories = result.items.find(c => c.name === 'MyRenderer');
+      expect(stories).toBeDefined();
+      // Should NOT have the function body as the name
+      expect(stories?.name).not.toContain('return');
+      expect(stories?.name).not.toContain('<div>');
+      // The title should be extracted properly
+      expect(stories?.metadata?.tags).toContain('storybook-title:Example/FunctionComponent');
+    });
+
+    it('extracts variants from inline component stories', async () => {
+      vol.fromJSON({
+        '/project/src/UnhandledErrors.stories.tsx': STORY_WITH_INLINE_COMPONENT,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const stories = result.items.find(c => c.name === 'InlineComponent');
+      expect(stories?.variants).toHaveLength(2);
+      expect(stories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Default' })
+      );
+      expect(stories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'WithError' })
+      );
     });
   });
 });

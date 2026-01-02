@@ -437,7 +437,7 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
           break;
 
         case 'component':
-          meta.component = prop.initializer.getText(sourceFile);
+          meta.component = this.extractComponentName(prop.initializer, sourceFile);
           break;
 
         case 'tags':
@@ -665,7 +665,7 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
           break;
 
         case 'component':
-          meta.component = prop.initializer.getText(sourceFile);
+          meta.component = this.extractComponentName(prop.initializer, sourceFile);
           break;
 
         case 'tags':
@@ -1079,6 +1079,38 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
         required: false, // argTypes don't indicate required, so default to false
       };
     });
+  }
+
+  /**
+   * Extract component name from a property initializer.
+   * Handles both identifier references and inline functions.
+   */
+  private extractComponentName(node: ts.Expression, sourceFile: ts.SourceFile): string | undefined {
+    // If it's a simple identifier (e.g., Button), return its name
+    if (ts.isIdentifier(node)) {
+      return node.getText(sourceFile);
+    }
+
+    // If it's a function expression with a name (e.g., function MyRenderer() { ... })
+    if (ts.isFunctionExpression(node) && node.name) {
+      return node.name.getText(sourceFile);
+    }
+
+    // If it's an arrow function or anonymous function expression,
+    // return undefined to indicate we should use title-derived name instead
+    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+      return undefined;
+    }
+
+    // For any other expression (property access, call expression, etc.),
+    // return the text but only if it's a reasonable length (not a function body)
+    const text = node.getText(sourceFile);
+    // If the text is very long or contains multiline content, it's likely a function body
+    if (text.length > 50 || text.includes('\n') || text.includes('{')) {
+      return undefined;
+    }
+
+    return text;
   }
 
   private getComponentNameFromTitle(title: string): string {
