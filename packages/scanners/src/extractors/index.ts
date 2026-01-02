@@ -138,6 +138,8 @@ export {
   extractDataAttributePatterns,
   extractHeadlessUIVariants,
   extractGroupPeerVariants,
+  extractDataSlotAttributes,
+  extractShortFormDataPatterns,
   type ClassPatternMatch,
   type CvaPattern,
   type StaticClassStrings,
@@ -145,4 +147,6 @@ export {
   type DataAttributePattern,
   type HeadlessUIVariant,
   type GroupPeerVariant,
+  type DataSlotAttribute,
+  type ShortFormDataPattern,
 } from './class-pattern.js';

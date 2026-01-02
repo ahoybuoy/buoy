@@ -1501,3 +1501,237 @@ export function extractGroupPeerVariants(content: string): GroupPeerVariant[] {
 
   return results;
 }
+
+// ============================================================================
+// Data-Slot Attribute Extraction (shadcn-ui v4)
+// ============================================================================
+
+/**
+ * Represents a data-slot attribute found in JSX content
+ * shadcn-ui v4 uses data-slot="component-name" to identify component parts
+ */
+export interface DataSlotAttribute {
+  /** The slot name value (e.g., "card-header", "button") */
+  slotName: string;
+  /** The inferred component type (e.g., "card", "button") */
+  componentType: string;
+  /** For compound slots like "card-header", the parent component */
+  parentComponent?: string;
+  /** For compound slots, the element name (e.g., "header" in "card-header") */
+  elementName?: string;
+  /** Line number where slot was found */
+  line: number;
+}
+
+/**
+ * Known element names that indicate compound component parts
+ * These help identify parent-element relationships
+ */
+const KNOWN_COMPOUND_ELEMENTS = [
+  'header', 'footer', 'content', 'title', 'description', 'body',
+  'overlay', 'trigger', 'action', 'cancel', 'media', 'list',
+  'item', 'separator', 'group', 'text', 'portal', 'panel',
+  'panels', 'indicator', 'input', 'label', 'message', 'icon',
+  'root', 'value', 'viewport', 'thumb', 'track', 'range',
+  'fallback', 'image', 'close', 'handle', 'backdrop',
+];
+
+/**
+ * Extract data-slot attribute values from JSX/TSX content
+ * shadcn-ui v4 uses data-slot="name" to identify component parts
+ *
+ * @param content - The source code content to scan
+ * @returns Array of extracted data-slot attributes
+ */
+export function extractDataSlotAttributes(content: string): DataSlotAttribute[] {
+  const results: DataSlotAttribute[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Match: data-slot="slot-name" or data-slot='slot-name'
+  const dataSlotRegex = /data-slot\s*=\s*["']([a-z][a-z0-9-]*)["']/gi;
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+    let match;
+
+    while ((match = dataSlotRegex.exec(line)) !== null) {
+      const slotName = match[1]!.toLowerCase();
+
+      // Deduplicate
+      if (seen.has(slotName)) continue;
+      seen.add(slotName);
+
+      // Parse the slot name to infer component structure
+      const parsed = parseSlotName(slotName);
+
+      results.push({
+        slotName,
+        componentType: parsed.componentType,
+        parentComponent: parsed.parentComponent,
+        elementName: parsed.elementName,
+        line: lineNum + 1,
+      });
+    }
+
+    dataSlotRegex.lastIndex = 0;
+  }
+
+  return results;
+}
+
+/**
+ * Parse a slot name to extract component structure
+ *
+ * Examples:
+ *   "button" -> componentType: "button"
+ *   "card-header" -> componentType: "card-header", parentComponent: "card", elementName: "header"
+ *   "alert-dialog-content" -> componentType: "alert-dialog-content", parentComponent: "alert-dialog", elementName: "content"
+ *   "dropdown-menu-item" -> componentType: "dropdown-menu-item", parentComponent: "dropdown-menu", elementName: "item"
+ */
+function parseSlotName(slotName: string): {
+  componentType: string;
+  parentComponent?: string;
+  elementName?: string;
+} {
+  const parts = slotName.split('-');
+
+  // Single word slot (e.g., "button", "card", "tabs")
+  if (parts.length === 1) {
+    return { componentType: slotName };
+  }
+
+  // Find the last part that matches a known element name
+  let elementIdx = -1;
+  for (let i = parts.length - 1; i >= 1; i--) {
+    if (KNOWN_COMPOUND_ELEMENTS.includes(parts[i]!)) {
+      elementIdx = i;
+      break;
+    }
+  }
+
+  if (elementIdx >= 0) {
+    const parentComponent = parts.slice(0, elementIdx).join('-');
+    const elementName = parts.slice(elementIdx).join('-');
+
+    return {
+      componentType: slotName,
+      parentComponent,
+      elementName,
+    };
+  }
+
+  // No known element found - treat as a compound component name
+  return { componentType: slotName };
+}
+
+// ============================================================================
+// Short-Form Data Attribute Pattern Extraction (HeadlessUI/Radix)
+// ============================================================================
+
+/**
+ * Represents a short-form data attribute pattern like data-closed: or data-active:
+ * These are Tailwind variants that apply styles based on data attribute presence
+ */
+export interface ShortFormDataPattern {
+  /** The state name (e.g., "closed", "active", "selected") */
+  state: string;
+  /** Whether this is a group variant (e.g., "group-data-selected:") */
+  groupVariant: boolean;
+  /** Whether this is a peer variant (e.g., "peer-data-selected:") */
+  peerVariant: boolean;
+  /** The utility class that is applied (e.g., "opacity-0", "bg-blue-500") */
+  utility: string;
+  /** The full pattern including the variant prefix and utility */
+  fullPattern: string;
+  /** Line number where pattern was found */
+  line: number;
+}
+
+/**
+ * Known short-form data states used by HeadlessUI and Radix
+ * These can be used directly as Tailwind variants: data-{state}:utility
+ */
+const SHORT_FORM_DATA_STATES = [
+  // Open/Closed states
+  'open',
+  'closed',
+  // Selection states
+  'active',
+  'selected',
+  'highlighted',
+  'checked',
+  'unchecked',
+  // Disabled states
+  'disabled',
+  'enabled',
+  // Focus states
+  'focused',
+  // Pressed states
+  'pressed',
+  // Expanded states
+  'expanded',
+  'collapsed',
+  // Transition states
+  'enter',
+  'leave',
+  // Side/alignment (Radix)
+  'side',
+  'align',
+];
+
+/**
+ * Extract short-form data attribute patterns from content
+ * These are Tailwind variants like data-closed:opacity-0 (without the bracket syntax)
+ *
+ * @param content - The source code content to scan
+ * @returns Array of extracted short-form data patterns
+ */
+export function extractShortFormDataPatterns(content: string): ShortFormDataPattern[] {
+  const results: ShortFormDataPattern[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Build regex for all known states
+  const statesPattern = SHORT_FORM_DATA_STATES.join('|');
+
+  // Match: data-{state}:utility or group-data-{state}:utility or peer-data-{state}:utility
+  // The utility can contain alphanumeric, hyphens, slashes (for opacity), periods, and brackets
+  const shortFormRegex = new RegExp(
+    `\\b(group-data-|peer-data-|data-)(${statesPattern})(?::[a-zA-Z])?:([a-zA-Z0-9_/-]+(?:\\[[^\\]]+\\])?)`,
+    'gi'
+  );
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+    let match;
+
+    while ((match = shortFormRegex.exec(line)) !== null) {
+      const prefix = match[1]!.toLowerCase();
+      const state = match[2]!.toLowerCase();
+      const utility = match[3]!;
+      const fullPattern = match[0];
+
+      // Create a unique key for deduplication
+      const key = `${state}:${utility}:${lineNum}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const groupVariant = prefix === 'group-data-';
+      const peerVariant = prefix === 'peer-data-';
+
+      results.push({
+        state,
+        groupVariant,
+        peerVariant,
+        utility,
+        fullPattern,
+        line: lineNum + 1,
+      });
+    }
+
+    shortFormRegex.lastIndex = 0;
+  }
+
+  return results;
+}

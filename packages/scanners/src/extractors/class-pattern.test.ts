@@ -11,6 +11,8 @@ import {
   extractDataAttributePatterns,
   extractHeadlessUIVariants,
   extractGroupPeerVariants,
+  extractDataSlotAttributes,
+  extractShortFormDataPatterns,
 } from './class-pattern.js';
 
 describe('extractClassPatterns', () => {
@@ -654,6 +656,193 @@ describe('BEM-like semantic class extraction', () => {
 
       // Note: this tests the variant prefix pattern used by headlessui
       expect(result.some(r => r.fullClass === 'ui-active' || r.fullClass === 'ui-not-active')).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// Data-Slot Attribute Extraction Tests (shadcn-ui v4)
+// ============================================================================
+
+describe('data-slot attribute extraction', () => {
+  describe('extractDataSlotAttributes', () => {
+    it('extracts data-slot attribute values from JSX', () => {
+      const content = `
+        <div data-slot="card" className={cn("cn-card", className)} />
+        <div data-slot="card-header" className={cn("cn-card-header", className)} />
+      `;
+      const result = extractDataSlotAttributes(content);
+
+      expect(result.some((r: { slotName: string }) => r.slotName === 'card')).toBe(true);
+      expect(result.some((r: { slotName: string }) => r.slotName === 'card-header')).toBe(true);
+    });
+
+    it('extracts data-slot from template string JSX attributes', () => {
+      const content = `
+        return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+      `;
+      const result = extractDataSlotAttributes(content);
+
+      expect(result.some((r: { slotName: string }) => r.slotName === 'alert-dialog')).toBe(true);
+    });
+
+    it('extracts compound component slot names', () => {
+      const content = `
+        <TabsPrimitive.Root data-slot="tabs" />
+        <TabsPrimitive.List data-slot="tabs-list" />
+        <TabsPrimitive.Trigger data-slot="tabs-trigger" />
+        <TabsPrimitive.Content data-slot="tabs-content" />
+      `;
+      const result = extractDataSlotAttributes(content);
+
+      expect(result).toHaveLength(4);
+      expect(result.map((r: { slotName: string }) => r.slotName).sort()).toEqual([
+        'tabs', 'tabs-content', 'tabs-list', 'tabs-trigger'
+      ].sort());
+    });
+
+    it('infers component type from slot name', () => {
+      const content = `
+        <div data-slot="button" />
+        <div data-slot="card-header" />
+        <div data-slot="dropdown-menu-item" />
+      `;
+      const result = extractDataSlotAttributes(content);
+
+      const buttonSlot = result.find((r: { slotName: string }) => r.slotName === 'button');
+      expect(buttonSlot?.componentType).toBe('button');
+
+      const cardHeaderSlot = result.find((r: { slotName: string }) => r.slotName === 'card-header');
+      expect(cardHeaderSlot?.parentComponent).toBe('card');
+      expect(cardHeaderSlot?.elementName).toBe('header');
+
+      const menuItemSlot = result.find((r: { slotName: string }) => r.slotName === 'dropdown-menu-item');
+      expect(menuItemSlot?.parentComponent).toBe('dropdown-menu');
+      expect(menuItemSlot?.elementName).toBe('item');
+    });
+
+    it('handles data-slot with additional data attributes', () => {
+      const content = `
+        <div
+          data-slot="avatar"
+          data-size={size}
+          className={cn("cn-avatar", className)}
+        />
+      `;
+      const result = extractDataSlotAttributes(content);
+
+      expect(result.some((r: { slotName: string }) => r.slotName === 'avatar')).toBe(true);
+    });
+
+    it('returns empty array for content without data-slot', () => {
+      const content = `
+        <div className="flex items-center" />
+      `;
+      const result = extractDataSlotAttributes(content);
+
+      expect(result).toHaveLength(0);
+    });
+  });
+});
+
+// ============================================================================
+// Short-form Data Attribute Pattern Tests (HeadlessUI/Radix)
+// ============================================================================
+
+describe('short-form data attribute patterns', () => {
+  describe('extractShortFormDataPatterns', () => {
+    it('extracts data-closed: patterns', () => {
+      const content = `
+        className="data-closed:opacity-0 data-closed:scale-95"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      expect(result.some((r: { state: string }) => r.state === 'closed')).toBe(true);
+    });
+
+    it('extracts data-open: patterns', () => {
+      const content = `
+        className="data-open:rotate-180 data-open:opacity-100"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      expect(result.some((r: { state: string }) => r.state === 'open')).toBe(true);
+    });
+
+    it('extracts data-active: patterns', () => {
+      const content = `
+        className="data-active:bg-indigo-600 data-active:text-white"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      expect(result.some((r: { state: string }) => r.state === 'active')).toBe(true);
+    });
+
+    it('extracts data-selected: patterns', () => {
+      const content = `
+        className="data-selected:font-semibold data-selected:bg-accent"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      expect(result.some((r: { state: string }) => r.state === 'selected')).toBe(true);
+    });
+
+    it('extracts data-disabled: patterns', () => {
+      const content = `
+        className="data-disabled:opacity-50 data-disabled:cursor-not-allowed"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      expect(result.some((r: { state: string }) => r.state === 'disabled')).toBe(true);
+    });
+
+    it('extracts group-data-* patterns', () => {
+      const content = `
+        className="group-data-selected:font-semibold group-data-active:text-white"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      expect(result.some((r: { state: string; groupVariant: boolean }) => r.state === 'selected' && r.groupVariant)).toBe(true);
+      expect(result.some((r: { state: string; groupVariant: boolean }) => r.state === 'active' && r.groupVariant)).toBe(true);
+    });
+
+    it('extracts data-enter/data-leave transition patterns', () => {
+      const content = `
+        className="data-enter:duration-300 data-leave:duration-300 data-enter:data-closed:-translate-x-full"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      expect(result.some((r: { state: string }) => r.state === 'enter')).toBe(true);
+      expect(result.some((r: { state: string }) => r.state === 'leave')).toBe(true);
+    });
+
+    it('extracts data-highlighted: patterns', () => {
+      const content = `
+        className="data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      expect(result.some((r: { state: string }) => r.state === 'highlighted')).toBe(true);
+    });
+
+    it('extracts data-checked: patterns', () => {
+      const content = `
+        className="data-checked:bg-primary data-checked:text-primary-foreground"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      expect(result.some((r: { state: string }) => r.state === 'checked')).toBe(true);
+    });
+
+    it('tracks the utility class applied with each state pattern', () => {
+      const content = `
+        className="data-active:bg-blue-500 data-active:text-white"
+      `;
+      const result = extractShortFormDataPatterns(content);
+
+      const activePatterns = result.filter((r: { state: string }) => r.state === 'active');
+      expect(activePatterns.length).toBeGreaterThan(0);
+      expect(activePatterns.some((r: { utility: string }) => r.utility === 'bg-blue-500')).toBe(true);
     });
   });
 });
