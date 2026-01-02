@@ -299,3 +299,59 @@ export const SVELTE5_SIMPLE_TYPE_ALIAS_PROPS = `
   {/if}
 </div>
 `;
+
+// Svelte 5 with inline object type annotation (shadcn-svelte pattern)
+// Example: let { number, name }: { number: number; name: string } = $props();
+export const SVELTE5_INLINE_OBJECT_TYPE = `
+<script lang="ts">
+  let { number, name }: { number: number; name: string } = $props();
+</script>
+
+<div>{name}: {number}</div>
+`;
+
+// Svelte 5 with inline object type containing optional props
+export const SVELTE5_INLINE_OBJECT_TYPE_OPTIONAL = `
+<script lang="ts">
+  let { command }: { command: string } = $props();
+</script>
+
+<span>{command}</span>
+`;
+
+// Svelte 5 with complex inline intersection type (shadcn-svelte button pattern)
+export const SVELTE5_COMPLEX_INTERSECTION_TYPE = `
+<script lang="ts">
+  import type { HTMLButtonAttributes } from "svelte/elements";
+  import type { Snippet } from "svelte";
+
+  let {
+    ref = $bindable(null),
+    variant,
+    size,
+    child,
+    children,
+    class: className,
+    ...restProps
+  }: HTMLButtonAttributes &
+    VariantProps<typeof buttonVariants> & {
+      child?: Snippet<[{ props: Record<string, unknown> }]>;
+      ref?: HTMLElement | null;
+    } = $props();
+</script>
+
+<button bind:this={ref} class={className} {...restProps}>
+  {@render children?.()}
+</button>
+`;
+
+// Svelte 5 with value = $bindable() pattern (shadcn-svelte input pattern)
+export const SVELTE5_BINDABLE_VALUE_PATTERN = `
+<script lang="ts">
+  import type { HTMLInputAttributes } from "svelte/elements";
+
+  let { class: className, value = $bindable(), ...restProps }: HTMLInputAttributes = $props();
+</script>
+
+<input bind:value class={className} {...restProps} />
+`;

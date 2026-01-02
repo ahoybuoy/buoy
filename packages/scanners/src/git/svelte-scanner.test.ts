@@ -17,6 +17,10 @@ import {
   SVELTE5_INLINE_INTERFACE_PROPS,
   SVELTE5_TYPE_ALIAS_PROPS,
   SVELTE5_SIMPLE_TYPE_ALIAS_PROPS,
+  SVELTE5_INLINE_OBJECT_TYPE,
+  SVELTE5_INLINE_OBJECT_TYPE_OPTIONAL,
+  SVELTE5_COMPLEX_INTERSECTION_TYPE,
+  SVELTE5_BINDABLE_VALUE_PATTERN,
 } from '../__tests__/fixtures/svelte-components.js';
 import { SvelteComponentScanner } from './svelte-scanner.js';
 
@@ -460,6 +464,106 @@ describe('SvelteComponentScanner', () => {
       expect(variantProp!.required).toBe(false);
       // Type should be the union type from type alias
       expect(variantProp!.type).toContain('default');
+    });
+
+    it('extracts props with types from inline object type annotation (shadcn-svelte pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/Pokemon.svelte': SVELTE5_INLINE_OBJECT_TYPE,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(2);
+
+      // number prop should have type 'number'
+      const numberProp = result.items[0]!.props.find(p => p.name === 'number');
+      expect(numberProp).toBeDefined();
+      expect(numberProp!.type).toBe('number');
+      expect(numberProp!.required).toBe(true);
+
+      // name prop should have type 'string'
+      const nameProp = result.items[0]!.props.find(p => p.name === 'name');
+      expect(nameProp).toBeDefined();
+      expect(nameProp!.type).toBe('string');
+      expect(nameProp!.required).toBe(true);
+    });
+
+    it('extracts props from inline object type with single prop (pm-run pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/PmRun.svelte': SVELTE5_INLINE_OBJECT_TYPE_OPTIONAL,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(1);
+
+      const commandProp = result.items[0]!.props.find(p => p.name === 'command');
+      expect(commandProp).toBeDefined();
+      expect(commandProp!.type).toBe('string');
+      expect(commandProp!.required).toBe(true);
+    });
+
+    it('extracts props from complex intersection type with inline object (button pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/Button.svelte': SVELTE5_COMPLEX_INTERSECTION_TYPE,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // Should at least detect the inline object props: child, ref
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(4);
+
+      // className (from class:) should be detected
+      const classNameProp = result.items[0]!.props.find(p => p.name === 'className');
+      expect(classNameProp).toBeDefined();
+
+      // child from inline object should have Snippet type
+      const childProp = result.items[0]!.props.find(p => p.name === 'child');
+      expect(childProp).toBeDefined();
+      expect(childProp!.required).toBe(false);
+    });
+
+    it('extracts value prop with $bindable() default (input pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/Input.svelte': SVELTE5_BINDABLE_VALUE_PATTERN,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(2);
+
+      // value should be detected with $bindable() as default
+      const valueProp = result.items[0]!.props.find(p => p.name === 'value');
+      expect(valueProp).toBeDefined();
+      expect(valueProp!.required).toBe(false);
+
+      // className should be detected
+      const classNameProp = result.items[0]!.props.find(p => p.name === 'className');
+      expect(classNameProp).toBeDefined();
     });
   });
 

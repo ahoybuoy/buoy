@@ -372,30 +372,105 @@ export class SvelteComponentScanner extends Scanner<
             props.push(...svelte5Props);
           }
 
-          // Look for type annotation after the destructuring: }: TypeName = $props()
-          // This extracts additional type info from interface/type alias definitions
+          // Look for type annotation after the destructuring
+          // Handles: }: TypeName = $props() OR }: { prop: type } = $props() OR }: Type & { prop: type } = $props()
           const afterBrace = scriptContent.substring(
             braceStartIdx + propsContent.length + 2,
           );
-          const typeAnnotationMatch = afterBrace.match(/^\s*:\s*(\w+)\s*=\s*\$props\(\)/);
-          if (typeAnnotationMatch && typeAnnotationMatch[1]) {
-            const typeName = typeAnnotationMatch[1];
-            const allScript = moduleScriptContent + "\n" + scriptContent;
-            const typeProps = this.extractPropsFromTypeDefinition(
-              allScript,
-              typeName,
+
+          // Check for type annotation (starts with ':')
+          const colonMatch = afterBrace.match(/^\s*:/);
+          if (colonMatch) {
+            const afterColon = afterBrace.substring(colonMatch[0].length);
+
+            // Check if this is an inline object type or intersection ending with inline object
+            // Pattern: { prop: type; } = $props() or Type & { prop: type; } = $props()
+            const beforePropsInType = afterColon.substring(
+              0,
+              afterColon.indexOf("$props()"),
             );
 
-            // Merge type information from type definition into our props
-            if (typeProps.length > 0) {
-              const typeMap = new Map(typeProps.map((p) => [p.name, p]));
-              for (const prop of props) {
-                const typeDef = typeMap.get(prop.name);
-                if (typeDef && prop.type === "unknown") {
-                  prop.type = typeDef.type;
-                  // Also update required status if type definition says optional
-                  if (!typeDef.required && prop.required) {
-                    prop.required = false;
+            // Find the top-level inline object type by looking for { at depth 0 after & or at start
+            // We need to track nesting depth to skip nested { inside <...> generics
+            let targetBraceIdx = -1;
+            let depth = 0;
+            let afterAmpersand = false;
+
+            for (let i = 0; i < beforePropsInType.length; i++) {
+              const char = beforePropsInType[i];
+              if (char === "<" || char === "(") {
+                depth++;
+              } else if (char === ">" || char === ")") {
+                depth--;
+              } else if (char === "&" && depth === 0) {
+                afterAmpersand = true;
+              } else if (char === "{" && depth === 0) {
+                // This is a top-level brace
+                // If it's the start of an inline object type (after & or at start without a type name before)
+                const beforeBrace = beforePropsInType.substring(0, i).trim();
+                if (
+                  afterAmpersand ||
+                  beforeBrace === "" ||
+                  beforeBrace.endsWith("&")
+                ) {
+                  targetBraceIdx = i;
+                }
+              }
+            }
+
+            if (targetBraceIdx !== -1) {
+              const inlineObjectContent = extractBalancedBraces(
+                afterColon,
+                targetBraceIdx,
+              );
+              if (inlineObjectContent) {
+                const inlineTypeProps =
+                  this.extractPropsFromInlineObjectType(inlineObjectContent);
+                // Merge type information into our props
+                if (inlineTypeProps.length > 0) {
+                  const typeMap = new Map(
+                    inlineTypeProps.map((p) => [p.name, p]),
+                  );
+                  for (const prop of props) {
+                    const typeDef = typeMap.get(prop.name);
+                    if (typeDef) {
+                      // Update type if still unknown
+                      if (prop.type === "unknown") {
+                        prop.type = typeDef.type;
+                      }
+                      // Also update required status if type definition says optional
+                      if (!typeDef.required && prop.required) {
+                        prop.required = false;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            // Also check for named type annotation: }: TypeName = $props()
+            const typeAnnotationMatch = afterColon.match(
+              /^\s*(\w+)\s*=\s*\$props\(\)/,
+            );
+            if (typeAnnotationMatch && typeAnnotationMatch[1]) {
+              const typeName = typeAnnotationMatch[1];
+              const allScript = moduleScriptContent + "\n" + scriptContent;
+              const typeProps = this.extractPropsFromTypeDefinition(
+                allScript,
+                typeName,
+              );
+
+              // Merge type information from type definition into our props
+              if (typeProps.length > 0) {
+                const typeMap = new Map(typeProps.map((p) => [p.name, p]));
+                for (const prop of props) {
+                  const typeDef = typeMap.get(prop.name);
+                  if (typeDef && prop.type === "unknown") {
+                    prop.type = typeDef.type;
+                    // Also update required status if type definition says optional
+                    if (!typeDef.required && prop.required) {
+                      prop.required = false;
+                    }
                   }
                 }
               }
@@ -549,6 +624,41 @@ export class SvelteComponentScanner extends Scanner<
 
     // Then try type alias
     props = this.extractPropsFromTypeAlias(content, typeName);
+    return props;
+  }
+
+  /**
+   * Extract props from inline object type annotation.
+   * Handles: { propName: type; propName?: type; }
+   * Example: let { number, name }: { number: number; name: string } = $props();
+   */
+  private extractPropsFromInlineObjectType(
+    objectContent: string,
+  ): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    // Match prop definitions: propName?: Type; or propName: Type;
+    // Handle complex types with generics, unions, etc.
+    // The last property may not have a trailing semicolon, so use (;|$) or ([;,]|$)
+    // Also handle properties separated by commas in some edge cases
+    const propRegex = /(\w+)(\?)?:\s*([^;,]+)(?:[;,]|$)/g;
+    let propMatch;
+
+    while ((propMatch = propRegex.exec(objectContent)) !== null) {
+      const propName = propMatch[1];
+      const isOptional = propMatch[2] === "?";
+      const propType = propMatch[3]?.trim() || "unknown";
+
+      if (propName) {
+        props.push({
+          name: propName,
+          type: propType,
+          required: !isOptional,
+          defaultValue: undefined,
+        });
+      }
+    }
+
     return props;
   }
 
