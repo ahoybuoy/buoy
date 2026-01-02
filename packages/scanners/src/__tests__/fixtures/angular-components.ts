@@ -584,3 +584,34 @@ export class SignalInlineTransformComponent {
   readonly ariaLabel = input('', { alias: 'aria-label', transform: (v: any) => String(v) });
 }
 `;
+
+// Component with @Output alias (PrimeNG pattern)
+export const OUTPUT_WITH_ALIAS_ANGULAR = `
+import { Component, Output, EventEmitter } from '@angular/core';
+
+interface EditorInitEvent {
+  editor: any;
+}
+
+interface TextChangeEvent {
+  delta: any;
+  htmlValue: string;
+  textValue: string;
+  source: string;
+}
+
+@Component({
+  selector: 'p-editor',
+  template: '<div></div>'
+})
+export class EditorComponent {
+  // Output with alias - public API uses 'onInit' but internal name is 'onEditorInit'
+  @Output('onInit') onEditorInit: EventEmitter<EditorInitEvent> = new EventEmitter<EditorInitEvent>();
+
+  // Output with alias - PrimeNG style 'onTextChange'
+  @Output('onTextChange') textChange: EventEmitter<TextChangeEvent> = new EventEmitter<TextChangeEvent>();
+
+  // Regular output without alias
+  @Output() onSelectionChange = new EventEmitter<void>();
+}
+`;

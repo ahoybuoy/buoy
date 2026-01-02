@@ -30,6 +30,7 @@ import {
   INLINE_ARROW_TRANSFORM_ANGULAR,
   INFERRED_TYPE_FROM_TRANSFORM_ANGULAR,
   SIGNAL_INPUT_INLINE_TRANSFORM_NO_TYPE_ANGULAR,
+  OUTPUT_WITH_ALIAS_ANGULAR,
 } from '../__tests__/fixtures/angular-components.js';
 import { AngularComponentScanner } from './angular-scanner.js';
 
@@ -1254,6 +1255,65 @@ describe('AngularComponentScanner', () => {
       const ariaLabelProp = result.items[0]!.props.find(p => p.name === 'ariaLabel');
       expect(ariaLabelProp).toBeDefined();
       expect(ariaLabelProp!.description).toContain('aria-label');
+    });
+  });
+
+  describe('@Output with alias', () => {
+    it('extracts alias from @Output decorator with string argument', async () => {
+      vol.fromJSON({
+        '/project/src/editor.component.ts': OUTPUT_WITH_ALIAS_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+
+      // Should detect output with alias 'onInit'
+      const onEditorInitProp = result.items[0]!.props.find(p => p.name === 'onEditorInit');
+      expect(onEditorInitProp).toBeDefined();
+      expect(onEditorInitProp!.type).toBe('EventEmitter');
+      expect(onEditorInitProp!.description).toContain('onInit');
+    });
+
+    it('extracts multiple outputs with aliases', async () => {
+      vol.fromJSON({
+        '/project/src/editor.component.ts': OUTPUT_WITH_ALIAS_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect output with alias 'onTextChange'
+      const textChangeProp = result.items[0]!.props.find(p => p.name === 'textChange');
+      expect(textChangeProp).toBeDefined();
+      expect(textChangeProp!.description).toContain('onTextChange');
+    });
+
+    it('does not add alias info for outputs without alias', async () => {
+      vol.fromJSON({
+        '/project/src/editor.component.ts': OUTPUT_WITH_ALIAS_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.component.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Regular output without alias should have standard description
+      const onSelectionChangeProp = result.items[0]!.props.find(p => p.name === 'onSelectionChange');
+      expect(onSelectionChangeProp).toBeDefined();
+      expect(onSelectionChangeProp!.description).toBe('Output event');
     });
   });
 });

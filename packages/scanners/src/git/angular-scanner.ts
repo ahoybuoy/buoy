@@ -848,7 +848,8 @@ export class AngularComponentScanner extends Scanner<
       const decorators = ts.getDecorators(member);
       if (!decorators) continue;
 
-      const hasOutput = decorators.some((d) => {
+      // Find @Output decorator and extract alias if present
+      const outputDecorator = decorators.find((d) => {
         if (ts.isCallExpression(d.expression)) {
           const expr = d.expression.expression;
           return ts.isIdentifier(expr) && expr.text === "Output";
@@ -859,14 +860,15 @@ export class AngularComponentScanner extends Scanner<
         return false;
       });
 
-      if (hasOutput) {
+      if (outputDecorator) {
         const propName = member.name.getText(sourceFile);
+        const alias = this.extractOutputDecoratorAlias(outputDecorator);
 
         outputs.push({
           name: propName,
           type: "EventEmitter",
           required: false,
-          description: "Output event",
+          description: alias ? `Output event (alias: ${alias})` : "Output event",
         });
       }
     }
@@ -900,6 +902,27 @@ export class AngularComponentScanner extends Scanner<
     }
 
     return outputs;
+  }
+
+  /**
+   * Extract alias from @Output decorator: @Output('aliasName')
+   */
+  private extractOutputDecoratorAlias(decorator: ts.Decorator): string | undefined {
+    if (!ts.isCallExpression(decorator.expression)) {
+      return undefined;
+    }
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return undefined;
+
+    const firstArg = args[0];
+
+    // @Output('alias') - string argument
+    if (firstArg && ts.isStringLiteral(firstArg)) {
+      return firstArg.text;
+    }
+
+    return undefined;
   }
 
   /**
