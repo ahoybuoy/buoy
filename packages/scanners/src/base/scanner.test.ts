@@ -458,6 +458,8 @@ describe('Base Scanner', () => {
         include: ['sandbox/*/src/**/*.ts'],
         // Explicitly override excludes to allow sandbox
         exclude: ['**/node_modules/**'],
+        // Must explicitly opt out of default excludes to allow sandbox files
+        overrideDefaultExcludes: true,
       });
 
       const result = await scanner.scan();
@@ -1192,6 +1194,108 @@ describe('Base Scanner', () => {
 
       const result = await scanner.scan();
       expect(result.items.length).toBe(10);
+    });
+  });
+
+  describe('exclude pattern merging', () => {
+    it('merges custom excludes with DEFAULT_EXCLUDES', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/src/Button.test.ts': 'export {}', // Should be excluded by custom pattern
+        '/project/node_modules/dep/index.ts': 'export {}', // Should be excluded by DEFAULT_EXCLUDES
+        '/project/sandbox/demo/App.ts': 'export {}', // Should be excluded by DEFAULT_EXCLUDES
+        '/project/dist/bundle.ts': 'export {}', // Should be excluded by DEFAULT_EXCLUDES
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+        // Custom exclude that adds to defaults, should NOT replace them
+        exclude: ['**/*.test.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Only Button.ts should be found - all other patterns should still be excluded
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('Button.ts');
+    });
+
+    it('still excludes node_modules when custom excludes are provided', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/node_modules/dep/index.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+        exclude: ['**/*.stories.ts'], // Custom exclude for stories
+      });
+
+      const result = await scanner.scan();
+
+      // node_modules should still be excluded even with custom excludes
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('src/Button.ts');
+    });
+
+    it('still excludes sandbox files when custom excludes are provided', async () => {
+      vol.fromJSON({
+        '/project/packages/ui/src/Button.ts': 'export {}',
+        '/project/sandbox/app/Button.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+        exclude: ['**/*.test.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // sandbox should still be excluded
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('packages/ui/src/Button.ts');
+    });
+
+    it('allows overriding default excludes with overrideDefaultExcludes option', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/sandbox/demo/App.ts': 'export {}', // Would normally be excluded
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+        exclude: ['**/node_modules/**'], // Minimal exclude
+        overrideDefaultExcludes: true, // Explicitly opt into overriding defaults
+      } as ScannerConfig & { overrideDefaultExcludes?: boolean });
+
+      const result = await scanner.scan();
+
+      // Both files should be found since sandbox is not in custom excludes
+      expect(result.items).toHaveLength(2);
+    });
+
+    it('uses only DEFAULT_EXCLUDES when no custom excludes provided', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/node_modules/dep/index.ts': 'export {}',
+        '/project/dist/bundle.ts': 'export {}',
+        '/project/sandbox/app.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+        // No exclude specified - should use DEFAULT_EXCLUDES
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('src/Button.ts');
     });
   });
 });

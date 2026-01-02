@@ -11,6 +11,12 @@ export interface ScannerConfig {
   concurrency?: number;
   /** Threshold for warning about large file counts (default: 1000) */
   largeFileCountThreshold?: number;
+  /**
+   * If true, custom exclude patterns will completely replace DEFAULT_EXCLUDES.
+   * If false (default), custom exclude patterns are merged with DEFAULT_EXCLUDES.
+   * This allows users to opt out of default exclusions when explicitly needed.
+   */
+  overrideDefaultExcludes?: boolean;
 }
 
 export interface ScanError {
@@ -71,39 +77,13 @@ export interface FileValidationResult {
 }
 
 /**
- * Default exclusion patterns for file discovery.
- * Includes common build output, cache, tooling directories,
- * and example/test/sandbox code that should not be counted as
- * production components.
+ * Core exclusion patterns that should ALWAYS be applied.
+ * These are build artifacts, dependencies, and tooling directories
+ * that are never valid component sources.
  */
-export const DEFAULT_EXCLUDES = [
+export const CORE_EXCLUDES = [
   // Package manager and dependencies
   "**/node_modules/**",
-
-  // Test files by naming convention
-  "**/*.test.*",
-  "**/*.spec.*",
-  "**/*.e2e.*",
-
-  // Story files
-  "**/*.stories.*",
-  "**/__stories__/**",
-  "**/.storybook/**",
-
-  // Test directories
-  "**/__tests__/**",
-  "**/__mocks__/**",
-  "**/__fixtures__/**",
-  "**/fixtures/**",
-
-  // E2E testing directories
-  "**/e2e/**",
-  "**/cypress/**",
-  "**/playwright/**",
-
-  // Example/sandbox code (not production components)
-  "**/sandbox/**",
-  "**/examples/**",
 
   // Build output
   "**/dist/**",
@@ -135,6 +115,46 @@ export const DEFAULT_EXCLUDES = [
   // Minified/bundled files
   "**/*.min.js",
   "**/*.min.css",
+
+  // Example/sandbox code (not production components)
+  // These are always excluded as they are typically demo/playground code
+  "**/sandbox/**",
+  "**/examples/**",
+];
+
+/**
+ * Default exclusion patterns for file discovery.
+ * Includes common build output, cache, tooling directories,
+ * and example/test/sandbox code that should not be counted as
+ * production components.
+ *
+ * These patterns are used when no custom excludes are provided.
+ * When custom excludes ARE provided, only CORE_EXCLUDES are merged in.
+ */
+export const DEFAULT_EXCLUDES = [
+  // Core excludes (always applied)
+  ...CORE_EXCLUDES,
+
+  // Test files by naming convention
+  "**/*.test.*",
+  "**/*.spec.*",
+  "**/*.e2e.*",
+
+  // Story files
+  "**/*.stories.*",
+  "**/__stories__/**",
+  "**/.storybook/**",
+
+  // Test directories
+  "**/__tests__/**",
+  "**/__mocks__/**",
+  "**/__fixtures__/**",
+  "**/fixtures/**",
+
+  // E2E testing directories
+  "**/e2e/**",
+  "**/cypress/**",
+  "**/playwright/**",
 ];
 
 /**
@@ -396,6 +416,35 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
   }
 
   /**
+   * Build the exclude patterns list based on config.
+   * By default, custom excludes are merged with CORE_EXCLUDES.
+   * Set overrideDefaultExcludes: true to completely replace defaults.
+   *
+   * This method uses CORE_EXCLUDES (node_modules, dist, .git, etc.)
+   * rather than full DEFAULT_EXCLUDES when custom excludes are provided.
+   * This allows specialized scanners (like storybook scanner) to work correctly
+   * when they explicitly include files that would be excluded by DEFAULT_EXCLUDES.
+   */
+  protected getExcludePatterns(): string[] {
+    const customExcludes = this.config.exclude || [];
+
+    // If no custom excludes, use full defaults
+    if (customExcludes.length === 0) {
+      return DEFAULT_EXCLUDES;
+    }
+
+    // If overrideDefaultExcludes is true, use only custom excludes
+    if (this.config.overrideDefaultExcludes) {
+      return customExcludes;
+    }
+
+    // Default behavior: merge custom excludes with CORE_EXCLUDES
+    // This ensures node_modules, dist, .git are always excluded
+    // but allows specialized scanners to include stories/tests if they want
+    return [...new Set([...CORE_EXCLUDES, ...customExcludes])];
+  }
+
+  /**
    * Find files matching the configured patterns.
    * @param defaultPatterns Default include patterns if none configured
    * @returns Object with matched files and patterns that matched nothing
@@ -406,9 +455,7 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
     const patterns = this.config.include?.length
       ? this.config.include
       : defaultPatterns;
-    const ignore = this.config.exclude?.length
-      ? this.config.exclude
-      : DEFAULT_EXCLUDES;
+    const ignore = this.getExcludePatterns();
 
     const allFiles: string[] = [];
     const unmatchedPatterns: string[] = [];
