@@ -26,12 +26,32 @@ const MODIFIER_PREFIX = '(?:(?:@(?:min|max)-\\[[^\\]]+\\]|@[a-z]+|[a-z-]+|has-\\
 // Negative prefix for classes like -translate-x-[20px], -z-[1], -order-[1]
 const NEGATIVE_PREFIX = '-?';
 
+// Tailwind v4 uses parentheses syntax for CSS variables: w-(--button-width), p-(--spacing)
+// This is distinct from the bracket syntax: w-[var(--button-width)]
+const TAILWIND_V4_PATTERNS = {
+  // Size utilities: w-(--var), h-(--var), min-w-(--var), max-w-(--var), etc.
+  size: new RegExp(`${MODIFIER_PREFIX}(?:w|h|min-w|max-w|min-h|max-h|size)-\\(--[\\w-]+\\)`, 'g'),
+
+  // Spacing utilities: p-(--var), m-(--var), gap-(--var), etc.
+  spacing: new RegExp(`${MODIFIER_PREFIX}(?:p|px|py|pt|pr|pb|pl|ps|pe|m|mx|my|mt|mr|mb|ml|ms|me|gap|gap-x|gap-y|space-x|space-y|inset|inset-x|inset-y|top|right|bottom|left|start|end)-\\(--[\\w-]+\\)`, 'g'),
+
+  // Color utilities: text-(--var), bg-(--var), border-(--var), etc.
+  color: new RegExp(`${MODIFIER_PREFIX}(?:text|bg|border|fill|stroke|from|via|to|accent|caret|decoration|shadow)-\\(--[\\w-]+\\)`, 'g'),
+
+  // Other utilities with CSS variables
+  other: new RegExp(`${MODIFIER_PREFIX}[\\w-]+-\\(--[\\w-]+\\)`, 'g'),
+};
+
 // Patterns for arbitrary values in Tailwind classes
 const ARBITRARY_PATTERNS = {
   // Colors: text-[#fff], bg-[#ff6b6b], border-[rgb(...)], via-[#hex]/opacity, etc.
   // Note: This pattern should only match color VALUES, not width/sizing values
   // Also handles modifier prefixes like dark:bg-[#1a1a1a]
   color: new RegExp(`${MODIFIER_PREFIX}(?:text|bg|border|fill|stroke|from|via|to|accent|caret|decoration|shadow)-\\[([^\\]]+)\\](?:/\\d+)?`, 'g'),
+
+  // Type hint color syntax: bg-[color:rgba(...)], text-[color:hsl(...)], etc.
+  // This is Tailwind's explicit type hint syntax for disambiguation
+  typeHintColor: new RegExp(`${MODIFIER_PREFIX}(?:text|bg|border|fill|stroke|from|via|to|accent|caret|decoration|shadow)-\\[color:([^\\]]+)\\]`, 'g'),
 
   // Spacing: p-[17px], m-[2rem], gap-[10px], scroll-m-[10px], scroll-p-[20px], etc.
   // Also handles modifier prefixes like before:p-[10px]
@@ -212,6 +232,79 @@ export class ArbitraryValueDetector {
           values.push({
             type: 'color',
             value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for type hint color syntax: bg-[color:rgba(...)], text-[color:hsl(...)]
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.typeHintColor)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        // The value inside color:... is always a color value
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'color',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for Tailwind v4 CSS variable syntax: w-(--button-width), h-(--header-height)
+      for (const match of line.matchAll(TAILWIND_V4_PATTERNS.size)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          // Extract the CSS variable name from the parentheses
+          const varMatch = fullClass.match(/\(--[\w-]+\)/);
+          values.push({
+            type: 'size',
+            value: varMatch ? varMatch[0].slice(1, -1) : fullClass,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for Tailwind v4 spacing syntax: p-(--padding), m-(--margin), gap-(--gap)
+      for (const match of line.matchAll(TAILWIND_V4_PATTERNS.spacing)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          const varMatch = fullClass.match(/\(--[\w-]+\)/);
+          values.push({
+            type: 'spacing',
+            value: varMatch ? varMatch[0].slice(1, -1) : fullClass,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for Tailwind v4 color syntax: text-(--color), bg-(--background)
+      for (const match of line.matchAll(TAILWIND_V4_PATTERNS.color)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          const varMatch = fullClass.match(/\(--[\w-]+\)/);
+          values.push({
+            type: 'css-property',
+            value: varMatch ? varMatch[0].slice(1, -1) : fullClass,
             fullClass,
             file: relativePath,
             line: lineNum + 1,

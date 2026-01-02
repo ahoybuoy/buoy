@@ -1514,4 +1514,128 @@ describe("ArbitraryValueDetector", () => {
       expect(values.some((v) => v.fullClass === "cursor-[pointer]")).toBe(true);
     });
   });
+
+  describe("Tailwind v4 CSS variable syntax", () => {
+    it("detects w-(--button-width) parentheses syntax for CSS variables", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/TailwindV4.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="w-(--button-width) h-(--header-height) min-w-(--sidebar-width)">
+          Tailwind v4 variable syntax
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // Should detect these as size/css-variable type values
+      expect(values.length).toBeGreaterThanOrEqual(3);
+      expect(values.some((v) => v.fullClass === "w-(--button-width)")).toBe(true);
+      expect(values.some((v) => v.fullClass === "h-(--header-height)")).toBe(true);
+    });
+
+    it("detects p-(--spacing) parentheses syntax for spacing", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/TailwindV4Spacing.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="p-(--card-padding) m-(--section-margin) gap-(--item-gap)">
+          Tailwind v4 spacing syntax
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(3);
+      expect(values.some((v) => v.fullClass === "p-(--card-padding)")).toBe(true);
+      expect(values.some((v) => v.fullClass === "gap-(--item-gap)")).toBe(true);
+    });
+
+    it("detects text-(--color) parentheses syntax for colors", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/TailwindV4Color.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="text-(--primary-color) bg-(--background) border-(--border-color)">
+          Tailwind v4 color syntax
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // CSS variable references should be detected but may not be flagged as "hardcoded"
+      expect(values.length).toBeGreaterThanOrEqual(3);
+      expect(values.some((v) => v.fullClass === "text-(--primary-color)")).toBe(true);
+      expect(values.some((v) => v.fullClass === "bg-(--background)")).toBe(true);
+    });
+  });
+
+  describe("character unit values", () => {
+    it("detects max-w-[30ch] with character units", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/CharUnits.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="max-w-[30ch] w-[60ch] min-w-[20ch]">
+          Character unit widths
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const sizeValues = values.filter((v) => v.type === "size");
+      expect(sizeValues.length).toBeGreaterThanOrEqual(3);
+      expect(sizeValues.map((v) => v.fullClass)).toContain("max-w-[30ch]");
+    });
+  });
+
+  describe("type hint color syntax", () => {
+    it("detects bg-[color:rgba(...)] with type hint syntax", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/TypeHint.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="bg-[color:rgba(254,204,27,0.5)] text-[color:hsl(0,0%,100%)]">
+          Type hint colors
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // Should detect the color values despite the type hint prefix
+      expect(values.length).toBeGreaterThanOrEqual(2);
+      expect(values.some((v) => v.fullClass.includes("bg-[color:rgba"))).toBe(true);
+    });
+  });
+
+  describe("calc expressions in arbitrary values", () => {
+    it("detects w-[calc(...)] with calc expressions", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/CalcExpr.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="w-[calc(var(--input-width)+var(--button-width))] h-[calc(100vh-64px)]">
+          Calc expressions
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const sizeValues = values.filter((v) => v.type === "size");
+      expect(sizeValues.length).toBeGreaterThanOrEqual(2);
+      expect(sizeValues.some((v) => v.fullClass.includes("w-[calc(var(--input-width)"))).toBe(true);
+    });
+  });
 });
