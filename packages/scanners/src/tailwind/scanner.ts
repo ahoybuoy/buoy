@@ -16,6 +16,8 @@ export interface TailwindScannerConfig {
   extractThemeTokens?: boolean;
   /** Whether to extract semantic tokens from class usage in source files (default: false) */
   extractSemanticTokens?: boolean;
+  /** Whether to detect class patterns across components for drift/duplication (default: false) */
+  detectClassPatterns?: boolean;
 }
 
 /**
@@ -34,17 +36,78 @@ export interface SemanticToken {
   exampleClasses: string[];
 }
 
+/**
+ * Represents a duplicated class pattern found across multiple components
+ */
+export interface DuplicatedClassPattern {
+  /** The repeated class pattern */
+  pattern: string;
+  /** Files containing this pattern */
+  files: string[];
+  /** Number of occurrences */
+  count: number;
+}
+
+/**
+ * Represents an inconsistency in variant values across similar components
+ */
+export interface VariantInconsistency {
+  /** Component name (e.g., 'button', 'input') */
+  componentName: string;
+  /** Variant type (e.g., 'size', 'variant') */
+  variantType: string;
+  /** Variant key (e.g., 'default', 'sm', 'lg') */
+  variantKey: string;
+  /** The CSS property that differs (e.g., 'height') */
+  property: string;
+  /** The different class values found */
+  classes: string[];
+  /** Files where each variant was found */
+  locations: Array<{ file: string; value: string }>;
+}
+
+/**
+ * Represents a class pattern that could be extracted as a reusable token/utility
+ */
+export interface ExtractablePattern {
+  /** The class pattern that repeats */
+  pattern: string;
+  /** How many times it's used */
+  usageCount: number;
+  /** Files where it's used */
+  usedInFiles: string[];
+  /** Suggested name for the extracted utility */
+  suggestedName: string;
+  /** Category of the pattern */
+  category: 'focus' | 'layout' | 'interactive' | 'typography' | 'other';
+}
+
+/**
+ * Analysis of class patterns across components
+ */
+export interface ClassPatternAnalysis {
+  /** Duplicated class patterns found across components */
+  duplicates: DuplicatedClassPattern[];
+  /** Inconsistencies in variant values across similar components */
+  variantInconsistencies: VariantInconsistency[];
+  /** Patterns that could be extracted as reusable tokens/utilities */
+  extractablePatterns: ExtractablePattern[];
+}
+
 export interface TailwindScanResult {
   tokens: DesignToken[];
   drifts: DriftSignal[];
   configPath: string | null;
   /** Semantic tokens discovered from Tailwind class usage */
   semanticTokens?: SemanticToken[];
+  /** Class pattern analysis results */
+  classPatterns?: ClassPatternAnalysis;
   stats: {
     filesScanned: number;
     arbitraryValuesFound: number;
     tokensExtracted: number;
     semanticTokensFound?: number;
+    classPatternsAnalyzed?: number;
   };
 }
 
@@ -68,6 +131,7 @@ export class TailwindScanner {
       detectArbitraryValues: true,
       extractThemeTokens: true,
       extractSemanticTokens: false,
+      detectClassPatterns: false,
       ...config,
     };
   }
@@ -140,6 +204,16 @@ export class TailwindScanner {
       const semanticTokens = await this.extractSemanticTokens();
       result.semanticTokens = semanticTokens;
       result.stats.semanticTokensFound = semanticTokens.length;
+    }
+
+    // Detect class patterns across components
+    if (this.config.detectClassPatterns) {
+      const classPatterns = await this.analyzeClassPatterns();
+      result.classPatterns = classPatterns;
+      result.stats.classPatternsAnalyzed =
+        classPatterns.duplicates.length +
+        classPatterns.variantInconsistencies.length +
+        classPatterns.extractablePatterns.length;
     }
 
     return result;
@@ -895,4 +969,492 @@ export class TailwindScanner {
     // Default to raw value
     return { type: 'raw', value };
   }
+
+  /**
+   * Analyze class patterns across components to detect duplications,
+   * variant inconsistencies, and extractable patterns
+   */
+  private async analyzeClassPatterns(): Promise<ClassPatternAnalysis> {
+    const result: ClassPatternAnalysis = {
+      duplicates: [],
+      variantInconsistencies: [],
+      extractablePatterns: [],
+    };
+
+    // Collect all class strings from source files
+    const fileClassData = await this.collectClassDataFromFiles();
+
+    // Analyze duplicated patterns
+    result.duplicates = this.findDuplicatedPatterns(fileClassData);
+
+    // Analyze variant inconsistencies (for cva patterns)
+    result.variantInconsistencies = this.findVariantInconsistencies(fileClassData);
+
+    // Find extractable patterns
+    result.extractablePatterns = this.findExtractablePatterns(fileClassData);
+
+    return result;
+  }
+
+  /**
+   * Collect class strings and metadata from source files
+   */
+  private async collectClassDataFromFiles(): Promise<Map<string, FileClassData>> {
+    const fileClassData = new Map<string, FileClassData>();
+
+    const sourcePatterns = this.config.include || [
+      '**/*.tsx',
+      '**/*.jsx',
+      '**/*.ts',
+      '**/*.js',
+      '**/*.vue',
+      '**/*.svelte',
+    ];
+
+    const exclude = [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/.next/**',
+      '**/*.test.*',
+      '**/*.spec.*',
+      ...(this.config.exclude || []),
+    ];
+
+    for (const pattern of sourcePatterns) {
+      try {
+        const files = await glob(pattern, {
+          cwd: this.config.projectRoot,
+          ignore: exclude,
+          absolute: true,
+        });
+
+        for (const file of files) {
+          const content = readFileSync(file, 'utf-8');
+          const relativePath = file.replace(this.config.projectRoot + '/', '');
+          const classData = this.extractClassDataFromFile(content, relativePath);
+          if (classData.classStrings.length > 0 || classData.cvaVariants.length > 0) {
+            fileClassData.set(relativePath, classData);
+          }
+        }
+      } catch {
+        // Continue to next pattern
+      }
+    }
+
+    return fileClassData;
+  }
+
+  /**
+   * Extract class data from a single file
+   */
+  private extractClassDataFromFile(content: string, filePath: string): FileClassData {
+    const result: FileClassData = {
+      filePath,
+      classStrings: [],
+      cvaVariants: [],
+      componentName: this.extractComponentName(filePath),
+    };
+
+    // Extract all class strings
+    const classStrings = this.extractClassStrings(content);
+    result.classStrings = classStrings;
+
+    // Extract CVA variant definitions
+    const cvaVariants = this.extractCvaVariants(content);
+    result.cvaVariants = cvaVariants;
+
+    return result;
+  }
+
+  /**
+   * Extract component name from file path
+   */
+  private extractComponentName(filePath: string): string {
+    const match = filePath.match(/([^/]+)\.tsx?$/);
+    if (match) {
+      return match[1]!.toLowerCase();
+    }
+    return filePath;
+  }
+
+  /**
+   * Extract CVA variant definitions from file content
+   */
+  private extractCvaVariants(content: string): CvaVariant[] {
+    const variants: CvaVariant[] = [];
+
+    // Match cva() calls - more flexible regex for multiline
+    const cvaCallRegex = /(?:const|let|var)\s+(\w+)\s*=\s*cva\s*\(/gs;
+    let cvaMatch;
+
+    while ((cvaMatch = cvaCallRegex.exec(content)) !== null) {
+      const variantName = cvaMatch[1]!;
+      const startPos = cvaMatch.index + cvaMatch[0].length;
+
+      // Find the matching closing parenthesis by counting brackets
+      let depth = 1;
+      let pos = startPos;
+      while (depth > 0 && pos < content.length) {
+        const char = content[pos];
+        if (char === '(' || char === '{' || char === '[') depth++;
+        else if (char === ')' || char === '}' || char === ']') depth--;
+        pos++;
+      }
+
+      const cvaContent = content.substring(startPos, pos - 1);
+
+      // Look for variants: { ... } block within the cva content
+      // Use a simpler approach: find "variants:" and then extract the content
+      const variantsStartMatch = cvaContent.match(/variants\s*:\s*\{/);
+      if (!variantsStartMatch) continue;
+
+      const variantsStart = variantsStartMatch.index! + variantsStartMatch[0].length;
+
+      // Find matching closing brace for the variants block
+      let braceDepth = 1;
+      let variantsEnd = variantsStart;
+      while (braceDepth > 0 && variantsEnd < cvaContent.length) {
+        const char = cvaContent[variantsEnd];
+        if (char === '{') braceDepth++;
+        else if (char === '}') braceDepth--;
+        variantsEnd++;
+      }
+
+      const variantsBlockContent = cvaContent.substring(variantsStart, variantsEnd - 1);
+
+      // Parse each variant type (size, variant, etc.)
+      // Match patterns like: size: { default: "...", sm: "..." }
+      const variantTypeStartRegex = /(\w+)\s*:\s*\{/g;
+      let variantTypeMatch;
+
+      while ((variantTypeMatch = variantTypeStartRegex.exec(variantsBlockContent)) !== null) {
+        const variantType = variantTypeMatch[1]!;
+        const typeStart = variantTypeMatch.index + variantTypeMatch[0].length;
+
+        // Find matching closing brace
+        let typeDepth = 1;
+        let typeEnd = typeStart;
+        while (typeDepth > 0 && typeEnd < variantsBlockContent.length) {
+          const char = variantsBlockContent[typeEnd];
+          if (char === '{') typeDepth++;
+          else if (char === '}') typeDepth--;
+          typeEnd++;
+        }
+
+        const variantValuesContent = variantsBlockContent.substring(typeStart, typeEnd - 1);
+
+        // Extract individual variant values (key: "value")
+        const valueRegex = /(\w+(?:-\w+)?)\s*:\s*["'`]([^"'`]*)["'`]/g;
+        let valueMatch;
+
+        while ((valueMatch = valueRegex.exec(variantValuesContent)) !== null) {
+          variants.push({
+            name: variantName,
+            type: variantType,
+            key: valueMatch[1]!,
+            classes: valueMatch[2]!,
+          });
+        }
+      }
+    }
+
+    return variants;
+  }
+
+  /**
+   * Find duplicated class patterns across files
+   */
+  private findDuplicatedPatterns(fileClassData: Map<string, FileClassData>): DuplicatedClassPattern[] {
+    const patternMap = new Map<string, { files: Set<string>; count: number }>();
+
+    for (const [filePath, data] of fileClassData) {
+      for (const classString of data.classStrings) {
+        // Normalize and find significant patterns (at least 3 classes)
+        const normalized = this.normalizeClassString(classString);
+        if (normalized.split(' ').length >= 3) {
+          const existing = patternMap.get(normalized);
+          if (existing) {
+            existing.files.add(filePath);
+            existing.count++;
+          } else {
+            patternMap.set(normalized, { files: new Set([filePath]), count: 1 });
+          }
+        }
+      }
+    }
+
+    // Filter to patterns found in multiple files
+    const duplicates: DuplicatedClassPattern[] = [];
+    for (const [pattern, data] of patternMap) {
+      if (data.files.size >= 2) {
+        duplicates.push({
+          pattern,
+          files: Array.from(data.files),
+          count: data.count,
+        });
+      }
+    }
+
+    // Sort by count descending
+    return duplicates.sort((a, b) => b.count - a.count);
+  }
+
+  /**
+   * Normalize a class string for comparison
+   */
+  private normalizeClassString(classString: string): string {
+    return classString
+      .split(/\s+/)
+      .filter(Boolean)
+      .sort()
+      .join(' ');
+  }
+
+  /**
+   * Find variant inconsistencies across similar components
+   */
+  private findVariantInconsistencies(fileClassData: Map<string, FileClassData>): VariantInconsistency[] {
+    const inconsistencies: VariantInconsistency[] = [];
+
+    // Group files by component name
+    const componentVariants = new Map<string, Array<{ file: string; variants: CvaVariant[] }>>();
+
+    for (const [filePath, data] of fileClassData) {
+      if (data.cvaVariants.length === 0) continue;
+
+      const componentName = data.componentName;
+      const existing = componentVariants.get(componentName);
+      if (existing) {
+        existing.push({ file: filePath, variants: data.cvaVariants });
+      } else {
+        componentVariants.set(componentName, [{ file: filePath, variants: data.cvaVariants }]);
+      }
+    }
+
+    // Find inconsistencies within each component type
+    for (const [componentName, files] of componentVariants) {
+      if (files.length < 2) continue;
+
+      // Group by variant type and key
+      const variantValues = new Map<string, Map<string, Array<{ file: string; classes: string }>>>();
+
+      for (const { file, variants } of files) {
+        for (const variant of variants) {
+          const typeKey = `${variant.type}:${variant.key}`;
+          if (!variantValues.has(typeKey)) {
+            variantValues.set(typeKey, new Map());
+          }
+          const values = variantValues.get(typeKey)!;
+          const classKey = variant.classes;
+          if (!values.has(classKey)) {
+            values.set(classKey, []);
+          }
+          values.get(classKey)!.push({ file, classes: variant.classes });
+        }
+      }
+
+      // Find keys with multiple different values
+      for (const [typeKey, values] of variantValues) {
+        if (values.size > 1) {
+          const [variantType, variantKey] = typeKey.split(':');
+          const allClasses: string[] = [];
+          const locations: Array<{ file: string; value: string }> = [];
+
+          for (const [classes, locs] of values) {
+            allClasses.push(classes);
+            for (const loc of locs) {
+              locations.push({ file: loc.file, value: classes });
+            }
+          }
+
+          // Detect the property that differs
+          const property = this.detectDifferingProperty(allClasses);
+
+          inconsistencies.push({
+            componentName,
+            variantType: variantType!,
+            variantKey: variantKey!,
+            property,
+            classes: allClasses,
+            locations,
+          });
+        }
+      }
+    }
+
+    return inconsistencies;
+  }
+
+  /**
+   * Detect which CSS property differs between class strings
+   */
+  private detectDifferingProperty(classStrings: string[]): string {
+    // Map of Tailwind prefixes to property names
+    const propertyMap: Record<string, string> = {
+      'h-': 'height',
+      'w-': 'width',
+      'p-': 'padding',
+      'px-': 'padding-x',
+      'py-': 'padding-y',
+      'm-': 'margin',
+      'mx-': 'margin-x',
+      'my-': 'margin-y',
+      'text-': 'text',
+      'bg-': 'background',
+      'border-': 'border',
+      'rounded-': 'border-radius',
+      'ring-': 'ring',
+      'gap-': 'gap',
+      'size-': 'size',
+    };
+
+    // Find classes that differ
+    const classSets = classStrings.map(s => new Set(s.split(/\s+/)));
+    const allClasses = new Set<string>();
+    classSets.forEach(set => set.forEach(c => allClasses.add(c)));
+
+    for (const cls of allClasses) {
+      const inAll = classSets.every(set => set.has(cls));
+      if (!inAll) {
+        // This class differs - find its property
+        for (const [prefix, property] of Object.entries(propertyMap)) {
+          if (cls.startsWith(prefix)) {
+            return property;
+          }
+        }
+      }
+    }
+
+    return 'unknown';
+  }
+
+  /**
+   * Find patterns that could be extracted as reusable utilities
+   */
+  private findExtractablePatterns(fileClassData: Map<string, FileClassData>): ExtractablePattern[] {
+    const patternUsage = new Map<string, { files: Set<string>; count: number }>();
+
+    // Focus on specific extractable patterns (focus rings, interactive states, etc.)
+    const extractablePatternGroups = [
+      {
+        regex: /focus(-visible)?:[^\s]+(\s+focus(-visible)?:[^\s]+)*/g,
+        category: 'focus' as const,
+        namePrefix: 'focus-ring',
+      },
+      {
+        regex: /ring-\d+\s+ring-[^\s]+(\s+ring-[^\s]+)*/g,
+        category: 'focus' as const,
+        namePrefix: 'ring-style',
+      },
+      {
+        regex: /flex\s+items-[^\s]+\s+justify-[^\s]+/g,
+        category: 'layout' as const,
+        namePrefix: 'flex-center',
+      },
+      {
+        regex: /hover:[^\s]+(\s+hover:[^\s]+)*/g,
+        category: 'interactive' as const,
+        namePrefix: 'hover-effect',
+      },
+    ];
+
+    for (const [filePath, data] of fileClassData) {
+      const fullContent = data.classStrings.join(' ');
+
+      for (const { regex } of extractablePatternGroups) {
+        const matches = fullContent.match(regex) || [];
+        for (const match of matches) {
+          const normalized = match.trim();
+          if (normalized.split(/\s+/).length >= 2) {
+            const existing = patternUsage.get(normalized);
+            if (existing) {
+              existing.files.add(filePath);
+              existing.count++;
+            } else {
+              patternUsage.set(normalized, {
+                files: new Set([filePath]),
+                count: 1,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Filter to patterns used multiple times
+    const extractable: ExtractablePattern[] = [];
+    for (const [pattern, data] of patternUsage) {
+      if (data.count >= 2) {
+        extractable.push({
+          pattern,
+          usageCount: data.count,
+          usedInFiles: Array.from(data.files),
+          suggestedName: this.suggestPatternName(pattern),
+          category: this.categorizePattern(pattern),
+        });
+      }
+    }
+
+    // Sort by usage count descending
+    return extractable.sort((a, b) => b.usageCount - a.usageCount);
+  }
+
+  /**
+   * Suggest a name for an extractable pattern
+   */
+  private suggestPatternName(pattern: string): string {
+    if (pattern.includes('focus-visible:ring') || pattern.includes('focus:ring')) {
+      return 'focus-ring';
+    }
+    if (pattern.includes('ring-') && pattern.includes('ring-offset')) {
+      return 'ring-outline';
+    }
+    if (pattern.includes('flex') && pattern.includes('items-center')) {
+      return 'flex-center';
+    }
+    if (pattern.includes('hover:')) {
+      return 'hover-state';
+    }
+    return 'utility-pattern';
+  }
+
+  /**
+   * Categorize an extractable pattern
+   */
+  private categorizePattern(pattern: string): 'focus' | 'layout' | 'interactive' | 'typography' | 'other' {
+    if (pattern.includes('focus') || pattern.includes('ring')) {
+      return 'focus';
+    }
+    if (pattern.includes('flex') || pattern.includes('grid') || pattern.includes('items-') || pattern.includes('justify-')) {
+      return 'layout';
+    }
+    if (pattern.includes('hover:') || pattern.includes('active:') || pattern.includes('disabled:')) {
+      return 'interactive';
+    }
+    if (pattern.includes('text-') || pattern.includes('font-') || pattern.includes('leading-')) {
+      return 'typography';
+    }
+    return 'other';
+  }
+}
+
+/**
+ * Internal interface for file class data
+ */
+interface FileClassData {
+  filePath: string;
+  classStrings: string[];
+  cvaVariants: CvaVariant[];
+  componentName: string;
+}
+
+/**
+ * Internal interface for CVA variant data
+ */
+interface CvaVariant {
+  name: string;
+  type: string;
+  key: string;
+  classes: string;
 }

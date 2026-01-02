@@ -759,6 +759,188 @@ export let Button = forwardRef<
     });
   });
 
+  describe('cross-component class pattern analysis', () => {
+    it('detects duplicated class patterns across components', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue([
+        '/test/project/src/components/Button.tsx',
+        '/test/project/src/components/Input.tsx',
+        '/test/project/src/components/Card.tsx',
+      ]);
+
+      // Real pattern from headlessui - identical focus ring classes in Button and Input
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        const pathStr = String(path);
+        if (pathStr.includes('Button.tsx')) {
+          return `
+export const Button = ({ className, ...props }) => (
+  <button
+    className={cn(
+      'focus:outline-hidden ui-focus-visible:ring-2 ui-focus-visible:ring-offset-2 flex items-center rounded-md border border-gray-300 bg-white px-2 py-1',
+      className
+    )}
+    {...props}
+  />
+)`;
+        }
+        if (pathStr.includes('Input.tsx')) {
+          return `
+export const Input = ({ className, ...props }) => (
+  <input
+    className={cn(
+      'focus:outline-hidden ui-focus-visible:ring-2 ui-focus-visible:ring-offset-2 flex items-center rounded-md border border-gray-300 bg-white px-2 py-1',
+      className
+    )}
+    {...props}
+  />
+)`;
+        }
+        if (pathStr.includes('Card.tsx')) {
+          return `
+export const Card = ({ className, ...props }) => (
+  <div
+    className={cn(
+      'rounded-lg border bg-white p-4 shadow-sm',
+      className
+    )}
+    {...props}
+  />
+)`;
+        }
+        return '';
+      });
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        detectClassPatterns: true,
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect duplicated class patterns
+      expect(result.classPatterns).toBeDefined();
+      expect(result.classPatterns!.duplicates.length).toBeGreaterThan(0);
+
+      // Should identify the repeated focus ring pattern
+      const focusPattern = result.classPatterns!.duplicates.find(
+        p => p.pattern.includes('focus:outline-hidden') || p.pattern.includes('ui-focus-visible:ring-2')
+      );
+      expect(focusPattern).toBeDefined();
+      expect(focusPattern!.files.length).toBe(2);
+      expect(focusPattern!.files).toContain('src/components/Button.tsx');
+      expect(focusPattern!.files).toContain('src/components/Input.tsx');
+    });
+
+    it('detects inconsistent variant values across similar components', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue([
+        '/test/project/registry/default/ui/button.tsx',
+        '/test/project/registry/new-york/ui/button.tsx',
+      ]);
+
+      // Real shadcn-ui drift pattern - different button heights across registries
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        const pathStr = String(path);
+        if (pathStr.includes('/default/')) {
+          return `
+const buttonVariants = cva(
+  "inline-flex items-center justify-center",
+  {
+    variants: {
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+      },
+    },
+  }
+)`;
+        }
+        if (pathStr.includes('/new-york/')) {
+          return `
+const buttonVariants = cva(
+  "inline-flex items-center justify-center",
+  {
+    variants: {
+      size: {
+        default: "h-9 px-4 py-2",
+        sm: "h-8 rounded-md px-3",
+        lg: "h-10 rounded-md px-8",
+      },
+    },
+  }
+)`;
+        }
+        return '';
+      });
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        detectClassPatterns: true,
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect variant inconsistencies
+      expect(result.classPatterns).toBeDefined();
+
+      // Debug: log the class patterns
+      // console.log('classPatterns:', JSON.stringify(result.classPatterns, null, 2));
+
+      expect(result.classPatterns!.variantInconsistencies.length).toBeGreaterThan(0);
+
+      // Should identify the height drift
+      const heightDrift = result.classPatterns!.variantInconsistencies.find(
+        i => i.property === 'height' || i.classes.some(c => c.includes('h-'))
+      );
+      expect(heightDrift).toBeDefined();
+    });
+
+    it('identifies extractable token patterns from repeated classes', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(glob.glob).mockResolvedValue([
+        '/test/project/src/components/Button.tsx',
+        '/test/project/src/components/Link.tsx',
+        '/test/project/src/components/Badge.tsx',
+      ]);
+
+      // Multiple components using the same focus ring pattern
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        const pathStr = String(path);
+        const focusClasses = 'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+        if (pathStr.includes('Button.tsx')) {
+          return `<button className="bg-primary ${focusClasses}">Click</button>`;
+        }
+        if (pathStr.includes('Link.tsx')) {
+          return `<a className="text-primary ${focusClasses}">Link</a>`;
+        }
+        if (pathStr.includes('Badge.tsx')) {
+          return `<span className="bg-secondary ${focusClasses}">Badge</span>`;
+        }
+        return '';
+      });
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+        detectClassPatterns: true,
+      });
+
+      const result = await scanner.scan();
+
+      // Should identify patterns that could be extracted as tokens/utilities
+      expect(result.classPatterns).toBeDefined();
+      expect(result.classPatterns!.extractablePatterns.length).toBeGreaterThan(0);
+
+      // Should suggest the focus ring pattern as extractable
+      const focusExtractable = result.classPatterns!.extractablePatterns.find(
+        p => p.pattern.includes('focus-visible:ring')
+      );
+      expect(focusExtractable).toBeDefined();
+      expect(focusExtractable!.usageCount).toBeGreaterThanOrEqual(3);
+      expect(focusExtractable!.suggestedName).toBeDefined();
+    });
+  });
+
   describe('scan orchestration', () => {
     it('combines theme tokens and arbitrary value detection', async () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
