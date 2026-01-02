@@ -1843,6 +1843,533 @@ export function extractDynamicDataAttributes(content: string): DynamicDataAttrib
 }
 
 // ============================================================================
+// Arbitrary Child/Sibling Selector Pattern Extraction
+// ============================================================================
+
+/**
+ * Represents an arbitrary child/sibling selector pattern in Tailwind
+ * Used for detecting patterns like:
+ *   - [&_svg]:pointer-events-none
+ *   - [&_svg:not([class*='size-'])]:size-4
+ *   - [&>*]:focus-visible:z-10
+ *   - [&_[cmdk-group-heading]]:text-muted-foreground
+ */
+export interface ArbitraryChildSelector {
+  /** The full selector expression (e.g., "&_svg", "&>*", "&_[cmdk-item]") */
+  selector: string;
+  /** The target element if extractable (e.g., "svg", "p", "tr") */
+  targetElement?: string;
+  /** The combinator used ('_' for descendant, '>' for direct child, '+' for sibling) */
+  combinator: '_' | '>' | '+' | '~' | 'none';
+  /** Whether this selector contains a :not() negation */
+  hasNegation: boolean;
+  /** Whether the target is an attribute selector like [cmdk-item] */
+  isAttributeSelector: boolean;
+  /** The utility class applied */
+  utility: string;
+  /** Line number where pattern was found */
+  line: number;
+}
+
+/**
+ * Extract arbitrary child/sibling selector patterns from content
+ * Handles patterns like:
+ *   - [&_svg]:pointer-events-none
+ *   - [&_svg:not([class*='size-'])]:size-4
+ *   - [&>*]:focus-visible:z-10
+ *   - [&_[attr]]:utility
+ *   - [&_tr:last-child]:border-0
+ *   - *:data-[slot=value]:utility
+ */
+export function extractArbitraryChildSelectors(content: string): ArbitraryChildSelector[] {
+  const results: ArbitraryChildSelector[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Pattern 1: Simple [&_element]:utility patterns (no nested brackets)
+  // Matches: [&_svg], [&>*], [&_tr:last-child]
+  const simpleChildRegex = /\[&([_>+~])([a-zA-Z*][\w*:-]*)\](?::[\w-]+)*:([a-zA-Z][\w-/.]*)/g;
+
+  // Pattern 2: [&_[attr]]:utility - attribute selector as child target
+  const arbitraryAttrChildRegex = /\[&_(\[[^\]]+\])\](?::[\w-]+)*:([a-zA-Z][\w-/.]*)/g;
+
+  // Pattern 3: *:data-[...]:utility - wildcard child with data attribute
+  const wildcardChildRegex = /\*:data-\[([^\]]+)\]:([a-zA-Z][\w-/.]*)/g;
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+
+    // Extract complex nested patterns like [&_svg:not([class*='size-'])]:size-4
+    // Use manual parsing for patterns with nested brackets
+    const complexMatches = extractNestedBracketPatterns(line, lineNum + 1);
+    for (const match of complexMatches) {
+      const key = `${match.selector}:${match.utility}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(match);
+      }
+    }
+
+    // Extract Pattern 1: Simple [&_element]:utility
+    let match;
+    while ((match = simpleChildRegex.exec(line)) !== null) {
+      const combinator = match[1] as '_' | '>' | '+' | '~';
+      const selectorPart = match[2]!;
+      const utility = match[3]!;
+      const fullSelector = `&${combinator}${selectorPart}`;
+
+      const key = `${fullSelector}:${utility}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      // Parse the selector to extract element and check for negation
+      const hasNegation = selectorPart.includes(':not(');
+      const isAttributeSelector = selectorPart.startsWith('[');
+
+      // Extract the target element name (before any pseudo-classes)
+      let targetElement: string | undefined;
+      if (!isAttributeSelector) {
+        const elementMatch = selectorPart.match(/^([a-zA-Z*]+)/);
+        if (elementMatch) {
+          targetElement = elementMatch[1];
+        }
+      }
+
+      results.push({
+        selector: fullSelector,
+        targetElement,
+        combinator,
+        hasNegation,
+        isAttributeSelector,
+        utility,
+        line: lineNum + 1,
+      });
+    }
+    simpleChildRegex.lastIndex = 0;
+
+    // Extract Pattern 2: [&_[attr]]:utility
+    while ((match = arbitraryAttrChildRegex.exec(line)) !== null) {
+      const attrSelector = match[1]!;
+      const utility = match[2]!;
+      const fullSelector = `&_${attrSelector}`;
+
+      const key = `${fullSelector}:${utility}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        selector: fullSelector,
+        combinator: '_',
+        hasNegation: false,
+        isAttributeSelector: true,
+        utility,
+        line: lineNum + 1,
+      });
+    }
+    arbitraryAttrChildRegex.lastIndex = 0;
+
+    // Extract Pattern 3: *:data-[...]:utility
+    while ((match = wildcardChildRegex.exec(line)) !== null) {
+      const dataAttr = match[1]!;
+      const utility = match[2]!;
+      const fullSelector = `*:data-[${dataAttr}]`;
+
+      const key = `${fullSelector}:${utility}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        selector: fullSelector,
+        combinator: 'none',
+        hasNegation: false,
+        isAttributeSelector: true,
+        utility,
+        line: lineNum + 1,
+      });
+    }
+    wildcardChildRegex.lastIndex = 0;
+  }
+
+  return results;
+}
+
+/**
+ * Extract patterns with nested brackets using manual parsing
+ * Handles: [&_svg:not([class*='size-'])]:size-4
+ */
+function extractNestedBracketPatterns(line: string, lineNum: number): ArbitraryChildSelector[] {
+  const results: ArbitraryChildSelector[] = [];
+
+  // Find all occurrences of [& which start arbitrary child selectors
+  let searchStart = 0;
+  while (true) {
+    const startIdx = line.indexOf('[&', searchStart);
+    if (startIdx === -1) break;
+
+    // Get the combinator (next character after [&)
+    const combinatorChar = line[startIdx + 2];
+    if (!combinatorChar || !['_', '>', '+', '~'].includes(combinatorChar)) {
+      searchStart = startIdx + 1;
+      continue;
+    }
+    const combinator = combinatorChar as '_' | '>' | '+' | '~';
+
+    // Find the matching closing bracket, handling nesting
+    let depth = 1;
+    let i = startIdx + 1;
+    while (i < line.length && depth > 0) {
+      if (line[i] === '[') depth++;
+      else if (line[i] === ']') depth--;
+      i++;
+    }
+
+    if (depth !== 0) {
+      searchStart = startIdx + 1;
+      continue;
+    }
+
+    const closingIdx = i - 1;
+    const selectorPart = line.slice(startIdx + 3, closingIdx); // Skip [& and combinator
+
+    // Check if this is followed by :utility
+    // Look for :utility pattern (may have additional variant prefixes like :focus-visible)
+    const afterBracket = line.slice(closingIdx + 1);
+    const utilityMatch = afterBracket.match(/^(?::[\w-]+)*:([a-zA-Z][\w-/.]*)/);
+
+    if (utilityMatch) {
+      const utility = utilityMatch[1]!;
+      const fullSelector = `&${combinator}${selectorPart}`;
+
+      // Check for :not() patterns
+      const hasNegation = selectorPart.includes(':not(');
+      const isAttributeSelector = selectorPart.startsWith('[');
+
+      // Extract target element
+      let targetElement: string | undefined;
+      if (!isAttributeSelector) {
+        const elementMatch = selectorPart.match(/^([a-zA-Z*]+)/);
+        if (elementMatch) {
+          targetElement = elementMatch[1];
+        }
+      }
+
+      results.push({
+        selector: fullSelector,
+        targetElement,
+        combinator,
+        hasNegation,
+        isAttributeSelector,
+        utility,
+        line: lineNum,
+      });
+    }
+
+    searchStart = closingIdx + 1;
+  }
+
+  return results;
+}
+
+// ============================================================================
+// Arbitrary Parent Class Selector Pattern Extraction
+// ============================================================================
+
+/**
+ * Represents an arbitrary parent class selector pattern
+ * Used for detecting patterns like:
+ *   - [.border-b]:pb-6
+ *   - [.border-t]:pt-6
+ */
+export interface ParentClassSelector {
+  /** The parent class name (without the dot) */
+  parentClass: string;
+  /** The utility class applied when parent has this class */
+  utility: string;
+  /** Line number where pattern was found */
+  line: number;
+}
+
+/**
+ * Extract arbitrary parent class selector patterns from content
+ * Handles patterns like:
+ *   - [.border-b]:pb-6
+ *   - [.border-t]:pt-6
+ */
+export function extractParentClassSelectors(content: string): ParentClassSelector[] {
+  const results: ParentClassSelector[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Match: [.class-name]:utility
+  const parentClassRegex = /\[\.([a-zA-Z][\w-]*)\]:([a-zA-Z][\w-/.]*)/g;
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+    let match;
+
+    while ((match = parentClassRegex.exec(line)) !== null) {
+      const parentClass = match[1]!;
+      const utility = match[2]!;
+
+      const key = `${parentClass}:${utility}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        parentClass,
+        utility,
+        line: lineNum + 1,
+      });
+    }
+
+    parentClassRegex.lastIndex = 0;
+  }
+
+  return results;
+}
+
+// ============================================================================
+// ARIA State Variant Pattern Extraction
+// ============================================================================
+
+/**
+ * Represents an ARIA state variant pattern
+ * Used for detecting patterns like:
+ *   - aria-invalid:ring-destructive/20
+ *   - has-aria-invalid:border-destructive
+ *   - aria-expanded:rotate-180
+ */
+export interface AriaStatePattern {
+  /** The ARIA state name (e.g., "invalid", "expanded", "selected") */
+  state: string;
+  /** The type of pattern (aria, has-aria, group-aria, etc.) */
+  type: 'aria' | 'has-aria' | 'group-aria' | 'peer-aria';
+  /** Whether this has a responsive/state prefix like dark: or focus: */
+  prefix?: string;
+  /** The utility class applied */
+  utility: string;
+  /** Line number where pattern was found */
+  line: number;
+}
+
+/**
+ * Known ARIA states that Tailwind supports as variants
+ */
+const ARIA_STATES = [
+  'checked',
+  'disabled',
+  'expanded',
+  'hidden',
+  'pressed',
+  'readonly',
+  'required',
+  'selected',
+  'invalid',
+  'busy',
+  'grabbed',
+  'current',
+  'live',
+  'atomic',
+  'relevant',
+  'sort',
+  'haspopup',
+  'multiselectable',
+  'orientation',
+];
+
+/**
+ * Extract ARIA state variant patterns from content
+ * Handles patterns like:
+ *   - aria-invalid:ring-destructive/20
+ *   - has-aria-invalid:border-destructive
+ *   - dark:aria-invalid:ring-destructive/40
+ *   - group-aria-expanded:rotate-180
+ */
+export function extractAriaStatePatterns(content: string): AriaStatePattern[] {
+  const results: AriaStatePattern[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Build regex for all ARIA states
+  const statesPattern = ARIA_STATES.join('|');
+
+  // Match: [prefix:]aria-state:utility or [prefix:]has-aria-state:utility
+  // Also match group-aria-* and peer-aria-*
+  const ariaRegex = new RegExp(
+    `(?:([a-z]+):)?((?:has-|group-|peer-)?aria)-(${statesPattern})(?:=[^:]+)?:([a-zA-Z][\\w-/.]*)`,
+    'gi'
+  );
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+    let match;
+
+    while ((match = ariaRegex.exec(line)) !== null) {
+      const prefix = match[1];
+      const ariaPrefix = match[2]!.toLowerCase();
+      const state = match[3]!.toLowerCase();
+      const utility = match[4]!;
+
+      // Determine type
+      let type: AriaStatePattern['type'] = 'aria';
+      if (ariaPrefix === 'has-aria') {
+        type = 'has-aria';
+      } else if (ariaPrefix === 'group-aria') {
+        type = 'group-aria';
+      } else if (ariaPrefix === 'peer-aria') {
+        type = 'peer-aria';
+      }
+
+      const key = `${type}:${state}:${utility}:${lineNum}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        state,
+        type,
+        prefix,
+        utility,
+        line: lineNum + 1,
+      });
+    }
+
+    ariaRegex.lastIndex = 0;
+  }
+
+  return results;
+}
+
+// ============================================================================
+// Wildcard Selector Pattern Extraction
+// ============================================================================
+
+/**
+ * Represents a wildcard selector pattern in Tailwind
+ * Used for detecting patterns like:
+ *   - **:data-[slot=...]:utility
+ *   - *:data-[slot=...]:utility
+ *   - data-[variant]:*:[svg]:!utility
+ */
+export interface WildcardPattern {
+  /** The type of wildcard (* for direct children, ** for all descendants) */
+  wildcardType: '*' | '**';
+  /** The data attribute being selected (if present) */
+  attribute?: string;
+  /** The attribute value (if present) */
+  value?: string;
+  /** Whether the utility has the !important modifier */
+  hasImportant: boolean;
+  /** The utility class applied */
+  utility: string;
+  /** The full pattern string */
+  fullPattern: string;
+  /** Line number where pattern was found */
+  line: number;
+}
+
+/**
+ * Extract wildcard selector patterns from content
+ * Handles patterns like:
+ *   - **:data-[slot=...]:utility
+ *   - *:data-[slot=...]:utility
+ *   - data-[variant]:*:[svg]:!utility
+ */
+export function extractWildcardPatterns(content: string): WildcardPattern[] {
+  const results: WildcardPattern[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Pattern 1: **:data-[attr=value]:utility
+  const doubleStarRegex = /(\*\*):data-\[([a-zA-Z][\w-]*)(?:=([^\]]+))?\]:(!?[a-zA-Z][\w-/.]*)/g;
+
+  // Pattern 2: *:data-[attr=value]:utility
+  const singleStarRegex = /(?<!\*)\*:data-\[([a-zA-Z][\w-]*)(?:=([^\]]+))?\]:(!?[a-zA-Z][\w-/.]*)/g;
+
+  // Pattern 3: data-[...]:*:[...]:!?utility (wildcard in the middle)
+  const middleWildcardRegex = /data-\[[^\]]+\]:\*:\[[^\]]+\]:(!?[a-zA-Z][\w-/.]*)/g;
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+
+    // Extract Pattern 1: **:data-[...]:utility
+    let match;
+    while ((match = doubleStarRegex.exec(line)) !== null) {
+      const wildcardType = '**' as const;
+      const attribute = match[2];
+      const value = match[3];
+      const utilityRaw = match[4]!;
+      const hasImportant = utilityRaw.startsWith('!');
+      const utility = hasImportant ? utilityRaw.slice(1) : utilityRaw;
+      const fullPattern = match[0];
+
+      const key = `${fullPattern}:${lineNum}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        wildcardType,
+        attribute,
+        value,
+        hasImportant,
+        utility,
+        fullPattern,
+        line: lineNum + 1,
+      });
+    }
+    doubleStarRegex.lastIndex = 0;
+
+    // Extract Pattern 2: *:data-[...]:utility
+    while ((match = singleStarRegex.exec(line)) !== null) {
+      const wildcardType = '*' as const;
+      const attribute = match[1];
+      const value = match[2];
+      const utilityRaw = match[3]!;
+      const hasImportant = utilityRaw.startsWith('!');
+      const utility = hasImportant ? utilityRaw.slice(1) : utilityRaw;
+      const fullPattern = match[0];
+
+      const key = `${fullPattern}:${lineNum}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        wildcardType,
+        attribute,
+        value,
+        hasImportant,
+        utility,
+        fullPattern,
+        line: lineNum + 1,
+      });
+    }
+    singleStarRegex.lastIndex = 0;
+
+    // Extract Pattern 3: data-[...]:*:[...]:!utility
+    while ((match = middleWildcardRegex.exec(line)) !== null) {
+      const utilityRaw = match[1]!;
+      const hasImportant = utilityRaw.startsWith('!');
+      const utility = hasImportant ? utilityRaw.slice(1) : utilityRaw;
+      const fullPattern = match[0];
+
+      const key = `${fullPattern}:${lineNum}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        wildcardType: '*',
+        hasImportant,
+        utility,
+        fullPattern,
+        line: lineNum + 1,
+      });
+    }
+    middleWildcardRegex.lastIndex = 0;
+  }
+
+  return results;
+}
+
+// ============================================================================
 // Render Prop className Pattern Extraction (HeadlessUI)
 // ============================================================================
 

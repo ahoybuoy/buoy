@@ -15,6 +15,10 @@ import {
   extractShortFormDataPatterns,
   extractDynamicDataAttributes,
   extractRenderPropClassNames,
+  extractArbitraryChildSelectors,
+  extractParentClassSelectors,
+  extractAriaStatePatterns,
+  extractWildcardPatterns,
 } from './class-pattern.js';
 
 describe('extractClassPatterns', () => {
@@ -1466,6 +1470,199 @@ describe('extended BEM parsing', () => {
       expect(result.some((r: { fullClass: string; modifier?: string }) =>
         r.fullClass === 'cn-badge-color-destructive' && r.modifier === 'color-destructive'
       )).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// Arbitrary Child/Sibling Selector Pattern Tests
+// ============================================================================
+
+describe('arbitrary child/sibling selector patterns', () => {
+  describe('extractArbitraryChildSelectors', () => {
+    it('extracts [&_element]:utility patterns', () => {
+      const content = `
+        className="[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_p]:leading-relaxed"
+      `;
+      const result = extractArbitraryChildSelectors(content);
+
+      expect(result.some(r => r.selector === '&_svg' && r.targetElement === 'svg')).toBe(true);
+      expect(result.some(r => r.selector === '&_p' && r.targetElement === 'p')).toBe(true);
+    });
+
+    it('extracts [&_element:not(...)]:utility patterns', () => {
+      const content = `
+        className="[&_svg:not([class*='size-'])]:size-4"
+      `;
+      const result = extractArbitraryChildSelectors(content);
+
+      expect(result.some(r =>
+        r.selector === "&_svg:not([class*='size-'])" &&
+        r.targetElement === 'svg' &&
+        r.hasNegation
+      )).toBe(true);
+    });
+
+    it('extracts [&>element]:utility direct child patterns', () => {
+      const content = `
+        className="[&>*]:focus-visible:z-10 [&>*]:focus-visible:relative"
+      `;
+      const result = extractArbitraryChildSelectors(content);
+
+      expect(result.some(r => r.selector === '&>*' && r.combinator === '>')).toBe(true);
+    });
+
+    it('extracts [&_[attr]]:utility attribute selector patterns', () => {
+      const content = `
+        className="[&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-item]]:px-2"
+      `;
+      const result = extractArbitraryChildSelectors(content);
+
+      expect(result.some(r => r.selector === '&_[cmdk-group-heading]' && r.isAttributeSelector)).toBe(true);
+      expect(result.some(r => r.selector === '&_[cmdk-item]')).toBe(true);
+    });
+
+    it('extracts [&_tr]:utility patterns for table elements', () => {
+      const content = `
+        className="[&_tr]:border-b [&_tr:last-child]:border-0"
+      `;
+      const result = extractArbitraryChildSelectors(content);
+
+      expect(result.some(r => r.selector === '&_tr' && r.targetElement === 'tr')).toBe(true);
+      expect(result.some(r => r.selector === '&_tr:last-child')).toBe(true);
+    });
+
+    it('extracts nested data-slot patterns', () => {
+      const content = `
+        className="*:data-[slot=select-value]:line-clamp-1 *:data-[slot=avatar]:rounded-full"
+      `;
+      const result = extractArbitraryChildSelectors(content);
+
+      expect(result.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+// ============================================================================
+// Arbitrary Parent Class Selector Pattern Tests
+// ============================================================================
+
+describe('arbitrary parent class selector patterns', () => {
+  describe('extractParentClassSelectors', () => {
+    it('extracts [.parent-class]:utility patterns', () => {
+      const content = `
+        className="[.border-b]:pb-6 [.border-t]:pt-6"
+      `;
+      const result = extractParentClassSelectors(content);
+
+      expect(result.some(r => r.parentClass === 'border-b' && r.utility === 'pb-6')).toBe(true);
+      expect(result.some(r => r.parentClass === 'border-t' && r.utility === 'pt-6')).toBe(true);
+    });
+
+    it('extracts complex parent patterns', () => {
+      const content = `
+        className="[.border-b]:pb-3 group-has-[>input]/input-group:pt-2.5"
+      `;
+      const result = extractParentClassSelectors(content);
+
+      expect(result.some(r => r.parentClass === 'border-b')).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// ARIA State Variant Pattern Tests
+// ============================================================================
+
+describe('ARIA state variant patterns', () => {
+  describe('extractAriaStatePatterns', () => {
+    it('extracts aria-*:utility patterns', () => {
+      const content = `
+        className="aria-invalid:ring-destructive/20 aria-invalid:border-destructive"
+      `;
+      const result = extractAriaStatePatterns(content);
+
+      expect(result.some(r => r.state === 'invalid' && r.type === 'aria')).toBe(true);
+    });
+
+    it('extracts has-aria-*:utility patterns', () => {
+      const content = `
+        className="has-aria-invalid:ring-destructive/20 has-aria-invalid:border-destructive"
+      `;
+      const result = extractAriaStatePatterns(content);
+
+      expect(result.some(r => r.state === 'invalid' && r.type === 'has-aria')).toBe(true);
+    });
+
+    it('extracts dark:aria-*:utility patterns', () => {
+      const content = `
+        className="dark:aria-invalid:ring-destructive/40 dark:has-aria-invalid:ring-destructive/40"
+      `;
+      const result = extractAriaStatePatterns(content);
+
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('extracts aria-expanded patterns', () => {
+      const content = `
+        className="aria-expanded:rotate-180 aria-expanded:opacity-100"
+      `;
+      const result = extractAriaStatePatterns(content);
+
+      expect(result.some(r => r.state === 'expanded')).toBe(true);
+    });
+
+    it('extracts aria-selected patterns', () => {
+      const content = `
+        className="aria-selected:bg-primary aria-selected:text-primary-foreground"
+      `;
+      const result = extractAriaStatePatterns(content);
+
+      expect(result.some(r => r.state === 'selected')).toBe(true);
+    });
+
+    it('extracts aria-disabled patterns', () => {
+      const content = `
+        className="aria-disabled:opacity-50 aria-disabled:pointer-events-none"
+      `;
+      const result = extractAriaStatePatterns(content);
+
+      expect(result.some(r => r.state === 'disabled')).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// Wildcard Selector Pattern Tests
+// ============================================================================
+
+describe('wildcard selector patterns', () => {
+  describe('extractWildcardPatterns', () => {
+    it('extracts **:data-[*]:utility patterns', () => {
+      const content = `
+        className="**:data-[slot=command-input-wrapper]:h-12"
+      `;
+      const result = extractWildcardPatterns(content);
+
+      expect(result.some(r => r.wildcardType === '**' && r.attribute === 'slot')).toBe(true);
+    });
+
+    it('extracts *:[selector]:utility patterns', () => {
+      const content = `
+        className="*:data-[slot=select-value]:flex *:data-[slot=avatar]:rounded-full"
+      `;
+      const result = extractWildcardPatterns(content);
+
+      expect(result.some(r => r.wildcardType === '*')).toBe(true);
+    });
+
+    it('extracts data-[variant]:*:[svg]:!text-destructive patterns', () => {
+      const content = `
+        className="data-[variant=destructive]:*:[svg]:!text-destructive"
+      `;
+      const result = extractWildcardPatterns(content);
+
+      expect(result.some(r => r.hasImportant === true)).toBe(true);
     });
   });
 });
