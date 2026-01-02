@@ -561,10 +561,12 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
   private extractStoryVariants(sourceFile: ts.SourceFile): StoryVariant[] {
     const variants: StoryVariant[] = [];
     const templateBindings = new Map<string, string>(); // Template name -> Story export name
+    const storyNameOverrides = new Map<string, string>(); // export name -> storyName override
 
     const visit = (node: ts.Node) => {
       // CSF3: export const Primary: Story = { ... }
       // CSF3: export const Primary = { args: { ... } }
+      // CSF1: export const Primary = () => <Component />
       if (ts.isVariableStatement(node)) {
         const isExported = node.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword);
         if (!isExported) {
@@ -605,7 +607,20 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
         }
       }
 
-      // Look for story.args = { ... } or story.play = async () => { ... }
+      // Handle named re-exports: export { ButtonBasic as Basic } from 'source'
+      if (ts.isExportDeclaration(node)) {
+        if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+          for (const element of node.exportClause.elements) {
+            const exportName = element.name.getText(sourceFile);
+            // Use the exported name (alias) as the variant name
+            if (/^[A-Z]/.test(exportName)) {
+              variants.push({ name: exportName });
+            }
+          }
+        }
+      }
+
+      // Look for story.args = { ... }, story.play = async () => { ... }, or story.storyName = '...'
       if (ts.isExpressionStatement(node)) {
         const expr = node.expression;
         if (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
@@ -621,6 +636,10 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
               if (propName === 'args' && ts.isObjectLiteralExpression(expr.right)) {
                 existingVariant.args = this.parseArgsObject(expr.right, sourceFile);
               }
+              // Handle storyName override: Story.storyName = 'Custom Name'
+              if (propName === 'storyName' && ts.isStringLiteral(expr.right)) {
+                storyNameOverrides.set(storyName, expr.right.text);
+              }
             }
           }
         }
@@ -630,6 +649,15 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
     };
 
     ts.forEachChild(sourceFile, visit);
+
+    // Apply storyName overrides
+    for (const variant of variants) {
+      const override = storyNameOverrides.get(variant.name);
+      if (override) {
+        variant.name = override;
+      }
+    }
+
     return variants;
   }
 
@@ -691,9 +719,13 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
       return variant;
     }
 
-    // Arrow function or function expression (likely a CSF2 template)
+    // Arrow function or function expression - could be CSF1 story or CSF2 template
+    // CSF1 stories are exported directly, templates are typically not exported
+    // Since we only get here for exported functions, treat them as CSF1 stories
     if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
-      return null; // Templates are not stories themselves
+      // This is a CSF1 arrow function story: export const Story = () => <Component />
+      // or a CSF2 story with globals access: export const Story: StoryFn = (args, { globals }) => ...
+      return variant;
     }
 
     return variant;

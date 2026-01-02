@@ -19,6 +19,11 @@ import {
   STORY_WITH_LOADERS,
   STORY_WITH_BEFORE_EACH,
   STORYBOOK_INDEX_JSON_V5,
+  CSF1_ARROW_FUNCTION_STORY,
+  STORY_WITH_STORYNAME,
+  STORY_WITH_REEXPORTS,
+  STORY_WITH_MIXED_PATTERNS,
+  STORY_WITH_GLOBALS,
 } from '../__tests__/fixtures/storybook-stories.js';
 import { StorybookScanner, StoryFileScanner } from './extractor.js';
 
@@ -583,6 +588,159 @@ describe('StoryFileScanner', () => {
       // v5 includes componentPath which should be extracted
       expect(buttonComponent?.metadata?.tags).toContain(
         'storybook-componentPath:./src/components/Button.tsx'
+      );
+    });
+  });
+
+  describe('CSF1 arrow function story detection', () => {
+    it('detects arrow function stories as variants', async () => {
+      vol.fromJSON({
+        '/project/src/Alert.stories.tsx': CSF1_ARROW_FUNCTION_STORY,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.errors).toHaveLength(0);
+      const alertStories = result.items.find(c => c.name === 'Alert');
+      expect(alertStories).toBeDefined();
+      // Arrow function stories should be detected as variants
+      expect(alertStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Success' })
+      );
+      expect(alertStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Warning' })
+      );
+      expect(alertStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Error' })
+      );
+    });
+  });
+
+  describe('storyName override detection', () => {
+    it('extracts storyName overrides from CSF2 patterns', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': STORY_WITH_STORYNAME,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      expect(buttonStories).toBeDefined();
+      // Should use the storyName override as the variant name
+      expect(buttonStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Default' })
+      );
+      expect(buttonStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Interactive' })
+      );
+    });
+
+    it('detects play function assigned after declaration', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': STORY_WITH_STORYNAME,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      const interactiveVariant = buttonStories?.variants.find(v => v.name === 'Interactive');
+      expect(interactiveVariant?.props?.hasPlayFunction).toBe(true);
+    });
+  });
+
+  describe('re-export story detection', () => {
+    it('detects re-exported stories as variants', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': STORY_WITH_REEXPORTS,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.errors).toHaveLength(0);
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      expect(buttonStories).toBeDefined();
+      // Re-exported stories should be detected as variants
+      expect(buttonStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Basic' })
+      );
+      expect(buttonStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Icon' })
+      );
+      expect(buttonStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Loading' })
+      );
+    });
+  });
+
+  describe('mixed CSF patterns detection', () => {
+    it('detects all story types in mixed pattern files', async () => {
+      vol.fromJSON({
+        '/project/src/Input.stories.tsx': STORY_WITH_MIXED_PATTERNS,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const inputStories = result.items.find(c => c.name === 'Input');
+      expect(inputStories).toBeDefined();
+      // Should detect all three types: CSF3 object, CSF2 bind, and CSF1 arrow
+      expect(inputStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Default' })
+      );
+      expect(inputStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'WithLabel' })
+      );
+      expect(inputStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Disabled' })
+      );
+    });
+  });
+
+  describe('globals access detection', () => {
+    it('detects stories with globals access', async () => {
+      vol.fromJSON({
+        '/project/src/LocaleDisplay.stories.tsx': STORY_WITH_GLOBALS,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const localeStories = result.items.find(c => c.name === 'LocaleDisplay');
+      expect(localeStories).toBeDefined();
+      // Stories accessing globals should be detected
+      expect(localeStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Locale Aware' })
+      );
+      expect(localeStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'WithTheme' })
       );
     });
   });

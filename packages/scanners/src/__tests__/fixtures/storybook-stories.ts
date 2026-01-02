@@ -538,3 +538,135 @@ export const STORYBOOK_INDEX_JSON_V5 = `{
     }
   }
 }`;
+
+// CSF1 arrow function stories (simplest format - function as story without object wrapper)
+export const CSF1_ARROW_FUNCTION_STORY = `
+import React from 'react';
+import { Alert } from './Alert';
+
+export default {
+  title: 'Feedback/Alert',
+  component: Alert,
+  parameters: {
+    chromatic: { disableSnapshot: true },
+  },
+};
+
+// Arrow function stories - the simplest form
+export const Success = () => <Alert type="success">Operation completed!</Alert>;
+export const Warning = () => <Alert type="warning">Please check your input.</Alert>;
+export const Error = () => <Alert type="error">Something went wrong.</Alert>;
+`;
+
+// Story with storyName override (CSF2/3 pattern)
+export const STORY_WITH_STORYNAME = `
+import type { Meta, StoryFn } from '@storybook/react';
+import { Button } from './Button';
+
+const meta: Meta<typeof Button> = {
+  title: 'Components/Button',
+  component: Button,
+};
+
+export default meta;
+
+const Template: StoryFn<typeof Button> = (args) => <Button {...args} />;
+
+// CSF2 style with storyName override
+export const DefaultButton = Template.bind({});
+DefaultButton.args = { label: 'Click me' };
+DefaultButton.storyName = 'Default';
+
+// Story with play function assigned after declaration
+export const InteractiveButton = Template.bind({});
+InteractiveButton.args = { label: 'Interact' };
+InteractiveButton.storyName = 'Interactive';
+InteractiveButton.play = async ({ canvasElement }) => {
+  console.log('Playing!');
+};
+`;
+
+// Story with re-exports (Chakra UI pattern)
+export const STORY_WITH_REEXPORTS = `
+import type { Meta } from "@storybook/react";
+import { Box } from "../src";
+
+export default {
+  title: "Components / Button",
+  decorators: [
+    (Story) => (
+      <Box p="10">
+        <Story />
+      </Box>
+    ),
+  ],
+} satisfies Meta;
+
+// Re-export stories from composition files
+export { ButtonBasic as Basic } from "compositions/examples/button-basic";
+export { ButtonWithIcons as Icon } from "compositions/examples/button-with-icons";
+export { ButtonWithLoading as Loading } from "compositions/examples/button-with-loading";
+`;
+
+// Story with mixed CSF2 and CSF3 patterns
+export const STORY_WITH_MIXED_PATTERNS = `
+import React from 'react';
+import type { Meta, StoryObj, ComponentStoryFn } from '@storybook/react';
+import { Input } from './Input';
+
+const meta: Meta<typeof Input> = {
+  title: 'Forms/Input',
+  component: Input,
+  argTypes: {
+    size: { control: 'select', options: ['sm', 'md', 'lg'] },
+  },
+};
+
+export default meta;
+type Story = StoryObj<typeof Input>;
+
+// CSF3 object story
+export const Default: Story = {
+  args: {
+    placeholder: 'Enter text...',
+  },
+};
+
+// CSF2 Template.bind() style
+const Template: ComponentStoryFn<typeof Input> = (args) => <Input {...args} />;
+
+export const WithLabel = Template.bind({});
+WithLabel.args = {
+  label: 'Username',
+  placeholder: 'Enter username',
+};
+WithLabel.parameters = {
+  docs: { description: { story: 'Input with a label above it.' } },
+};
+
+// CSF1 arrow function style
+export const Disabled = () => <Input disabled placeholder="Disabled input" />;
+`;
+
+// Story with globals access (CSF2 pattern)
+export const STORY_WITH_GLOBALS = `
+import type { Meta, StoryFn } from '@storybook/react';
+import { LocaleDisplay } from './LocaleDisplay';
+
+const meta: Meta<typeof LocaleDisplay> = {
+  title: 'Utilities/LocaleDisplay',
+  component: LocaleDisplay,
+};
+
+export default meta;
+
+// Story accessing globals (locale, theme, etc.)
+export const WithLocale: StoryFn = (args, { globals: { locale } }) => {
+  return <LocaleDisplay locale={locale} />;
+};
+WithLocale.storyName = 'Locale Aware';
+
+export const WithTheme: StoryFn = (args, { globals }) => {
+  return <LocaleDisplay theme={globals.theme} />;
+};
+`;
