@@ -568,16 +568,23 @@ export function extractDisplayName(code: string): string | null {
 /**
  * Extract the slot name from withContext or withProvider calls.
  * E.g., from `withContext<A, B>("div", "body")` extracts "body".
+ * Also handles: `withContext<A, B>(ArkDialog.Trigger, "trigger")`
  *
  * @param code The code string to search
  * @returns The slot name, or null if not found
  */
 export function extractSlotName(code: string): string | null {
   // Match patterns like: withContext<...>("div", "slotName") or withProvider<...>("div", "slotName")
-  const pattern =
+  const stringElementPattern =
     /with(?:Context|Provider)\s*<[^>]+>\s*\(\s*["'][^"']+["']\s*,\s*["']([^"']+)["']/;
-  const match = code.match(pattern);
-  return match?.[1] ?? null;
+  const match1 = code.match(stringElementPattern);
+  if (match1?.[1]) return match1[1];
+
+  // Also match: withContext<...>(ComponentName, "slotName") for Ark UI wrappers
+  const componentPattern =
+    /with(?:Context|Provider)\s*<[^>]+>\s*\(\s*[a-zA-Z_$][a-zA-Z0-9_$.]*\s*,\s*["']([^"']+)["']/;
+  const match2 = code.match(componentPattern);
+  return match2?.[1] ?? null;
 }
 
 /**
@@ -1091,4 +1098,302 @@ export function extractExportedConstants(code: string): ExportedConstant[] {
   }
 
   return constants;
+}
+
+/**
+ * Types of component patterns that can be classified.
+ */
+export type ComponentPatternType =
+  | "forwardRef"
+  | "memo"
+  | "chakra-recipe"
+  | "chakra-slot-recipe"
+  | "chakra-with-context"
+  | "chakra-root-provider"
+  | "chakra-styled"
+  | "mantine-factory"
+  | "mantine-polymorphic-factory"
+  | "cva"
+  | "styled-components"
+  | "unknown";
+
+/**
+ * Result of classifying a component's pattern.
+ */
+export interface ComponentPatternClassification {
+  /** The detected pattern type */
+  pattern: ComponentPatternType;
+  /** Whether this is a design system component (vs utility/helper) */
+  isDesignSystemComponent: boolean;
+  /** The recipe key if using Chakra recipe context */
+  recipeKey?: string;
+  /** The wrapped component name (for HOC patterns) */
+  wrappedComponent?: string;
+  /** The slot name (for slot-based components) */
+  slotName?: string;
+  /** The element type (for chakra styled factory) */
+  elementType?: string;
+  /** Ark UI components imported in this file */
+  arkUIImports?: string[];
+}
+
+/**
+ * Classify the component pattern used in a code snippet.
+ * Detects various design system patterns like Chakra recipes, Mantine factories, etc.
+ *
+ * @param code The code string to analyze
+ * @returns Classification result with pattern type and metadata
+ */
+export function classifyComponentPattern(code: string): ComponentPatternClassification {
+  const result: ComponentPatternClassification = {
+    pattern: "unknown",
+    isDesignSystemComponent: false,
+  };
+
+  // Extract Ark UI imports if present
+  const arkImports = extractArkUIImportNames(code);
+  if (arkImports.length > 0) {
+    result.arkUIImports = arkImports;
+  }
+
+  // Check for Chakra recipe context patterns (most specific first)
+  if (COMMON_REACT_PATTERNS.slotRecipeContext.test(code)) {
+    result.pattern = "chakra-slot-recipe";
+    result.isDesignSystemComponent = true;
+    result.recipeKey = extractRecipeKey(code) ?? undefined;
+    return result;
+  }
+
+  if (COMMON_REACT_PATTERNS.recipeContext.test(code)) {
+    result.pattern = "chakra-recipe";
+    result.isDesignSystemComponent = true;
+    result.recipeKey = extractRecipeKey(code) ?? undefined;
+    return result;
+  }
+
+  // Check for withRootProvider pattern
+  if (COMMON_REACT_PATTERNS.withRootProvider.test(code)) {
+    result.pattern = "chakra-root-provider";
+    result.isDesignSystemComponent = true;
+    result.wrappedComponent = extractRootProviderWrappedComponent(code) ?? undefined;
+    return result;
+  }
+
+  // Check for withContext pattern (with slot info)
+  if (COMMON_REACT_PATTERNS.withContext.test(code)) {
+    result.pattern = "chakra-with-context";
+    result.isDesignSystemComponent = true;
+    result.wrappedComponent = extractHOCWrappedType(code) ?? undefined;
+    result.slotName = extractSlotName(code) ?? undefined;
+    return result;
+  }
+
+  // Check for withProvider pattern
+  if (COMMON_REACT_PATTERNS.withProvider.test(code)) {
+    result.pattern = "chakra-with-context"; // Same pattern type as withContext
+    result.isDesignSystemComponent = true;
+    result.wrappedComponent = extractHOCWrappedType(code) ?? undefined;
+    result.slotName = extractSlotName(code) ?? undefined;
+    return result;
+  }
+
+  // Check for chakra styled factory
+  if (COMMON_REACT_PATTERNS.chakraStyled.test(code)) {
+    result.pattern = "chakra-styled";
+    result.isDesignSystemComponent = true;
+    result.elementType = extractChakraElementType(code) ?? undefined;
+    return result;
+  }
+
+  // Check for Mantine patterns
+  if (COMMON_REACT_PATTERNS.polymorphicFactory.test(code)) {
+    result.pattern = "mantine-polymorphic-factory";
+    result.isDesignSystemComponent = true;
+    return result;
+  }
+
+  if (COMMON_REACT_PATTERNS.factory.test(code)) {
+    result.pattern = "mantine-factory";
+    result.isDesignSystemComponent = true;
+    return result;
+  }
+
+  // Check for cva pattern
+  if (COMMON_REACT_PATTERNS.cva.test(code)) {
+    result.pattern = "cva";
+    result.isDesignSystemComponent = true;
+    return result;
+  }
+
+  // Check for styled-components pattern
+  if (COMMON_REACT_PATTERNS.styled.test(code)) {
+    result.pattern = "styled-components";
+    result.isDesignSystemComponent = true;
+    return result;
+  }
+
+  // Check for React patterns (forwardRef and memo)
+  if (COMMON_REACT_PATTERNS.forwardRefCall.test(code)) {
+    result.pattern = "forwardRef";
+    result.isDesignSystemComponent = true;
+    return result;
+  }
+
+  if (COMMON_REACT_PATTERNS.memo.test(code)) {
+    result.pattern = "memo";
+    result.isDesignSystemComponent = true;
+    return result;
+  }
+
+  return result;
+}
+
+/**
+ * Extract component names from Ark UI import statements.
+ *
+ * @param code The code string to search
+ * @returns Array of component names imported from Ark UI
+ */
+function extractArkUIImportNames(code: string): string[] {
+  const names: string[] = [];
+  const importPattern = /import\s+\{([^}]+)\}\s+from\s+["']@ark-ui\/react\/\w+["']/g;
+
+  let match;
+  while ((match = importPattern.exec(code)) !== null) {
+    const namedImports = match[1];
+    if (namedImports) {
+      const items = namedImports.split(",").map((s) => s.trim());
+      for (const item of items) {
+        // Handle "Foo as Bar" or just "Foo"
+        const aliasMatch = item.match(/^(\w+)\s+as\s+\w+$/);
+        if (aliasMatch?.[1] && /^[A-Z]/.test(aliasMatch[1])) {
+          names.push(aliasMatch[1]);
+        } else if (isValidIdentifier(item) && /^[A-Z]/.test(item)) {
+          names.push(item);
+        }
+      }
+    }
+  }
+
+  return names;
+}
+
+/**
+ * Extract the wrapped component from withRootProvider calls.
+ * E.g., from `withRootProvider<Props>(ArkDialog.Root, { ... })` extracts "ArkDialog.Root".
+ *
+ * @param code The code string to search
+ * @returns The wrapped component name, or null if not found
+ */
+export function extractRootProviderWrappedComponent(code: string): string | null {
+  // Match withRootProvider<...>(ComponentName) or withRootProvider<...>(ComponentName, { ... })
+  const pattern = /withRootProvider\s*<[^>]+>\s*\(\s*([a-zA-Z_$][a-zA-Z0-9_$.]*)\s*[,)]/;
+  const match = code.match(pattern);
+  return match?.[1] ?? null;
+}
+
+/**
+ * Patterns that indicate a file is auto-generated.
+ */
+const GENERATED_FILE_PATTERNS = [
+  /auto-generated/i,
+  /AUTO GENERATED/i,
+  /@generated/,
+  /DO NOT EDIT/i,
+  /This file is generated/i,
+  /Generated by/i,
+  /generated file/i,
+];
+
+/**
+ * Check if a file appears to be auto-generated based on its content.
+ *
+ * @param content The file content to check
+ * @returns True if the file appears to be generated
+ */
+export function isGeneratedFile(content: string): boolean {
+  // Only check the first 500 characters (header comments)
+  const header = content.substring(0, 500);
+  return GENERATED_FILE_PATTERNS.some((pattern) => pattern.test(header));
+}
+
+/**
+ * Information about the design system detected in code.
+ */
+export interface DesignSystemInfo {
+  /** The detected design system name, or null if not detected */
+  designSystem: string | null;
+  /** Patterns found in the code */
+  patterns: string[];
+  /** Recipe keys found (for Chakra) */
+  recipeKeys: string[];
+  /** Ark UI components found */
+  arkComponents: string[];
+}
+
+/**
+ * Extract design system information from code.
+ * Analyzes imports and patterns to determine which design system is used.
+ *
+ * @param code The code string to analyze
+ * @returns Design system information
+ */
+export function extractDesignSystemInfo(code: string): DesignSystemInfo {
+  const result: DesignSystemInfo = {
+    designSystem: null,
+    patterns: [],
+    recipeKeys: [],
+    arkComponents: [],
+  };
+
+  // Check imports for design system packages
+  const imports = extractImports(code);
+  for (const [, { source }] of imports) {
+    if (source.includes("@chakra-ui")) {
+      result.designSystem = "chakra-ui";
+      break;
+    }
+    if (source.includes("@mantine")) {
+      result.designSystem = "mantine";
+      break;
+    }
+    if (source.includes("@ark-ui")) {
+      result.designSystem = "ark-ui";
+      break;
+    }
+  }
+
+  // Detect patterns
+  if (COMMON_REACT_PATTERNS.recipeContext.test(code)) {
+    result.patterns.push("createRecipeContext");
+    const key = extractRecipeKey(code);
+    if (key) result.recipeKeys.push(key);
+  }
+
+  if (COMMON_REACT_PATTERNS.slotRecipeContext.test(code)) {
+    result.patterns.push("createSlotRecipeContext");
+    const key = extractRecipeKey(code);
+    if (key && !result.recipeKeys.includes(key)) {
+      result.recipeKeys.push(key);
+    }
+  }
+
+  if (COMMON_REACT_PATTERNS.factory.test(code)) {
+    result.patterns.push("factory");
+  }
+
+  if (COMMON_REACT_PATTERNS.polymorphicFactory.test(code)) {
+    result.patterns.push("polymorphicFactory");
+  }
+
+  // Extract Ark UI components
+  const arkImports = extractArkUIImportNames(code);
+  result.arkComponents = arkImports;
+
+  // If we found Ark components but no design system yet, it's Ark UI
+  if (!result.designSystem && arkImports.length > 0) {
+    result.designSystem = "ark-ui";
+  }
+
+  return result;
 }

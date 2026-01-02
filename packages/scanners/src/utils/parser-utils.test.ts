@@ -21,6 +21,10 @@ import {
   extractMultilineGenericParams,
   parseInterfaceDeclaration,
   extractExportedConstants,
+  classifyComponentPattern,
+  extractRootProviderWrappedComponent,
+  isGeneratedFile,
+  extractDesignSystemInfo,
 } from "./parser-utils.js";
 
 describe("parser-utils", () => {
@@ -609,6 +613,216 @@ describe("parser-utils", () => {
       expect(result).toHaveLength(1);
       expect(result[0]?.name).toBe("Center");
       expect(result[0]?.pattern).toContain("chakra");
+    });
+  });
+
+  describe("classifyComponentPattern", () => {
+    it("should classify forwardRef pattern", () => {
+      const code = `export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(inProps, ref) {
+    return <chakra.button ref={ref} {...rest} />
+  }
+)`;
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("forwardRef");
+      expect(result.isDesignSystemComponent).toBe(true);
+    });
+
+    it("should classify Chakra recipe context pattern", () => {
+      const code = `
+const { useRecipeResult, PropsProvider } = createRecipeContext({ key: "button" })
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(props, ref) { })
+`;
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("chakra-recipe");
+      expect(result.isDesignSystemComponent).toBe(true);
+      expect(result.recipeKey).toBe("button");
+    });
+
+    it("should classify Chakra slot recipe context pattern", () => {
+      const code = `
+const { withProvider, withContext } = createSlotRecipeContext({ key: "card" })
+export const CardRoot = withProvider<HTMLDivElement, CardRootProps>("div", "root")
+`;
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("chakra-slot-recipe");
+      expect(result.isDesignSystemComponent).toBe(true);
+      expect(result.recipeKey).toBe("card");
+    });
+
+    it("should classify withContext pattern wrapping Ark UI component", () => {
+      const code = `export const DialogTrigger = withContext<HTMLButtonElement, DialogTriggerProps>(
+  ArkDialog.Trigger,
+  "trigger",
+  { forwardAsChild: true },
+)`;
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("chakra-with-context");
+      expect(result.isDesignSystemComponent).toBe(true);
+      expect(result.wrappedComponent).toBe("ArkDialog.Trigger");
+      expect(result.slotName).toBe("trigger");
+    });
+
+    it("should classify withRootProvider pattern", () => {
+      const code = `export const DialogRoot = withRootProvider<DialogRootProps>(ArkDialog.Root, {
+  defaultProps: { unmountOnExit: true, lazyMount: true },
+})`;
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("chakra-root-provider");
+      expect(result.isDesignSystemComponent).toBe(true);
+      expect(result.wrappedComponent).toBe("ArkDialog.Root");
+    });
+
+    it("should classify chakra styled factory pattern", () => {
+      const code = 'export const Center = chakra("div", { baseStyle: {} })';
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("chakra-styled");
+      expect(result.isDesignSystemComponent).toBe(true);
+      expect(result.elementType).toBe("div");
+    });
+
+    it("should classify React.memo pattern", () => {
+      const code = 'export const MemoizedComponent = memo<Props>(function Component() { })';
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("memo");
+      expect(result.isDesignSystemComponent).toBe(true);
+    });
+
+    it("should classify Mantine factory pattern", () => {
+      const code = 'export const Button = factory<ButtonFactory>((_props, ref) => { })';
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("mantine-factory");
+      expect(result.isDesignSystemComponent).toBe(true);
+    });
+
+    it("should classify polymorphicFactory pattern", () => {
+      const code = 'export const Box = polymorphicFactory<BoxFactory>((_props, ref) => { })';
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("mantine-polymorphic-factory");
+      expect(result.isDesignSystemComponent).toBe(true);
+    });
+
+    it("should classify cva (class-variance-authority) pattern", () => {
+      const code = `const buttonVariants = cva("base-class", {
+  variants: { size: { sm: "text-sm", md: "text-md" } },
+})`;
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("cva");
+      expect(result.isDesignSystemComponent).toBe(true);
+    });
+
+    it("should classify styled-components pattern", () => {
+      const code = 'export const Button = styled.button`color: red;`';
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("styled-components");
+      expect(result.isDesignSystemComponent).toBe(true);
+    });
+
+    it("should classify styled() wrapper pattern", () => {
+      const code = 'export const StyledButton = styled(Button)`color: red;`';
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("styled-components");
+      expect(result.isDesignSystemComponent).toBe(true);
+    });
+
+    it("should return unknown for unrecognized patterns", () => {
+      const code = 'export const util = () => "helper"';
+      const result = classifyComponentPattern(code);
+      expect(result.pattern).toBe("unknown");
+      expect(result.isDesignSystemComponent).toBe(false);
+    });
+
+    it("should detect Ark UI imports in file", () => {
+      const code = `
+import { Dialog as ArkDialog } from "@ark-ui/react/dialog"
+export const DialogTrigger = withContext<HTMLButtonElement, Props>(ArkDialog.Trigger, "trigger")
+`;
+      const result = classifyComponentPattern(code);
+      expect(result.arkUIImports).toContain("Dialog");
+    });
+  });
+
+  describe("extractRootProviderWrappedComponent", () => {
+    it("should extract Ark component from withRootProvider", () => {
+      const code = `export const DialogRoot = withRootProvider<DialogRootProps>(ArkDialog.Root, {
+  defaultProps: { unmountOnExit: true, lazyMount: true },
+})`;
+      const result = extractRootProviderWrappedComponent(code);
+      expect(result).toBe("ArkDialog.Root");
+    });
+
+    it("should extract Ark component from simple withRootProvider", () => {
+      const code = 'export const TooltipRoot = withRootProvider<TooltipRootProps>(ArkTooltip.Root)';
+      const result = extractRootProviderWrappedComponent(code);
+      expect(result).toBe("ArkTooltip.Root");
+    });
+
+    it("should return null when no withRootProvider pattern", () => {
+      const code = 'export const Button = forwardRef<HTMLButtonElement, ButtonProps>(() => {})';
+      const result = extractRootProviderWrappedComponent(code);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("isGeneratedFile", () => {
+    it("should detect auto-generated file markers", () => {
+      expect(isGeneratedFile("// This file is auto-generated")).toBe(true);
+      expect(isGeneratedFile("/* AUTO GENERATED FILE */")).toBe(true);
+      expect(isGeneratedFile("// @generated")).toBe(true);
+      expect(isGeneratedFile("/* eslint-disable */ // generated file")).toBe(true);
+    });
+
+    it("should not flag normal files", () => {
+      expect(isGeneratedFile('import { Button } from "./button"')).toBe(false);
+      expect(isGeneratedFile("export const Component = () => {}")).toBe(false);
+    });
+
+    it("should detect common generated file patterns", () => {
+      expect(isGeneratedFile("// DO NOT EDIT. This file is generated")).toBe(true);
+      expect(isGeneratedFile("/* Generated by script */")).toBe(true);
+    });
+  });
+
+  describe("extractDesignSystemInfo", () => {
+    it("should extract Chakra UI info from code", () => {
+      const code = `
+import { chakra, forwardRef } from "@chakra-ui/react"
+const { useRecipeResult } = createRecipeContext({ key: "button" })
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button() {})
+`;
+      const result = extractDesignSystemInfo(code);
+      expect(result.designSystem).toBe("chakra-ui");
+      expect(result.patterns).toContain("createRecipeContext");
+      expect(result.recipeKeys).toContain("button");
+    });
+
+    it("should extract Mantine info from code", () => {
+      const code = `
+import { factory } from "@mantine/core"
+export const Button = factory<ButtonFactory>((_props, ref) => {})
+`;
+      const result = extractDesignSystemInfo(code);
+      expect(result.designSystem).toBe("mantine");
+      expect(result.patterns).toContain("factory");
+    });
+
+    it("should extract Ark UI info from code", () => {
+      const code = `
+import { Dialog as ArkDialog } from "@ark-ui/react/dialog"
+export const DialogTrigger = withContext(ArkDialog.Trigger, "trigger")
+`;
+      const result = extractDesignSystemInfo(code);
+      expect(result.designSystem).toBe("ark-ui");
+      expect(result.arkComponents).toContain("Dialog");
+    });
+
+    it("should return unknown for non-design-system code", () => {
+      const code = `
+export function helper() { return "util" }
+`;
+      const result = extractDesignSystemInfo(code);
+      expect(result.designSystem).toBeNull();
+      expect(result.patterns).toHaveLength(0);
     });
   });
 });
