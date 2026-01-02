@@ -1638,4 +1638,179 @@ describe("ArbitraryValueDetector", () => {
       expect(sizeValues.some((v) => v.fullClass.includes("w-[calc(var(--input-width)"))).toBe(true);
     });
   });
+
+  describe("Tailwind v4 --spacing() function", () => {
+    it("detects [--cell-size:--spacing(12)] CSS property with spacing function", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SpacingFn.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[--cell-size:--spacing(12)] md:[--cell-size:--spacing(10)]">
+          Tailwind v4 spacing function
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // Should detect the CSS properties with --spacing() function
+      expect(values.length).toBeGreaterThanOrEqual(2);
+      expect(values.some((v) => v.fullClass.includes("[--cell-size:--spacing(12)]"))).toBe(true);
+      // The md: prefix creates a separate arbitrary CSS property
+      expect(values.some((v) => v.fullClass.includes("[--cell-size:--spacing(10)]"))).toBe(true);
+    });
+
+    it("detects --spacing() with decimal values like --spacing(9.5)", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SpacingDecimal.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[--cell-size:--spacing(9.5)] [--sidebar-width:--spacing(40)]">
+          Decimal spacing values
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(2);
+      expect(values.some((v) => v.fullClass.includes("[--cell-size:--spacing(9.5)]"))).toBe(true);
+    });
+
+    it("detects --spacing() inside calc() expressions", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SpacingCalc.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[--header-height:calc(--spacing(14))] [--footer-height:calc(var(--spacing)*24)]">
+          Spacing in calc
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("detects --spacing() with nested var() in the argument", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SpacingVar.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[--toggle-gap:--spacing(var(--gap))]">
+          Spacing with var
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(1);
+      expect(values.some((v) => v.fullClass.includes("[--toggle-gap:--spacing(var(--gap))]"))).toBe(true);
+    });
+  });
+
+  describe("CSS properties with embedded hardcoded values", () => {
+    it("detects [background-image:radial-gradient(#color)] with embedded colors", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Gradient.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[background-image:radial-gradient(#d4d4d4_1px,transparent_1px)] [background-size:20px_20px]">
+          Gradient background
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      // Should detect at least the CSS properties
+      expect(values.length).toBeGreaterThanOrEqual(2);
+      expect(values.some((v) => v.fullClass.includes("[background-image:radial-gradient"))).toBe(true);
+    });
+
+    it("detects [background-size:20px_20px] as CSS property", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/BgSize.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[background-size:20px_20px]">
+          Background size
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBe(1);
+      expect(values[0]!.type).toBe("css-property");
+      expect(values[0]!.fullClass).toBe("[background-size:20px_20px]");
+    });
+  });
+
+  describe("complex CSS functions in arbitrary values", () => {
+    it("detects max-h-[min(...)] with nested CSS functions", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/CssFn.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="max-h-[min(calc(--spacing(96)),calc(var(--available-height)))]">
+          Complex CSS function
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBeGreaterThanOrEqual(1);
+      expect(values.some((v) => v.fullClass.includes("max-h-[min("))).toBe(true);
+    });
+
+    it("detects [--cell-size:clamp(...)] with clamp function", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Clamp.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="[--cell-size:clamp(0px,calc(100vw/7.5),52px)]">
+          Clamp function
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      expect(values.length).toBe(1);
+      expect(values[0]!.type).toBe("css-property");
+    });
+  });
+
+  describe("svh/dvh/lvh viewport units", () => {
+    it("detects h-[80svh] with small viewport height unit", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Svh.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        <div className="h-[80svh] min-h-[50dvh] max-h-[100lvh]">
+          Viewport units
+        </div>
+      `);
+
+      const detector = new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+      });
+
+      const values = await detector.detect();
+
+      const sizeValues = values.filter((v) => v.type === "size");
+      expect(sizeValues.length).toBeGreaterThanOrEqual(3);
+      expect(sizeValues.some((v) => v.fullClass === "h-[80svh]")).toBe(true);
+    });
+  });
 });
