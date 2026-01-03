@@ -6,6 +6,8 @@ import {
   ScannerConfig,
   ScanResult,
   ScanWarning,
+  AbortableScanResult,
+  PatternStats,
   DEFAULT_EXCLUDES,
   MONOREPO_PATTERNS,
   SCOPED_PACKAGE_PATTERNS,
@@ -1296,6 +1298,256 @@ describe('Base Scanner', () => {
 
       expect(result.items).toHaveLength(1);
       expect(result.items[0]).toContain('src/Button.ts');
+    });
+  });
+
+  describe('iterator-based scanning', () => {
+    it('supports async iteration for memory-efficient processing', async () => {
+      vol.fromJSON({
+        '/project/src/a.ts': 'export {}',
+        '/project/src/b.ts': 'export {}',
+        '/project/src/c.ts': 'export {}',
+      });
+
+      class IterableScanner extends Scanner<string> {
+        protected async processFile(file: string): Promise<string[]> {
+          return [file];
+        }
+
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => [file],
+            ['src/**/*.ts']
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const scanner = new IterableScanner({
+        projectRoot: '/project',
+      });
+
+      // Use the new iterator method for streaming results
+      const items: string[] = [];
+      for await (const item of scanner.scanIterator(['src/**/*.ts'])) {
+        items.push(item);
+      }
+
+      expect(items).toHaveLength(3);
+    });
+
+    it('allows early termination during iteration', async () => {
+      vol.fromJSON({
+        '/project/src/a.ts': 'export {}',
+        '/project/src/b.ts': 'export {}',
+        '/project/src/c.ts': 'export {}',
+        '/project/src/d.ts': 'export {}',
+        '/project/src/e.ts': 'export {}',
+      });
+
+      class IterableScanner extends Scanner<string> {
+        protected async processFile(file: string): Promise<string[]> {
+          return [file];
+        }
+
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => [file],
+            ['src/**/*.ts']
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const scanner = new IterableScanner({
+        projectRoot: '/project',
+      });
+
+      // Collect only first 2 items then break
+      const items: string[] = [];
+      for await (const item of scanner.scanIterator(['src/**/*.ts'])) {
+        items.push(item);
+        if (items.length >= 2) break;
+      }
+
+      expect(items).toHaveLength(2);
+    });
+
+    it('yields items as they are processed', async () => {
+      vol.fromJSON({
+        '/project/src/a.ts': 'export {}',
+        '/project/src/b.ts': 'export {}',
+      });
+
+      class IterableScanner extends Scanner<string> {
+        protected async processFile(file: string): Promise<string[]> {
+          return [file];
+        }
+
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => [file],
+            ['src/**/*.ts']
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const scanner = new IterableScanner({
+        projectRoot: '/project',
+      });
+
+      const yieldOrder: number[] = [];
+      let count = 0;
+
+      for await (const _item of scanner.scanIterator(['src/**/*.ts'])) {
+        yieldOrder.push(++count);
+      }
+
+      // Items should be yielded one at a time
+      expect(yieldOrder).toEqual([1, 2]);
+    });
+  });
+
+  describe('file discovery statistics', () => {
+    it('tracks pattern match statistics', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/src/Card.tsx': 'export {}',
+        '/project/lib/util.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts', 'src/**/*.tsx', 'lib/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Should have all 3 files
+      expect(result.items).toHaveLength(3);
+      expect(result.stats.filesScanned).toBe(3);
+    });
+
+    it('provides per-pattern match counts via getPatternStats', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/src/Card.tsx': 'export {}',
+        '/project/lib/util.ts': 'export {}',
+      });
+
+      class StatsScanner extends Scanner<string> {
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => [file],
+            ['src/**/*.ts', 'src/**/*.tsx', 'lib/**/*.ts']
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+
+        // Expose pattern stats for testing
+        async getStats(patterns: string[]): Promise<{ pattern: string; count: number }[]> {
+          return this.getPatternStats(patterns);
+        }
+      }
+
+      const scanner = new StatsScanner({
+        projectRoot: '/project',
+      });
+
+      const stats = await scanner.getStats(['src/**/*.ts', 'src/**/*.tsx', 'lib/**/*.ts']);
+
+      expect(stats).toHaveLength(3);
+      expect(stats.find(s => s.pattern === 'src/**/*.ts')?.count).toBe(1);
+      expect(stats.find(s => s.pattern === 'src/**/*.tsx')?.count).toBe(1);
+      expect(stats.find(s => s.pattern === 'lib/**/*.ts')?.count).toBe(1);
+    });
+  });
+
+  describe('abort signal support', () => {
+    it('aborts scan when signal is already aborted', async () => {
+      vol.fromJSON({
+        '/project/src/a.ts': 'export {}',
+        '/project/src/b.ts': 'export {}',
+        '/project/src/c.ts': 'export {}',
+      });
+
+      class AbortableScanner extends Scanner<string> {
+        protected async processFile(file: string): Promise<string[]> {
+          return [file];
+        }
+
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => [file],
+            ['src/**/*.ts']
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const controller = new AbortController();
+      const scanner = new AbortableScanner({
+        projectRoot: '/project',
+      });
+
+      // Abort immediately before scan starts
+      controller.abort();
+
+      const result = await scanner.scanWithAbort(['src/**/*.ts'], controller.signal);
+
+      // Should be aborted with no results
+      expect(result.aborted).toBe(true);
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('completes normally when signal is not triggered', async () => {
+      vol.fromJSON({
+        '/project/src/a.ts': 'export {}',
+        '/project/src/b.ts': 'export {}',
+      });
+
+      class AbortableScanner extends Scanner<string> {
+        protected async processFile(file: string): Promise<string[]> {
+          return [file];
+        }
+
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => [file],
+            ['src/**/*.ts']
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const controller = new AbortController();
+      const scanner = new AbortableScanner({
+        projectRoot: '/project',
+      });
+
+      const result = await scanner.scanWithAbort(['src/**/*.ts'], controller.signal);
+
+      expect(result.aborted).toBe(false);
+      expect(result.items).toHaveLength(2);
     });
   });
 });

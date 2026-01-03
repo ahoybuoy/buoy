@@ -67,6 +67,22 @@ export interface ScanResult<T> {
 }
 
 /**
+ * Result from an abortable scan operation
+ */
+export interface AbortableScanResult<T> extends ScanResult<T> {
+  /** Whether the scan was aborted before completion */
+  aborted: boolean;
+}
+
+/**
+ * Statistics for a single glob pattern
+ */
+export interface PatternStats {
+  pattern: string;
+  count: number;
+}
+
+/**
  * Result of file path validation
  */
 export interface FileValidationResult {
@@ -579,6 +595,140 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
     };
 
     return { items, errors, warnings, stats };
+  }
+
+  /**
+   * Get per-pattern file match statistics.
+   * Useful for debugging which patterns are matching files.
+   *
+   * @param patterns Glob patterns to analyze
+   * @returns Array of pattern statistics with match counts
+   */
+  protected async getPatternStats(patterns: string[]): Promise<PatternStats[]> {
+    const ignore = this.getExcludePatterns();
+    const stats: PatternStats[] = [];
+
+    for (const pattern of patterns) {
+      const matches = await glob(pattern, {
+        cwd: this.config.projectRoot,
+        ignore,
+        absolute: true,
+      });
+      stats.push({ pattern, count: matches.length });
+    }
+
+    return stats;
+  }
+
+  /**
+   * Async iterator for memory-efficient streaming of scan results.
+   * Yields items one at a time as they are discovered, allowing
+   * early termination and lower memory usage for large repositories.
+   *
+   * @param defaultPatterns Default glob patterns for file discovery
+   */
+  async *scanIterator(defaultPatterns: string[]): AsyncGenerator<T, void, unknown> {
+    const { files } = await this.findFilesWithDetails(defaultPatterns);
+
+    for (const file of files) {
+      try {
+        const items = await this.processFile(file);
+        for (const item of items) {
+          yield item;
+        }
+      } catch {
+        // Errors are silently skipped in iterator mode
+        // Use scan() or scanWithAbort() for error reporting
+        continue;
+      }
+    }
+  }
+
+  /**
+   * Scan with abort signal support for cancellable operations.
+   * Useful for implementing timeouts or user-initiated cancellation.
+   *
+   * @param defaultPatterns Default glob patterns for file discovery
+   * @param signal AbortSignal for cancellation
+   * @returns Scan result with aborted flag
+   */
+  async scanWithAbort(
+    defaultPatterns: string[],
+    signal: AbortSignal,
+  ): Promise<AbortableScanResult<T>> {
+    const startTime = Date.now();
+    const { files, unmatchedPatterns } = await this.findFilesWithDetails(defaultPatterns);
+    const items: T[] = [];
+    const errors: ScanError[] = [];
+    const warnings: ScanWarning[] = [];
+    let aborted = false;
+
+    // Check if already aborted
+    if (signal.aborted) {
+      return {
+        items: [],
+        errors: [],
+        warnings: [],
+        stats: { filesScanned: 0, itemsFound: 0, duration: Date.now() - startTime },
+        aborted: true,
+      };
+    }
+
+    // Warn about unmatched patterns
+    for (const pattern of unmatchedPatterns) {
+      warnings.push({
+        code: "PATTERN_NO_MATCH",
+        message: `Pattern "${pattern}" matched no files`,
+        pattern,
+      });
+    }
+
+    // Process files one by one, checking abort signal
+    for (const file of files) {
+      if (signal.aborted) {
+        aborted = true;
+        break;
+      }
+
+      try {
+        const fileItems = await this.processFile(file);
+        items.push(...fileItems);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const code =
+          error && typeof error === "object" && "code" in error && (error as { code: string }).code === "TIMEOUT"
+            ? "TIMEOUT"
+            : "PARSE_ERROR";
+        errors.push({ file, message, code });
+      }
+    }
+
+    const stats: ScanStats = {
+      filesScanned: aborted ? items.length : files.length,
+      itemsFound: items.length,
+      duration: Date.now() - startTime,
+    };
+
+    return { items, errors, warnings, stats, aborted };
+  }
+
+  /**
+   * Process a single file and return extracted items.
+   * Subclasses should override this method for custom processing.
+   * Default implementation throws to indicate it must be overridden
+   * if using iterator or abort methods.
+   *
+   * @param file Absolute file path to process
+   * @returns Array of extracted items
+   */
+  protected async processFile(file: string): Promise<T[]> {
+    // Default implementation that can be overridden
+    // For scanIterator and scanWithAbort to work, subclasses
+    // must implement this method
+    void file;
+    throw new Error(
+      "processFile must be implemented by subclass when using scanIterator or scanWithAbort"
+    );
   }
 
   abstract scan(): Promise<ScanResult<T>>;
