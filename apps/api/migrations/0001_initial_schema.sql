@@ -231,3 +231,29 @@ CREATE TABLE IF NOT EXISTS scans (
 CREATE INDEX IF NOT EXISTS scans_project_id_idx ON scans(project_id);
 CREATE INDEX IF NOT EXISTS scans_account_id_idx ON scans(account_id);
 CREATE INDEX IF NOT EXISTS scans_created_at_idx ON scans(created_at);
+
+-- Drift resolutions (tracking resolved/ignored drift signals)
+CREATE TABLE IF NOT EXISTS drift_resolutions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  signal_id TEXT NOT NULL,
+
+  -- Status: resolved, ignored
+  status TEXT NOT NULL DEFAULT 'resolved',
+
+  -- Resolution details
+  resolution TEXT,
+  resolved_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+
+  -- Ignore details
+  ignore_reason TEXT,
+  ignore_expires_at TEXT,
+
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+
+  UNIQUE(project_id, signal_id)
+);
+
+CREATE INDEX IF NOT EXISTS drift_resolutions_project_id_idx ON drift_resolutions(project_id);
+CREATE INDEX IF NOT EXISTS drift_resolutions_status_idx ON drift_resolutions(status);

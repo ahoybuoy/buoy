@@ -13,6 +13,9 @@ import { auth } from './routes/auth.js';
 import { apiKeys } from './routes/api-keys.js';
 import { projects } from './routes/projects.js';
 import { scans } from './routes/scans.js';
+import { drift } from './routes/drift.js';
+import { team } from './routes/team.js';
+import { events } from './routes/events.js';
 import { requireAuth } from './middleware/auth.js';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -72,6 +75,15 @@ app.route('/api-keys', apiKeys);
 app.use('/projects/*', requireAuth);
 app.route('/projects', projects);
 app.route('/projects', scans); // Nested: /projects/:id/scans
+app.route('/projects', drift); // Nested: /projects/:id/drift
+app.route('/projects', events); // Nested: /projects/:id/events
+
+// Team management routes (authenticated)
+app.use('/account/*', requireAuth);
+app.route('', team); // /account and /account/*
+
+// Public invite acceptance
+app.route('', team); // /invites/:token/accept (handled by team router)
 
 // 404 handler
 app.notFound((c) => {
