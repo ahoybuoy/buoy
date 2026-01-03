@@ -1,6 +1,6 @@
 {
   "name": "@buoy-design/cli",
-  "version": "0.1.1",
+  "version": "0.1.6",
   "description": "Buoy CLI - Design drift detection for the AI era",
   "type": "module",
   "license": "MIT",
@@ -40,8 +40,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@buoy-design/core": "workspace:*",
-    "@buoy-design/scanners": "workspace:*",
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@buoy-design/core": "^0.1.2",
+    "@buoy-design/scanners": "^0.1.3",
     "@octokit/rest": "^21.0.0",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.5",

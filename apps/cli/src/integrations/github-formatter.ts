@@ -13,7 +13,7 @@ export function formatPRComment(results: DriftResult, _context?: PRContext): str
   const lines: string[] = [COMMENT_MARKER];
 
   // Header
-  lines.push('## 🔱 Buoy Design Drift Report');
+  lines.push('## 🛟 Buoy Design Drift Report');
   lines.push('');
 
   // Walkthrough section (like CodeRabbit)
@@ -137,7 +137,7 @@ export function formatPRComment(results: DriftResult, _context?: PRContext): str
 
   // Footer
   lines.push('---');
-  lines.push('<sub>🔱 <a href="https://github.com/dylantarre/buoy">Buoy</a> - Design drift detection for the AI era</sub>');
+  lines.push('<sub>🛟 <a href="https://github.com/dylantarre/buoy">Buoy</a> - Design drift detection for the AI era</sub>');
 
   return lines.join('\n');
 }
@@ -332,7 +332,7 @@ export function formatAIPRComment(analysis: PRAnalysisSummary, results: DriftRes
   const lines: string[] = [COMMENT_MARKER];
 
   // Header with AI badge
-  lines.push('## 🔱 Buoy Design Drift Report');
+  lines.push('## 🛟 Buoy Design Drift Report');
   lines.push('');
   lines.push('*🤖 AI-powered analysis enabled*');
   lines.push('');
@@ -433,7 +433,7 @@ export function formatAIPRComment(analysis: PRAnalysisSummary, results: DriftRes
 
   // Footer
   lines.push('---');
-  lines.push('<sub>🔱 <a href="https://github.com/dylantarre/buoy">Buoy</a> - AI-powered design drift detection</sub>');
+  lines.push('<sub>🛟 <a href="https://github.com/dylantarre/buoy">Buoy</a> - AI-powered design drift detection</sub>');
 
   return lines.join('\n');
 }
