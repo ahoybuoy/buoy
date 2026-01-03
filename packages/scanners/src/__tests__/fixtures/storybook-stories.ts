@@ -821,3 +821,76 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 `;
+
+// CSF4 with imported preview object (Storybook monorepo pattern)
+// This pattern imports a preview object from a central location and calls .meta() on it
+export const CSF4_IMPORTED_PREVIEW = `
+import React from 'react';
+import { fn, userEvent, within, expect } from 'storybook/test';
+import preview from '../../../.storybook/preview';
+import { A11YPanel } from './A11YPanel';
+
+const meta = preview.meta({
+  title: 'Panel',
+  component: A11YPanel,
+  parameters: {
+    layout: 'fullscreen',
+  },
+});
+
+export const Initializing = meta.story({
+  render: () => {
+    return <div>Initializing state</div>;
+  },
+});
+
+export const Running = meta.story({
+  args: { status: 'running' },
+});
+
+export const ReadyWithResults = meta.story({
+  args: { status: 'ready' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button'));
+    expect(fn()).toHaveBeenCalled();
+  },
+});
+`;
+
+// CSF4 imported preview with argTypes and tags
+export const CSF4_IMPORTED_PREVIEW_WITH_ARGTYPES = `
+import preview from '.storybook/preview';
+import { Button } from './Button';
+
+const meta = preview.meta({
+  title: 'Components/Button',
+  component: Button,
+  tags: ['autodocs', 'chromatic'],
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['primary', 'secondary'],
+    },
+    size: {
+      control: 'radio',
+      options: ['sm', 'md', 'lg'],
+    },
+  },
+  decorators: [(Story) => <div className="wrapper"><Story /></div>],
+});
+
+export const Primary = meta.story({
+  args: {
+    variant: 'primary',
+    children: 'Click me',
+  },
+});
+
+export const Secondary = meta.story({
+  args: {
+    variant: 'secondary',
+    children: 'Secondary',
+  },
+});
+`;

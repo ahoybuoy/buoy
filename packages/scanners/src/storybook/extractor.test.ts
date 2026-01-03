@@ -29,6 +29,8 @@ import {
   CSF4_STORYBOOK_IMPORT,
   STORY_WITH_INLINE_COMPONENT,
   STORY_WITH_INLINE_FUNCTION_COMPONENT,
+  CSF4_IMPORTED_PREVIEW,
+  CSF4_IMPORTED_PREVIEW_WITH_ARGTYPES,
 } from '../__tests__/fixtures/storybook-stories.js';
 import { StorybookScanner, StoryFileScanner } from './extractor.js';
 
@@ -976,6 +978,158 @@ describe('StoryFileScanner', () => {
       expect(stories?.variants).toContainEqual(
         expect.objectContaining({ name: 'WithError' })
       );
+    });
+  });
+
+  describe('CSF4 imported preview pattern detection', () => {
+    it('detects CSF4 with imported preview object calling .meta()', async () => {
+      vol.fromJSON({
+        '/project/src/A11YPanel.stories.tsx': CSF4_IMPORTED_PREVIEW,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.items.length).toBeGreaterThan(0);
+
+      const panelStories = result.items.find(c => c.name === 'A11YPanel');
+      expect(panelStories).toBeDefined();
+      expect(panelStories?.source.type).toBe('storybook');
+    });
+
+    it('extracts title from imported preview pattern', async () => {
+      vol.fromJSON({
+        '/project/src/A11YPanel.stories.tsx': CSF4_IMPORTED_PREVIEW,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const panelStories = result.items.find(c => c.name === 'A11YPanel');
+      expect(panelStories?.metadata?.tags).toContain('storybook-title:Panel');
+    });
+
+    it('extracts story variants from imported preview pattern', async () => {
+      vol.fromJSON({
+        '/project/src/A11YPanel.stories.tsx': CSF4_IMPORTED_PREVIEW,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const panelStories = result.items.find(c => c.name === 'A11YPanel');
+      expect(panelStories?.variants).toHaveLength(3);
+      expect(panelStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Initializing' })
+      );
+      expect(panelStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Running' })
+      );
+      expect(panelStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'ReadyWithResults' })
+      );
+    });
+
+    it('detects render function in imported preview pattern stories', async () => {
+      vol.fromJSON({
+        '/project/src/A11YPanel.stories.tsx': CSF4_IMPORTED_PREVIEW,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const panelStories = result.items.find(c => c.name === 'A11YPanel');
+      const initializingVariant = panelStories?.variants.find(v => v.name === 'Initializing');
+      expect(initializingVariant?.props?.hasRenderFunction).toBe(true);
+    });
+
+    it('detects play function in imported preview pattern stories', async () => {
+      vol.fromJSON({
+        '/project/src/A11YPanel.stories.tsx': CSF4_IMPORTED_PREVIEW,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const panelStories = result.items.find(c => c.name === 'A11YPanel');
+      const readyVariant = panelStories?.variants.find(v => v.name === 'ReadyWithResults');
+      expect(readyVariant?.props?.hasPlayFunction).toBe(true);
+    });
+
+    it('extracts argTypes from imported preview pattern', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': CSF4_IMPORTED_PREVIEW_WITH_ARGTYPES,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      expect(buttonStories).toBeDefined();
+      expect(buttonStories?.props).toContainEqual(
+        expect.objectContaining({ name: 'variant' })
+      );
+      expect(buttonStories?.props).toContainEqual(
+        expect.objectContaining({ name: 'size' })
+      );
+    });
+
+    it('extracts tags from imported preview pattern', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': CSF4_IMPORTED_PREVIEW_WITH_ARGTYPES,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      expect(buttonStories?.metadata?.tags).toContain('autodocs');
+      expect(buttonStories?.metadata?.tags).toContain('chromatic');
+    });
+
+    it('detects decorators in imported preview pattern', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': CSF4_IMPORTED_PREVIEW_WITH_ARGTYPES,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      expect(buttonStories?.metadata?.tags).toContain('has-decorators');
     });
   });
 });

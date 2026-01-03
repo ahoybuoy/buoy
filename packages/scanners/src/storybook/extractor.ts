@@ -334,24 +334,48 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
 
   /**
    * Check if this is a CSF4 file (uses preview.meta() pattern)
+   * This includes:
+   * 1. Files with definePreview/__definePreview calls
+   * 2. Files where a 'preview' variable (imported or created) has .meta() called on it
    */
   private isCSF4File(sourceFile: ts.SourceFile): boolean {
-    let hasDefinePreview = false;
+    let isCSF4 = false;
 
     const visit = (node: ts.Node) => {
-      // Look for definePreview or __definePreview calls
+      if (isCSF4) return; // Already found
+
       if (ts.isCallExpression(node)) {
         const callText = node.expression.getText(sourceFile);
+        // Pattern 1: Direct definePreview/__definePreview call
         if (callText === 'definePreview' || callText === '__definePreview') {
-          hasDefinePreview = true;
+          isCSF4 = true;
           return;
+        }
+
+        // Pattern 2: Something.meta() call where Something is likely a preview object
+        // This covers both: preview.meta() where preview is imported
+        // and: preview.meta() where preview = definePreview()
+        if (ts.isPropertyAccessExpression(node.expression)) {
+          const methodName = node.expression.name.getText(sourceFile);
+          if (methodName === 'meta') {
+            const objectExpr = node.expression.expression;
+            // Check if it's an identifier (e.g., 'preview')
+            if (ts.isIdentifier(objectExpr)) {
+              const objectName = objectExpr.getText(sourceFile);
+              // Common preview object names
+              if (objectName === 'preview' || objectName === 'storybook') {
+                isCSF4 = true;
+                return;
+              }
+            }
+          }
         }
       }
       ts.forEachChild(node, visit);
     };
 
     ts.forEachChild(sourceFile, visit);
-    return hasDefinePreview;
+    return isCSF4;
   }
 
   /**
