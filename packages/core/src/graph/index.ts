@@ -26,6 +26,7 @@ export {
   exportToDOT,
   exportToCytoscape,
   GraphBuilder,
+  type DesignSystemGraph,
 } from './builder.js';
 
 // Queries
@@ -52,3 +53,6 @@ export {
   // Coverage
   calculateCoverage,
 } from './queries.js';
+
+// Collectors
+export * from './collectors/index.js';

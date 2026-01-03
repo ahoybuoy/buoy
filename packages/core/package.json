@@ -49,8 +49,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "glob": "^11.0.0",
     "graphology": "^0.26.0",
     "graphology-types": "^0.24.8",
+    "simple-git": "^3.30.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
