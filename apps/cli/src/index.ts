@@ -5,7 +5,7 @@ import {
   createDriftCommand,
   createStatusCommand,
   createTokensCommand,
-  createBuildCommand,
+  createAnchorCommand,
   createPluginsCommand,
   createCICommand,
   createCheckCommand,
@@ -14,7 +14,6 @@ import {
   createCompareCommand,
   createAuditCommand,
   createGraphCommand,
-  createArchitectCommand,
   createImportCommand,
 } from "./commands/index.js";
 
@@ -32,7 +31,7 @@ export function createCli(): Command {
   program.addCommand(createDriftCommand());
   program.addCommand(createStatusCommand());
   program.addCommand(createTokensCommand());
-  program.addCommand(createBuildCommand());
+  program.addCommand(createAnchorCommand());
   program.addCommand(createPluginsCommand());
   program.addCommand(createCICommand());
   program.addCommand(createCheckCommand());
@@ -41,7 +40,6 @@ export function createCli(): Command {
   program.addCommand(createCompareCommand());
   program.addCommand(createAuditCommand());
   program.addCommand(createGraphCommand());
-  program.addCommand(createArchitectCommand());
   program.addCommand(createImportCommand());
 
   return program;

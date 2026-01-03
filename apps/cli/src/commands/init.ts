@@ -1,6 +1,6 @@
 import { Command } from "commander";
-import { writeFileSync, existsSync } from "fs";
-import { resolve } from "path";
+import { writeFileSync, existsSync, readFileSync } from "fs";
+import { resolve, extname } from "path";
 import chalk from "chalk";
 import ora from "ora";
 import { createInterface } from "readline";
@@ -22,6 +22,8 @@ import {
   generateStandaloneHook,
   detectHookSystem,
 } from "../hooks/index.js";
+import { parseTokenFile, detectFormat } from "@buoy-design/core";
+import type { DesignToken } from "@buoy-design/core";
 
 function generateConfig(project: DetectedProject): string {
   const lines: string[] = [];
@@ -520,12 +522,33 @@ function printDetectionResults(project: DetectedProject): void {
     }
   }
 
+  // Design system documentation tools
+  if (project.designSystemDocs) {
+    const typeNames: Record<string, string> = {
+      'zeroheight': 'Zeroheight',
+      'supernova': 'Supernova',
+      'specify': 'Specify',
+      'knapsack': 'Knapsack',
+      'framer': 'Framer',
+      'tokenforge': 'TokenForge',
+      'tokens-studio': 'Tokens Studio (Figma Tokens)',
+    };
+    const name = typeNames[project.designSystemDocs.type] || project.designSystemDocs.type;
+    const path = project.designSystemDocs.exportPath || project.designSystemDocs.configPath || '';
+    console.log(
+      chalk.green("    ✓ ") +
+        chalk.bold(name) +
+        (path ? chalk.dim(` (${path})`) : ''),
+    );
+  }
+
   // Nothing found
   if (
     project.frameworks.length === 0 &&
     project.components.length === 0 &&
     project.tokens.length === 0 &&
-    !project.storybook
+    !project.storybook &&
+    !project.designSystemDocs
   ) {
     console.log(chalk.yellow("    ⚠ ") + "No sources auto-detected");
     console.log(
@@ -538,6 +561,170 @@ function printDetectionResults(project: DetectedProject): void {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Import tokens from a detected source and generate output file
+ */
+async function importTokensFromSource(
+  sourcePath: string,
+  outputPath: string,
+): Promise<{ success: boolean; tokenCount: number }> {
+  try {
+    const content = readFileSync(sourcePath, 'utf-8');
+    const ext = extname(sourcePath).toLowerCase();
+    let tokens: DesignToken[] = [];
+
+    if (ext === '.json') {
+      const json = JSON.parse(content);
+      const format = detectFormat(json);
+      info(`Detected format: ${formatTokenFormat(format)}`);
+      tokens = parseTokenFile(content);
+    } else if (ext === '.css') {
+      tokens = parseCssVariablesForInit(content, sourcePath);
+    } else {
+      return { success: false, tokenCount: 0 };
+    }
+
+    if (tokens.length === 0) {
+      return { success: false, tokenCount: 0 };
+    }
+
+    // Generate CSS output
+    const outputContent = generateCssFromTokens(tokens);
+    writeFileSync(outputPath, outputContent);
+
+    return { success: true, tokenCount: tokens.length };
+  } catch {
+    return { success: false, tokenCount: 0 };
+  }
+}
+
+/**
+ * Parse CSS variables for token import
+ */
+function parseCssVariablesForInit(content: string, filePath: string): DesignToken[] {
+  const tokens: DesignToken[] = [];
+  const varRegex = /--([\\w-]+)\\s*:\\s*([^;]+);/g;
+
+  let match;
+  while ((match = varRegex.exec(content)) !== null) {
+    const name = match[1]!;
+    const value = match[2]!.trim();
+
+    tokens.push({
+      id: `css:${filePath}:${name}`,
+      name: `--${name}`,
+      category: inferTokenCategory(name, value),
+      value: parseTokenValue(value),
+      source: { type: 'css', path: filePath },
+      aliases: [],
+      usedBy: [],
+      metadata: {},
+      scannedAt: new Date(),
+    });
+  }
+
+  return tokens;
+}
+
+/**
+ * Infer token category from name or value
+ */
+function inferTokenCategory(name: string, value: string): DesignToken['category'] {
+  const nameLower = name.toLowerCase();
+
+  if (nameLower.includes('color') || value.startsWith('#') || value.startsWith('rgb') || value.startsWith('hsl')) {
+    return 'color';
+  }
+  if (nameLower.includes('spacing') || nameLower.includes('space') || nameLower.includes('gap')) {
+    return 'spacing';
+  }
+  if (nameLower.includes('font') || nameLower.includes('text') || nameLower.includes('size')) {
+    return 'typography';
+  }
+  if (nameLower.includes('radius') || nameLower.includes('rounded')) {
+    return 'border';
+  }
+  if (nameLower.includes('shadow')) {
+    return 'shadow';
+  }
+
+  return 'other';
+}
+
+/**
+ * Parse a CSS value into TokenValue
+ */
+function parseTokenValue(value: string): DesignToken['value'] {
+  if (value.startsWith('#') || value.startsWith('rgb') || value.startsWith('hsl')) {
+    return { type: 'color', hex: value.startsWith('#') ? value.toLowerCase() : value };
+  }
+
+  const dimMatch = value.match(/^([\d.]+)(px|rem|em|%)$/);
+  if (dimMatch) {
+    return { type: 'spacing', value: parseFloat(dimMatch[1]!), unit: dimMatch[2] as 'px' | 'rem' | 'em' };
+  }
+
+  return { type: 'raw', value };
+}
+
+/**
+ * Generate CSS file from tokens
+ */
+function generateCssFromTokens(tokens: DesignToken[]): string {
+  const lines: string[] = [
+    '/**',
+    ' * Design Tokens',
+    ' * Imported by Buoy',
+    ' */',
+    '',
+    ':root {',
+  ];
+
+  // Group by category
+  const groups: Record<string, DesignToken[]> = {};
+  for (const token of tokens) {
+    const cat = token.category;
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat]!.push(token);
+  }
+
+  for (const [category, catTokens] of Object.entries(groups)) {
+    lines.push(`  /* ${capitalize(category)} */`);
+    for (const token of catTokens) {
+      const name = token.name.startsWith('--') ? token.name : `--${token.name}`;
+      const value = getTokenDisplayValue(token);
+      lines.push(`  ${name}: ${value};`);
+    }
+    lines.push('');
+  }
+
+  lines.push('}');
+  return lines.join('\\n');
+}
+
+/**
+ * Get display value for a token
+ */
+function getTokenDisplayValue(token: DesignToken): string {
+  const v = token.value;
+  if (v.type === 'color') return v.hex;
+  if (v.type === 'spacing') return `${v.value}${v.unit}`;
+  if (v.type === 'raw') return v.value;
+  return JSON.stringify(v);
+}
+
+/**
+ * Format token format name for display
+ */
+function formatTokenFormat(format: string): string {
+  const names: Record<string, string> = {
+    dtcg: 'W3C Design Tokens (DTCG)',
+    'tokens-studio': 'Tokens Studio (Figma Tokens)',
+    'style-dictionary': 'Style Dictionary',
+  };
+  return names[format] || format;
 }
 
 async function promptConfirm(
@@ -620,6 +807,69 @@ export function createInitCommand(): Command {
           const message = err instanceof Error ? err.message : String(err);
           error(message);
           process.exit(1);
+        }
+      }
+
+      // Track imported token file path for config generation
+      let importedTokenFile: string | null = null;
+
+      // Check if design system docs were detected and offer to import tokens
+      if (project.designSystemDocs && !options.skipDetect) {
+        const docType = project.designSystemDocs.type;
+        const sourcePath = project.designSystemDocs.exportPath || project.designSystemDocs.configPath;
+
+        const typeNames: Record<string, string> = {
+          'zeroheight': 'Zeroheight',
+          'supernova': 'Supernova',
+          'specify': 'Specify',
+          'knapsack': 'Knapsack',
+          'framer': 'Framer',
+          'tokenforge': 'TokenForge',
+          'tokens-studio': 'Tokens Studio',
+        };
+        const docName = typeNames[docType] || docType;
+
+        if (sourcePath && existsSync(resolve(cwd, sourcePath))) {
+          console.log(chalk.bold("  Token Import"));
+          console.log("");
+          console.log(`  Found ${chalk.cyan(docName)} tokens at ${chalk.dim(sourcePath)}`);
+          console.log("");
+
+          let shouldImport = false;
+          if (options.yes) {
+            shouldImport = true;
+          } else if (process.stdin.isTTY) {
+            shouldImport = await promptConfirm(
+              `  Import tokens from ${docName}?`,
+              true,
+            );
+          }
+
+          if (shouldImport) {
+            const outputFile = 'design-tokens.css';
+            const importSpinner = ora(`Importing tokens from ${docName}...`).start();
+
+            const result = await importTokensFromSource(
+              resolve(cwd, sourcePath),
+              resolve(cwd, outputFile),
+            );
+
+            if (result.success) {
+              importSpinner.succeed(`Imported ${result.tokenCount} tokens to ${outputFile}`);
+              importedTokenFile = outputFile;
+
+              // Add to project tokens for config generation
+              project.tokens.push({
+                name: 'Design Tokens',
+                path: outputFile,
+                type: 'css',
+              });
+            } else {
+              importSpinner.warn('Could not parse tokens from source');
+              info(`You can manually import later with: ${chalk.cyan(`buoy import ${sourcePath}`)}`);
+            }
+            console.log("");
+          }
         }
       }
 
@@ -770,12 +1020,22 @@ export function createInitCommand(): Command {
 
         console.log("");
         info("Next steps:");
-        info("  1. Run " + chalk.cyan("buoy scan") + " to scan your codebase");
-        info("  2. Run " + chalk.cyan("buoy drift check") + " to detect drift");
+
+        let stepNum = 1;
+
+        if (importedTokenFile) {
+          info(`  ${stepNum}. Review imported tokens in ${chalk.cyan(importedTokenFile)}`);
+          stepNum++;
+        }
+
+        info(`  ${stepNum}. Run ${chalk.cyan("buoy scan")} to scan your codebase`);
+        stepNum++;
+        info(`  ${stepNum}. Run ${chalk.cyan("buoy drift check")} to detect drift`);
+        stepNum++;
 
         if (!options.hooks) {
           info(
-            "  3. Run " +
+            `  ${stepNum}. Run ` +
               chalk.cyan("buoy init --hooks") +
               " to setup pre-commit hooks",
           );
