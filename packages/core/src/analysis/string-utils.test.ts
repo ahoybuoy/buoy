@@ -101,7 +101,9 @@ describe('levenshteinDistance', () => {
     const duration = performance.now() - start;
 
     expect(distance).toBe(10000); // All substitutions
-    expect(duration).toBeLessThan(2000); // Should complete in <2s
+    // Generous threshold to avoid flaky failures on slow/loaded machines
+    // This catches algorithmic issues (O(n^3)) not minor timing variations
+    expect(duration).toBeLessThan(10000); // Should complete in <10s
   });
 
   it('handles unicode characters', () => {
