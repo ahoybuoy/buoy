@@ -30,11 +30,11 @@
   "homepage": "https://buoy.design",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dylantarre/buoy-design.git",
+    "url": "git+https://github.com/buoy-design/buoy.git",
     "directory": "packages/agents"
   },
   "bugs": {
-    "url": "https://github.com/dylantarre/buoy-design/issues"
+    "url": "https://github.com/buoy-design/buoy/issues"
   },
   "keywords": ["buoy", "ai-agents", "code-review", "git-analysis"],
   "files": ["dist", "README.md"],

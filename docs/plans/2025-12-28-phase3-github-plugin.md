@@ -138,7 +138,7 @@ export function formatPRComment(results: DriftResult): string {
     lines.push('No design drift detected. Your code is aligned with the design system!');
     lines.push('');
     lines.push('---');
-    lines.push('<sub>🔱 <a href="https://github.com/dylantarre/buoy">Buoy</a></sub>');
+    lines.push('<sub>🔱 <a href="https://github.com/buoy-design/buoy">Buoy</a></sub>');
     return lines.join('\n');
   }
 
@@ -195,7 +195,7 @@ export function formatPRComment(results: DriftResult): string {
 
   // Footer
   lines.push('---');
-  lines.push('<sub>🔱 <a href="https://github.com/dylantarre/buoy">Buoy</a></sub>');
+  lines.push('<sub>🔱 <a href="https://github.com/buoy-design/buoy">Buoy</a></sub>');
 
   return lines.join('\n');
 }

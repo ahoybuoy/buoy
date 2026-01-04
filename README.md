@@ -107,7 +107,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: dylantarre/buoy@main
+      - uses: buoy-design/buoy@main
         with:
           mode: ci
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -116,7 +116,7 @@ jobs:
 Or run architect mode to auto-create design tokens:
 
 ```yaml
-- uses: dylantarre/buoy@main
+- uses: buoy-design/buoy@main
   with:
     mode: architect
     github-token: ${{ secrets.GITHUB_TOKEN }}
