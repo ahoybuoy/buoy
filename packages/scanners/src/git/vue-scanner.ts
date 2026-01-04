@@ -3,7 +3,10 @@ import type { Component, PropDefinition, VueSource } from "@buoy-design/core";
 import { createComponentId } from "@buoy-design/core";
 import { readFile } from "fs/promises";
 import { relative, basename, dirname, resolve } from "path";
-import { extractBalancedBraces } from "../utils/parser-utils.js";
+import {
+  extractBalancedBraces,
+  parseTypeScriptInterfaceProps,
+} from "../utils/parser-utils.js";
 import { existsSync } from "fs";
 
 export interface VueScannerConfig extends ScannerConfig {
@@ -349,69 +352,8 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
    * Handles complex types like: { cb: () => void, data: { nested: string } }
    */
   private parseTypeProps(propsContent: string): PropDefinition[] {
-    const props: PropDefinition[] = [];
-    let i = 0;
-
-    while (i < propsContent.length) {
-      // Skip whitespace
-      while (i < propsContent.length && /\s/.test(propsContent[i] ?? "")) i++;
-      if (i >= propsContent.length) break;
-
-      // Match prop name
-      const nameMatch = propsContent.substring(i).match(/^(\w+)(\?)?:\s*/);
-      if (!nameMatch || !nameMatch[1]) {
-        // Skip to next comma or end
-        while (i < propsContent.length && propsContent[i] !== "," && propsContent[i] !== ";") i++;
-        i++; // skip delimiter
-        continue;
-      }
-
-      const propName = nameMatch[1];
-      const isOptional = !!nameMatch[2];
-      i += nameMatch[0].length;
-
-      // Now extract the type - need to handle nested braces, parens, brackets, and generics
-      let typeStr = "";
-      let depth = 0;
-      const openChars = new Set(["{", "(", "<", "["]);
-      const closeChars = new Set(["}", ")", "]"]);
-
-      while (i < propsContent.length) {
-        const char = propsContent[i];
-        if (char === undefined) break;
-
-        if (openChars.has(char)) {
-          depth++;
-        } else if (closeChars.has(char)) {
-          depth--;
-        } else if (char === ">") {
-          // Only treat > as closing if we're inside a generic (depth > 0) and it's not part of =>
-          if (depth > 0 && propsContent[i - 1] !== "=") {
-            depth--;
-          }
-        }
-
-        // Stop at comma or semicolon only when not nested
-        if (depth === 0 && (char === "," || char === ";")) {
-          i++; // skip the delimiter
-          break;
-        }
-
-        typeStr += char;
-        i++;
-      }
-
-      typeStr = typeStr.trim();
-      if (propName && typeStr) {
-        props.push({
-          name: propName,
-          type: typeStr,
-          required: !isOptional,
-        });
-      }
-    }
-
-    return props;
+    // Use shared utility from parser-utils (eliminates ~65 lines of duplication)
+    return parseTypeScriptInterfaceProps(propsContent);
   }
 
   /**

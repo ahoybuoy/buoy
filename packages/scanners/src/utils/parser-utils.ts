@@ -2216,3 +2216,199 @@ export function extractExtendWithParts(
     parts,
   };
 }
+
+/**
+ * Result of parsing a prop from TypeScript syntax.
+ */
+export interface ParsedProp {
+  /** The prop name */
+  name: string;
+  /** The prop type as a string */
+  type: string;
+  /** Whether the prop is required (no ? marker) */
+  required: boolean;
+  /** Default value if specified */
+  defaultValue?: string;
+}
+
+/**
+ * Parse TypeScript interface-style props into structured data.
+ * Handles nested types with proper depth tracking for {}, (), <>, [].
+ *
+ * Examples:
+ * - `{ title: string, count?: number }` → [{ name: 'title', type: 'string', required: true }, ...]
+ * - `{ cb: () => { value: string }, items?: Array<string> }` → properly handles nesting
+ *
+ * @param content The content between interface braces
+ * @returns Array of parsed props
+ */
+export function parseTypeScriptInterfaceProps(content: string): ParsedProp[] {
+  const props: ParsedProp[] = [];
+  let i = 0;
+
+  while (i < content.length) {
+    // Skip whitespace and newlines
+    while (i < content.length && /\s/.test(content[i] ?? "")) i++;
+    if (i >= content.length) break;
+
+    // Match prop name and optional marker
+    const nameMatch = content.substring(i).match(/^(\w+)(\?)?:\s*/);
+    if (!nameMatch || !nameMatch[1]) {
+      // Skip to next comma, semicolon, or end
+      while (
+        i < content.length &&
+        content[i] !== "," &&
+        content[i] !== ";"
+      )
+        i++;
+      i++; // skip delimiter
+      continue;
+    }
+
+    const propName = nameMatch[1];
+    const isOptional = !!nameMatch[2];
+    i += nameMatch[0].length;
+
+    // Extract the type using depth tracking
+    const { value: typeStr, endIndex } = extractBalancedExpression(
+      content,
+      i,
+      [",", ";"],
+    );
+    i = endIndex;
+
+    // Skip delimiter
+    if (content[i] === "," || content[i] === ";") {
+      i++;
+    }
+
+    props.push({
+      name: propName,
+      type: typeStr.trim() || "unknown",
+      required: !isOptional,
+    });
+  }
+
+  return props;
+}
+
+/**
+ * Extract a balanced expression with depth tracking.
+ * Handles nested {}, (), <>, [] properly.
+ * Stops at delimiter characters when depth is 0.
+ *
+ * This is an enhanced version of extractWithDepthTracking that returns
+ * both the value and the end index for easier parsing.
+ *
+ * @param content The string to parse
+ * @param startIndex Where to start parsing
+ * @param stopChars Characters that stop extraction when depth is 0
+ * @returns The extracted value and the index where extraction stopped
+ */
+export function extractBalancedExpression(
+  content: string,
+  startIndex: number,
+  stopChars: string[],
+): { value: string; endIndex: number } {
+  let value = "";
+  let depth = 0;
+  let i = startIndex;
+
+  const openChars = new Set(["{", "(", "<", "["]);
+  const closeChars: { [key: string]: number } = {
+    "}": 1,
+    ")": 1,
+    ">": 1,
+    "]": 1,
+  };
+
+  while (i < content.length) {
+    const char = content[i];
+    if (char === undefined) break;
+
+    // Track depth
+    if (openChars.has(char)) {
+      depth++;
+    } else if (char in closeChars) {
+      // Special handling for > to avoid treating => as closing bracket
+      if (char === ">" && content[i - 1] === "=") {
+        // This is part of arrow function, don't decrement depth
+        value += char;
+        i++;
+        continue;
+      }
+      depth--;
+    }
+
+    // Stop at delimiter only when not nested
+    if (depth === 0 && char !== undefined && stopChars.includes(char)) {
+      break;
+    }
+
+    value += char;
+    i++;
+  }
+
+  return { value: value.trim(), endIndex: i };
+}
+
+/**
+ * Parse Vue runtime prop definition to extract type and required status.
+ * Handles patterns like:
+ * - `String` → { type: 'string', required: false }
+ * - `{ type: String }` → { type: 'string', required: false }
+ * - `{ type: String, required: true }` → { type: 'string', required: true }
+ * - `{ type: [String, Number] }` → { type: 'string | number', required: false }
+ * - `String as PropType<MyType>` → { type: 'string', required: false }
+ *
+ * @param propContent The prop definition content
+ * @returns Type and required status
+ */
+export function parseVueRuntimePropType(propContent: string): {
+  type: string;
+  required: boolean;
+} {
+  const trimmed = propContent.trim();
+
+  // Simple type: String, Number, Boolean, etc.
+  const simpleTypeMatch = trimmed.match(
+    /^(String|Number|Boolean|Array|Object|Function|Symbol|Date)$/,
+  );
+  if (simpleTypeMatch?.[1]) {
+    return {
+      type: simpleTypeMatch[1].toLowerCase(),
+      required: false,
+    };
+  }
+
+  // Object syntax: { type: String, required: true }
+  if (trimmed.startsWith("{")) {
+    // Extract type
+    const typeMatch = trimmed.match(/type:\s*(\w+)/);
+    const arrayTypeMatch = trimmed.match(/type:\s*\[([^\]]+)\]/);
+
+    let typeStr = "unknown";
+    if (arrayTypeMatch?.[1]) {
+      // Array type like [String, Number] - join them
+      const types = arrayTypeMatch[1]
+        .split(",")
+        .map((t) => t.trim().toLowerCase());
+      typeStr = types.join(" | ");
+    } else if (typeMatch?.[1]) {
+      typeStr = typeMatch[1].toLowerCase();
+    }
+
+    // Check for required flag
+    const isRequired = /required:\s*true/.test(trimmed);
+
+    return {
+      type: typeStr,
+      required: isRequired,
+    };
+  }
+
+  return {
+    type: "unknown",
+    required: false,
+  };
+}

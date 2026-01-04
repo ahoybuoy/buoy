@@ -7,7 +7,10 @@ import type {
 import { createComponentId } from "@buoy-design/core";
 import { readFile } from "fs/promises";
 import { relative, basename } from "path";
-import { extractBalancedBraces } from "../utils/parser-utils.js";
+import {
+  extractBalancedBraces,
+  extractBalancedExpression,
+} from "../utils/parser-utils.js";
 
 export interface SvelteScannerConfig extends ScannerConfig {
   designSystemPackage?: string;
@@ -209,43 +212,11 @@ export class SvelteComponentScanner extends Scanner<
     content: string,
     startIdx: number,
   ): { value: string | undefined; endIndex: number } {
-    let valueStr = "";
-    let depth = 0;
-    let i = startIdx;
-    const depthChars: { [key: string]: number } = {
-      "{": 1,
-      "}": -1,
-      "(": 1,
-      ")": -1,
-      "<": 1,
-      ">": -1,
-      "[": 1,
-      "]": -1,
-    };
-
-    const charAt = (idx: number): string => content.charAt(idx);
-
-    while (i < content.length) {
-      const char = charAt(i);
-      const depthDelta = depthChars[char];
-
-      if (depthDelta !== undefined) {
-        depth += depthDelta;
-      }
-
-      // Stop at comma only when not nested
-      if (depth === 0 && char === ",") {
-        break;
-      }
-
-      valueStr += char;
-      i++;
-    }
-
-    const trimmed = valueStr.trim();
+    // Use shared utility from parser-utils (eliminates ~40 lines of duplication)
+    const { value, endIndex } = extractBalancedExpression(content, startIdx, [","]);
     return {
-      value: trimmed.length > 0 ? trimmed : undefined,
-      endIndex: i,
+      value: value.length > 0 ? value : undefined,
+      endIndex,
     };
   }
 
@@ -257,40 +228,16 @@ export class SvelteComponentScanner extends Scanner<
     type: string;
     rest: string;
   } {
-    let typeStr = "";
-    let depth = 0;
-    let i = 0;
-    const depthChars: { [key: string]: number } = {
-      "{": 1,
-      "}": -1,
-      "(": 1,
-      ")": -1,
-      "<": 1,
-      ">": -1,
-    };
-
-    const charAt = (idx: number): string => typeAndRest.charAt(idx);
-
-    while (i < typeAndRest.length) {
-      const char = charAt(i);
-      const depthDelta = depthChars[char];
-
-      if (depthDelta !== undefined) {
-        depth += depthDelta;
-      }
-
-      // Stop at '=' or ';' only when not nested
-      if (depth === 0 && (char === "=" || char === ";")) {
-        break;
-      }
-
-      typeStr += char;
-      i++;
-    }
+    // Use shared utility from parser-utils (eliminates ~40 lines of duplication)
+    const { value: typeStr, endIndex } = extractBalancedExpression(
+      typeAndRest,
+      0,
+      ["=", ";"],
+    );
 
     return {
-      type: typeStr.trim() || "unknown",
-      rest: typeAndRest.substring(i),
+      type: typeStr || "unknown",
+      rest: typeAndRest.substring(endIndex),
     };
   }
 
