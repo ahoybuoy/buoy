@@ -38,12 +38,24 @@ describe('drift model helpers', () => {
       expect(getDefaultSeverity('accessibility-conflict')).toBe('critical');
     });
 
+    it('returns critical for color-contrast', () => {
+      expect(getDefaultSeverity('color-contrast')).toBe('critical');
+    });
+
     it('returns warning for hardcoded-value', () => {
       expect(getDefaultSeverity('hardcoded-value')).toBe('warning');
     });
 
+    it('returns warning for unused-component', () => {
+      expect(getDefaultSeverity('unused-component')).toBe('warning');
+    });
+
     it('returns info for naming-inconsistency', () => {
       expect(getDefaultSeverity('naming-inconsistency')).toBe('info');
+    });
+
+    it('returns info for unused-token', () => {
+      expect(getDefaultSeverity('unused-token')).toBe('info');
     });
   });
 });

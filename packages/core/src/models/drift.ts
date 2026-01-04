@@ -12,6 +12,9 @@ export const DriftTypeSchema = z.enum([
   "missing-documentation",
   "hardcoded-value",
   "framework-sprawl",
+  "unused-component",
+  "unused-token",
+  "color-contrast",
 ]);
 
 // Severity levels
@@ -153,17 +156,20 @@ export function getSeverityWeight(severity: Severity): number {
 export function getDefaultSeverity(type: DriftType): Severity {
   switch (type) {
     case "accessibility-conflict":
+    case "color-contrast":
       return "critical";
     case "deprecated-pattern":
     case "semantic-mismatch":
     case "value-divergence":
     case "hardcoded-value":
     case "framework-sprawl":
+    case "unused-component":
       return "warning";
     case "orphaned-component":
     case "orphaned-token":
     case "naming-inconsistency":
     case "missing-documentation":
+    case "unused-token":
       return "info";
   }
 }
@@ -180,6 +186,9 @@ export const DRIFT_TYPE_LABELS: Record<DriftType, string> = {
   "missing-documentation": "Missing Documentation",
   "hardcoded-value": "Hardcoded Value",
   "framework-sprawl": "Framework Sprawl",
+  "unused-component": "Unused Component",
+  "unused-token": "Unused Token",
+  "color-contrast": "Color Contrast",
 };
 
 /**
@@ -208,6 +217,12 @@ export const DRIFT_TYPE_DESCRIPTIONS: Record<DriftType, string> = {
     "Magic numbers, hex colors, or pixel values that should use design tokens",
   "framework-sprawl":
     "Multiple UI frameworks detected that may indicate migration issues",
+  "unused-component":
+    "Component is defined but never imported or used elsewhere in the codebase",
+  "unused-token":
+    "Design token is defined but never referenced in components or stylesheets",
+  "color-contrast":
+    "Color combinations fail WCAG accessibility contrast ratio requirements",
 };
 
 // Human-readable severity labels

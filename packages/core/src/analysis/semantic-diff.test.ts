@@ -517,6 +517,194 @@ describe("SemanticDiffEngine", () => {
       expect(duplicateDrifts).toHaveLength(0);
     });
   });
+
+  describe("checkColorContrast", () => {
+    it("detects insufficient color contrast", () => {
+      const component = createMockComponentWithMetadata("Button", {
+        hardcodedValues: [
+          {
+            type: "color",
+            value: "#777",
+            property: "color",
+            location: "Button.tsx:10",
+          },
+          {
+            type: "color",
+            value: "#999",
+            property: "background-color",
+            location: "Button.tsx:11",
+          },
+        ],
+      });
+
+      const result = engine.analyzeComponents([component], {
+        checkAccessibility: true,
+      });
+
+      const contrastDrifts = result.drifts.filter(
+        (d) => d.type === "color-contrast",
+      );
+      expect(contrastDrifts.length).toBeGreaterThan(0);
+      expect(contrastDrifts[0]!.severity).toBe("critical");
+      expect(contrastDrifts[0]!.message).toContain("insufficient color contrast");
+    });
+
+    it("does not flag sufficient color contrast", () => {
+      const component = createMockComponentWithMetadata("Button", {
+        hardcodedValues: [
+          {
+            type: "color",
+            value: "#000",
+            property: "color",
+            location: "Button.tsx:10",
+          },
+          {
+            type: "color",
+            value: "#fff",
+            property: "background-color",
+            location: "Button.tsx:11",
+          },
+        ],
+      });
+
+      const result = engine.analyzeComponents([component], {
+        checkAccessibility: true,
+      });
+
+      const contrastDrifts = result.drifts.filter(
+        (d) => d.type === "color-contrast",
+      );
+      expect(contrastDrifts).toHaveLength(0);
+    });
+
+    it("skips contrast check when accessibility checking is disabled", () => {
+      const component = createMockComponentWithMetadata("Button", {
+        hardcodedValues: [
+          {
+            type: "color",
+            value: "#777",
+            property: "color",
+            location: "Button.tsx:10",
+          },
+          {
+            type: "color",
+            value: "#999",
+            property: "background-color",
+            location: "Button.tsx:11",
+          },
+        ],
+      });
+
+      const result = engine.analyzeComponents([component], {
+        checkAccessibility: false,
+      });
+
+      const contrastDrifts = result.drifts.filter(
+        (d) => d.type === "color-contrast",
+      );
+      expect(contrastDrifts).toHaveLength(0);
+    });
+  });
+
+  describe("checkUnusedComponents", () => {
+    it("detects unused components", () => {
+      const components = [
+        createMockComponent("Button", "react"),
+        createMockComponent("Card", "react"),
+      ];
+
+      const usageMap = new Map([
+        ["react:Button", 5], // Button is used 5 times
+        ["react:Card", 0], // Card is never used
+      ]);
+
+      const drifts = engine.checkUnusedComponents(components, usageMap);
+
+      expect(drifts).toHaveLength(1);
+      expect(drifts[0]!.type).toBe("unused-component");
+      expect(drifts[0]!.severity).toBe("warning");
+      expect(drifts[0]!.message).toContain("Card");
+      expect(drifts[0]!.message).toContain("never used");
+    });
+
+    it("does not flag used components", () => {
+      const components = [
+        createMockComponent("Button", "react"),
+        createMockComponent("Card", "react"),
+      ];
+
+      const usageMap = new Map([
+        ["react:Button", 5],
+        ["react:Card", 3],
+      ]);
+
+      const drifts = engine.checkUnusedComponents(components, usageMap);
+
+      expect(drifts).toHaveLength(0);
+    });
+
+    it("checks usage by component name if id not found", () => {
+      const components = [createMockComponent("Button", "react")];
+
+      const usageMap = new Map([
+        ["Button", 5], // Usage tracked by name instead of ID
+      ]);
+
+      const drifts = engine.checkUnusedComponents(components, usageMap);
+
+      expect(drifts).toHaveLength(0);
+    });
+  });
+
+  describe("checkUnusedTokens", () => {
+    it("detects unused tokens", () => {
+      const tokens = [
+        createMockToken("primary", "#3b82f6", "css"),
+        createMockToken("secondary", "#6b7280", "css"),
+      ];
+
+      const usageMap = new Map([
+        ["css:primary", 10], // primary is used
+        ["css:secondary", 0], // secondary is never used
+      ]);
+
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+
+      expect(drifts).toHaveLength(1);
+      expect(drifts[0]!.type).toBe("unused-token");
+      expect(drifts[0]!.severity).toBe("info");
+      expect(drifts[0]!.message).toContain("secondary");
+      expect(drifts[0]!.message).toContain("never used");
+    });
+
+    it("does not flag used tokens", () => {
+      const tokens = [
+        createMockToken("primary", "#3b82f6", "css"),
+        createMockToken("secondary", "#6b7280", "css"),
+      ];
+
+      const usageMap = new Map([
+        ["css:primary", 10],
+        ["css:secondary", 5],
+      ]);
+
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+
+      expect(drifts).toHaveLength(0);
+    });
+
+    it("checks usage by token name if id not found", () => {
+      const tokens = [createMockToken("primary", "#3b82f6", "css")];
+
+      const usageMap = new Map([
+        ["primary", 10], // Usage tracked by name instead of ID
+      ]);
+
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+
+      expect(drifts).toHaveLength(0);
+    });
+  });
 });
 
 // Helper functions

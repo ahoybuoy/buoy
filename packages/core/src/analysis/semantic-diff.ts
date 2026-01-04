@@ -26,6 +26,99 @@ import {
 export type { TokenSuggestion } from "./token-suggestions.js";
 
 /**
+ * Calculate relative luminance for WCAG contrast ratio
+ * https://www.w3.org/TR/WCAG20/#relativeluminancedef
+ */
+function getRelativeLuminance(r: number, g: number, b: number): number {
+  const normalize = (c: number) => {
+    const sRGB = c / 255;
+    return sRGB <= 0.03928 ? sRGB / 12.92 : Math.pow((sRGB + 0.055) / 1.055, 2.4);
+  };
+
+  const rs = normalize(r);
+  const gs = normalize(g);
+  const bs = normalize(b);
+
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+/**
+ * Calculate WCAG contrast ratio between two colors
+ * https://www.w3.org/TR/WCAG20/#contrast-ratiodef
+ */
+function getContrastRatio(
+  color1: { r: number; g: number; b: number },
+  color2: { r: number; g: number; b: number },
+): number {
+  const l1 = getRelativeLuminance(color1.r, color1.g, color1.b);
+  const l2 = getRelativeLuminance(color2.r, color2.g, color2.b);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Parse hex color to RGB
+ */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = hex.replace(/^#/, '');
+
+  // Handle 3-digit hex
+  if (normalized.length === 3) {
+    const [r, g, b] = normalized.split('').map(c => parseInt(c + c, 16));
+    return { r: r!, g: g!, b: b! };
+  }
+
+  // Handle 6-digit hex
+  if (normalized.length === 6) {
+    const r = parseInt(normalized.substring(0, 2), 16);
+    const g = parseInt(normalized.substring(2, 4), 16);
+    const b = parseInt(normalized.substring(4, 6), 16);
+    return { r, g, b };
+  }
+
+  return null;
+}
+
+/**
+ * Parse rgb/rgba string to RGB
+ */
+function parseRgbString(rgbString: string): { r: number; g: number; b: number } | null {
+  const match = rgbString.match(/rgba?\((\d+),?\s*(\d+),?\s*(\d+)/);
+  if (!match) return null;
+
+  return {
+    r: parseInt(match[1]!),
+    g: parseInt(match[2]!),
+    b: parseInt(match[3]!),
+  };
+}
+
+/**
+ * Convert color value to RGB
+ */
+function colorToRgb(color: string): { r: number; g: number; b: number } | null {
+  if (color.startsWith('#')) {
+    return hexToRgb(color);
+  }
+  if (color.startsWith('rgb')) {
+    return parseRgbString(color);
+  }
+
+  // Named colors (common ones)
+  const namedColors: Record<string, { r: number; g: number; b: number }> = {
+    'white': { r: 255, g: 255, b: 255 },
+    'black': { r: 0, g: 0, b: 0 },
+    'red': { r: 255, g: 0, b: 0 },
+    'green': { r: 0, g: 128, b: 0 },
+    'blue': { r: 0, g: 0, b: 255 },
+    'transparent': { r: 255, g: 255, b: 255 }, // Treat as white for contrast purposes
+  };
+
+  return namedColors[color.toLowerCase()] || null;
+}
+
+/**
  * Semantic suffixes that represent legitimate separate components.
  * Components with these suffixes are NOT duplicates of their base component.
  * e.g., Button vs ButtonGroup are distinct components, not duplicates.
@@ -693,6 +786,12 @@ export class SemanticDiffEngine {
           });
         }
       }
+
+      // Check for color contrast issues
+      if (options.checkAccessibility) {
+        const contrastIssues = this.checkColorContrast(component);
+        drifts.push(...contrastIssues);
+      }
     }
 
     // Cross-component checks
@@ -1291,6 +1390,152 @@ export class SemanticDiffEngine {
     }
 
     return issues;
+  }
+
+  /**
+   * Check for color contrast issues in component
+   * Detects foreground/background color pairs that fail WCAG contrast ratios
+   */
+  private checkColorContrast(component: Component): DriftSignal[] {
+    const drifts: DriftSignal[] = [];
+
+    if (!component.metadata.hardcodedValues) {
+      return drifts;
+    }
+
+    const colorValues = component.metadata.hardcodedValues.filter(
+      (h) => h.type === "color",
+    );
+
+    // Look for color/background-color pairs
+    const colorsByProperty = new Map<string, typeof colorValues>();
+    for (const cv of colorValues) {
+      const prop = cv.property.toLowerCase();
+      if (!colorsByProperty.has(prop)) {
+        colorsByProperty.set(prop, []);
+      }
+      colorsByProperty.get(prop)!.push(cv);
+    }
+
+    const foregroundColors = colorsByProperty.get("color") || [];
+    const backgroundColors =
+      colorsByProperty.get("background-color") ||
+      colorsByProperty.get("background") ||
+      [];
+
+    // Check contrast ratio for each foreground/background pair
+    for (const fg of foregroundColors) {
+      for (const bg of backgroundColors) {
+        const fgRgb = colorToRgb(fg.value);
+        const bgRgb = colorToRgb(bg.value);
+
+        if (!fgRgb || !bgRgb) continue;
+
+        const ratio = getContrastRatio(fgRgb, bgRgb);
+
+        // WCAG AA requires 4.5:1 for normal text, 3:1 for large text
+        // WCAG AAA requires 7:1 for normal text, 4.5:1 for large text
+        const minRatioAA = 4.5;
+        const minRatioAAA = 7;
+
+        if (ratio < minRatioAA) {
+          const level = ratio < 3 ? "WCAG AA and AAA" : "WCAG AAA";
+          drifts.push({
+            id: createDriftId("color-contrast", component.id, `${fg.value}-${bg.value}`),
+            type: "color-contrast",
+            severity: "critical",
+            source: this.componentToDriftSource(component),
+            message: `Component "${component.name}" has insufficient color contrast: ${fg.value} on ${bg.value} (ratio: ${ratio.toFixed(2)}:1)`,
+            details: {
+              expected: `Minimum ${minRatioAA}:1 for WCAG AA, ${minRatioAAA}:1 for AAA`,
+              actual: `${ratio.toFixed(2)}:1`,
+              suggestions: [
+                `Fails ${level} - adjust colors to meet minimum ${minRatioAA}:1 ratio`,
+                "Use a contrast checker tool to find accessible color combinations",
+                "Consider using design system color tokens with built-in contrast ratios",
+              ],
+              affectedFiles: [
+                `${fg.location}: ${fg.property}: ${fg.value}`,
+                `${bg.location}: ${bg.property}: ${bg.value}`,
+              ],
+            },
+            detectedAt: new Date(),
+          });
+        }
+      }
+    }
+
+    return drifts;
+  }
+
+  /**
+   * Check for unused components
+   * Components that are defined but never imported/used elsewhere
+   */
+  checkUnusedComponents(
+    components: Component[],
+    usageMap: Map<string, number>,
+  ): DriftSignal[] {
+    const drifts: DriftSignal[] = [];
+
+    for (const component of components) {
+      const usageCount = usageMap.get(component.id) || usageMap.get(component.name) || 0;
+
+      if (usageCount === 0) {
+        drifts.push({
+          id: createDriftId("unused-component", component.id),
+          type: "unused-component",
+          severity: "warning",
+          source: this.componentToDriftSource(component),
+          message: `Component "${component.name}" is defined but never used`,
+          details: {
+            suggestions: [
+              "Remove component if no longer needed",
+              "Export component if it's part of the public API",
+              "Add usage in tests or documentation",
+            ],
+          },
+          detectedAt: new Date(),
+        });
+      }
+    }
+
+    return drifts;
+  }
+
+  /**
+   * Check for unused tokens
+   * Design tokens that are defined but never referenced
+   */
+  checkUnusedTokens(
+    tokens: DesignToken[],
+    usageMap: Map<string, number>,
+  ): DriftSignal[] {
+    const drifts: DriftSignal[] = [];
+
+    for (const token of tokens) {
+      const usageCount = usageMap.get(token.id) || usageMap.get(token.name) || 0;
+
+      if (usageCount === 0) {
+        drifts.push({
+          id: createDriftId("unused-token", token.id),
+          type: "unused-token",
+          severity: "info",
+          source: this.tokenToDriftSource(token),
+          message: `Token "${token.name}" is defined but never used`,
+          details: {
+            suggestions: [
+              "Remove token if no longer needed",
+              "Document token for future use",
+              "Check if token is referenced by name in CSS/JS",
+            ],
+          },
+          detectedAt: new Date(),
+        });
+      }
+    }
+
+    return drifts;
   }
 
   /**
