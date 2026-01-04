@@ -100,7 +100,7 @@ export function createScanCommand(): Command {
             info("Buoy couldn't find React, Vue, Svelte, Angular, or other UI frameworks.");
             console.log("");
             info("If this is a frontend project, try:");
-            info("  1. Run " + chalk.cyan("buoy init") + " to configure manually");
+            info("  1. Run " + chalk.cyan("buoy dock") + " to configure manually");
             info("  2. Make sure package.json lists your framework");
           } else {
             warning("No sources to scan");
@@ -120,7 +120,7 @@ export function createScanCommand(): Command {
             );
             info(
               "  2. Run " +
-                chalk.cyan("buoy init") +
+                chalk.cyan("buoy dock") +
                 " to configure your project manually",
             );
             info("  3. Or add paths manually to your config");

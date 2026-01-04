@@ -1036,7 +1036,7 @@ export function createDockCommand(): Command {
         if (!options.hooks) {
           info(
             `  ${stepNum}. Run ` +
-              chalk.cyan("buoy init --hooks") +
+              chalk.cyan("buoy dock --hooks") +
               " to setup pre-commit hooks",
           );
         }

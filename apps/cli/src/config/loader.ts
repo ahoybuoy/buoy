@@ -72,7 +72,7 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
         prefixSeparator: ': ',
       });
       throw new Error(
-        `Invalid config in ${configPath}:\n\n${validationError.message}\n\nRun 'buoy init' to generate a valid configuration.`,
+        `Invalid config in ${configPath}:\n\n${validationError.message}\n\nRun 'buoy dock' to generate a valid configuration.`,
       );
     }
 

@@ -502,7 +502,7 @@ describe('scan command', () => {
       // When no frameworks detected, shows warning and hint
       expect(reporters.warning).toHaveBeenCalledWith('No frontend project detected');
       expect(reporters.info).toHaveBeenCalledWith(
-        expect.stringContaining('buoy init')
+        expect.stringContaining('buoy dock')
       );
     });
 

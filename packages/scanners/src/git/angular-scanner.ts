@@ -47,38 +47,44 @@ export class AngularComponentScanner extends Scanner<
   }
 
   private async parseFile(filePath: string): Promise<Component[]> {
-    const content = readFileSync(filePath, "utf-8");
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      content,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
-    );
+    try {
+      const content = readFileSync(filePath, "utf-8");
+      const sourceFile = ts.createSourceFile(
+        filePath,
+        content,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TS,
+      );
 
-    const components: Component[] = [];
-    const relativePath = relative(this.config.projectRoot, filePath);
+      const components: Component[] = [];
+      const relativePath = relative(this.config.projectRoot, filePath);
 
-    const visit = (node: ts.Node) => {
-      // Find classes with @Component or @Directive decorator
-      if (ts.isClassDeclaration(node) && node.name) {
-        const decorator = this.findAngularDecorator(node);
-        if (decorator) {
-          const comp = this.extractComponent(
-            node,
-            decorator,
-            sourceFile,
-            relativePath,
-          );
-          if (comp) components.push(comp);
+      const visit = (node: ts.Node) => {
+        // Find classes with @Component or @Directive decorator
+        if (ts.isClassDeclaration(node) && node.name) {
+          const decorator = this.findAngularDecorator(node);
+          if (decorator) {
+            const comp = this.extractComponent(
+              node,
+              decorator,
+              sourceFile,
+              relativePath,
+            );
+            if (comp) components.push(comp);
+          }
         }
-      }
 
-      ts.forEachChild(node, visit);
-    };
+        ts.forEachChild(node, visit);
+      };
 
-    ts.forEachChild(sourceFile, visit);
-    return components;
+      ts.forEachChild(sourceFile, visit);
+      return components;
+    } catch (error) {
+      // Log error and return empty array for graceful degradation
+      console.warn(`Failed to parse Angular component ${filePath}:`, error instanceof Error ? error.message : error);
+      return [];
+    }
   }
 
   /**

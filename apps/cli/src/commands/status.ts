@@ -162,12 +162,12 @@ export function createStatusCommand(): Command {
           info("Options:");
           info(
             "  - Run " +
-              chalk.cyan("buoy bootstrap") +
+              chalk.cyan("buoy tokens") +
               " to extract tokens from existing code",
           );
           info(
             "  - Run " +
-              chalk.cyan("buoy build") +
+              chalk.cyan("buoy anchor") +
               " to generate a design system with AI",
           );
           info("  - Check your config has component paths configured");
@@ -228,7 +228,7 @@ export function createStatusCommand(): Command {
           console.log(
             chalk.dim("💡 ") +
               "Run " +
-              chalk.cyan("buoy init") +
+              chalk.cyan("buoy dock") +
               " to save this configuration"
           );
         }

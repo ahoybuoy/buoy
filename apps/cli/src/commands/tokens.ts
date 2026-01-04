@@ -241,7 +241,7 @@ export function createTokensCommand(): Command {
           console.log(
             chalk.dim('💡 ') +
               'Run ' +
-              chalk.cyan('buoy init') +
+              chalk.cyan('buoy dock') +
               ' to save configuration'
           );
         }

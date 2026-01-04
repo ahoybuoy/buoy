@@ -51,6 +51,12 @@ const driftSignalSchema = z.object({
   suggestion: z.string().optional(),
 });
 
+const scanSummarySchema = z.object({
+  totalComponents: z.number(),
+  totalTokens: z.number(),
+  totalDrift: z.number(),
+});
+
 const uploadScanSchema = z.object({
   // Metadata
   commitSha: z.string().optional(),
@@ -64,14 +70,39 @@ const uploadScanSchema = z.object({
   drift: z.array(driftSignalSchema).default([]),
 
   // Summary stats
-  summary: z.object({
-    totalComponents: z.number(),
-    totalTokens: z.number(),
-    totalDrift: z.number(),
+  summary: scanSummarySchema.extend({
     driftByType: z.record(z.number()).optional(),
     driftBySeverity: z.record(z.number()).optional(),
   }).optional(),
 });
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Safely parse JSON with schema validation
+ */
+function safeJsonParse<T>(json: string | null | undefined, schema: z.ZodType<T>, fallback: T): T {
+  if (!json) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(json);
+    const result = schema.safeParse(parsed);
+
+    if (result.success) {
+      return result.data;
+    }
+
+    console.warn('JSON validation failed:', result.error);
+    return fallback;
+  } catch (error) {
+    console.warn('JSON parse failed:', error);
+    return fallback;
+  }
+}
 
 // ============================================================================
 // Routes
@@ -229,7 +260,7 @@ scans.get('/:projectId/scans', async (c) => {
       componentsCount: row.components_count,
       tokensCount: row.tokens_count,
       driftCount: row.drift_count,
-      summary: row.summary ? JSON.parse(row.summary as string) : null,
+      summary: safeJsonParse(row.summary as string | null, scanSummarySchema, null),
       createdAt: row.created_at,
     })) || [];
 
@@ -296,14 +327,14 @@ scans.get('/:projectId/scans/latest', async (c) => {
       componentsCount: scan.components_count,
       tokensCount: scan.tokens_count,
       driftCount: scan.drift_count,
-      summary: scan.summary ? JSON.parse(scan.summary as string) : null,
+      summary: safeJsonParse(scan.summary as string | null, scanSummarySchema, null),
       createdAt: scan.created_at,
     };
 
     if (includeData) {
-      result.components = scan.components_data ? JSON.parse(scan.components_data as string) : [];
-      result.tokens = scan.tokens_data ? JSON.parse(scan.tokens_data as string) : [];
-      result.drift = scan.drift_data ? JSON.parse(scan.drift_data as string) : [];
+      result.components = safeJsonParse(scan.components_data as string | null, z.array(componentSchema), []);
+      result.tokens = safeJsonParse(scan.tokens_data as string | null, z.array(tokenSchema), []);
+      result.drift = safeJsonParse(scan.drift_data as string | null, z.array(driftSignalSchema), []);
     }
 
     return c.json(result);
@@ -349,14 +380,14 @@ scans.get('/:projectId/scans/:scanId', async (c) => {
       componentsCount: scan.components_count,
       tokensCount: scan.tokens_count,
       driftCount: scan.drift_count,
-      summary: scan.summary ? JSON.parse(scan.summary as string) : null,
+      summary: safeJsonParse(scan.summary as string | null, scanSummarySchema, null),
       createdAt: scan.created_at,
     };
 
     if (includeData) {
-      result.components = scan.components_data ? JSON.parse(scan.components_data as string) : [];
-      result.tokens = scan.tokens_data ? JSON.parse(scan.tokens_data as string) : [];
-      result.drift = scan.drift_data ? JSON.parse(scan.drift_data as string) : [];
+      result.components = safeJsonParse(scan.components_data as string | null, z.array(componentSchema), []);
+      result.tokens = safeJsonParse(scan.tokens_data as string | null, z.array(tokenSchema), []);
+      result.drift = safeJsonParse(scan.drift_data as string | null, z.array(driftSignalSchema), []);
     }
 
     return c.json(result);
