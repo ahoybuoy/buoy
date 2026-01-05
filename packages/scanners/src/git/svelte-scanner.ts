@@ -12,6 +12,17 @@ import {
   extractBalancedBraces,
   extractBalancedExpression,
 } from "../utils/parser-utils.js";
+import {
+  createScannerSignalCollector,
+  type ScannerSignalCollector,
+  type SignalEnrichedScanResult,
+  type CollectorStats,
+} from "../signals/scanner-integration.js";
+import {
+  createSignalAggregator,
+  type SignalAggregator,
+  type RawSignal,
+} from "../signals/index.js";
 
 export interface SvelteScannerConfig extends ScannerConfig {
   designSystemPackage?: string;
@@ -24,11 +35,52 @@ export class SvelteComponentScanner extends Scanner<
   /** Default file patterns for Svelte components */
   private static readonly DEFAULT_PATTERNS = ["**/*.svelte"];
 
+  /** Aggregator for collecting signals across all scanned files */
+  private signalAggregator: SignalAggregator = createSignalAggregator();
+
   async scan(): Promise<ScanResult<Component>> {
+    // Clear signals from previous scan
+    this.signalAggregator.clear();
+
     return this.runScan(
       (file) => this.parseFile(file),
       SvelteComponentScanner.DEFAULT_PATTERNS,
     );
+  }
+
+  /**
+   * Scan and return signals along with components.
+   * This is the signal-enriched version of scan().
+   */
+  async scanWithSignals(): Promise<SignalEnrichedScanResult<Component>> {
+    const result = await this.scan();
+    return {
+      ...result,
+      signals: this.signalAggregator.getAllSignals(),
+      signalStats: {
+        total: this.signalAggregator.getStats().total,
+        byType: this.signalAggregator.getStats().byType,
+      },
+    };
+  }
+
+  /**
+   * Get signals collected during the last scan.
+   * Call after scan() to retrieve signals.
+   */
+  getCollectedSignals(): RawSignal[] {
+    return this.signalAggregator.getAllSignals();
+  }
+
+  /**
+   * Get signal statistics from the last scan.
+   */
+  getSignalStats(): CollectorStats {
+    const stats = this.signalAggregator.getStats();
+    return {
+      total: stats.total,
+      byType: stats.byType,
+    };
   }
 
   getSourceType(): string {
@@ -39,11 +91,18 @@ export class SvelteComponentScanner extends Scanner<
     const content = await readFile(filePath, "utf-8");
     const relativePath = relative(this.config.projectRoot, filePath);
 
+    // Create signal collector for this file
+    const signalCollector = createScannerSignalCollector('svelte', relativePath);
+
     // Extract component name from filename (e.g., MyButton.svelte -> MyButton)
     const rawName = basename(filePath, ".svelte");
 
     // Skip SvelteKit route files (+page.svelte, +layout.svelte, +error.svelte, etc.)
-    if (rawName.startsWith("+")) return [];
+    if (rawName.startsWith("+")) {
+      // Still add signals even if we skip the component
+      this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
+      return [];
+    }
 
     // Convert filename to PascalCase component name
     // Handles: button -> Button, my-button -> MyButton, myButton -> MyButton
@@ -55,8 +114,8 @@ export class SvelteComponentScanner extends Scanner<
     const moduleScriptContent = this.extractModuleScriptContent(content);
 
     const props = this.extractProps(scriptContent, moduleScriptContent);
-    const dependencies = this.extractDependencies(content);
-    const hardcodedValues = this.extractHardcodedValuesFromTemplate(content);
+    const dependencies = this.extractDependencies(content, signalCollector);
+    const hardcodedValues = this.extractHardcodedValuesFromTemplate(content, signalCollector);
 
     const source: SvelteSource = {
       type: "svelte",
@@ -64,6 +123,16 @@ export class SvelteComponentScanner extends Scanner<
       exportName: name,
       line: 1,
     };
+
+    // Emit component definition signal
+    signalCollector.collectComponentDef(name, 1, {
+      propsCount: props.length,
+      hasHardcodedValues: hardcodedValues.length > 0,
+      dependencyCount: dependencies.length,
+    });
+
+    // Add this file's signals to the aggregator
+    this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
 
     return [
       {
@@ -713,7 +782,10 @@ export class SvelteComponentScanner extends Scanner<
     return props;
   }
 
-  private extractDependencies(content: string): string[] {
+  private extractDependencies(
+    content: string,
+    signalCollector?: ScannerSignalCollector,
+  ): string[] {
     const deps: Set<string> = new Set();
 
     // Find component imports
@@ -729,7 +801,11 @@ export class SvelteComponentScanner extends Scanner<
     // Find component usage in template: <ComponentName
     const componentUsage = content.matchAll(/<([A-Z][a-zA-Z0-9]+)/g);
     for (const m of componentUsage) {
-      if (m[1]) deps.add(m[1]);
+      if (m[1]) {
+        deps.add(m[1]);
+        // Emit component usage signal
+        signalCollector?.collectComponentUsage(m[1], 1);
+      }
     }
 
     return Array.from(deps);
@@ -805,7 +881,10 @@ export class SvelteComponentScanner extends Scanner<
    * - style="color: #FF0000"
    * - style:color="#FF0000"
    */
-  private extractHardcodedValuesFromTemplate(content: string): HardcodedValue[] {
+  private extractHardcodedValuesFromTemplate(
+    content: string,
+    signalCollector?: ScannerSignalCollector,
+  ): HardcodedValue[] {
     const hardcoded: HardcodedValue[] = [];
 
     // Pattern 1: Inline style attribute: style="color: #FF0000; padding: 16px"
@@ -829,6 +908,8 @@ export class SvelteComponentScanner extends Scanner<
                 property,
                 location: "template",
               });
+              // Emit signal for hardcoded value
+              signalCollector?.collectFromValue(trimmedValue, property, 1);
             }
           }
         }
@@ -848,6 +929,8 @@ export class SvelteComponentScanner extends Scanner<
             property,
             location: "template",
           });
+          // Emit signal for hardcoded value
+          signalCollector?.collectFromValue(value, property, 1);
         }
       }
     }

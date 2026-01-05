@@ -8,6 +8,17 @@ import {
   parseTypeScriptInterfaceProps,
 } from "../utils/parser-utils.js";
 import { existsSync } from "fs";
+import {
+  createScannerSignalCollector,
+  type ScannerSignalCollector,
+  type SignalEnrichedScanResult,
+  type CollectorStats,
+} from "../signals/scanner-integration.js";
+import {
+  createSignalAggregator,
+  type SignalAggregator,
+  type RawSignal,
+} from "../signals/index.js";
 
 export interface VueScannerConfig extends ScannerConfig {
   designSystemPackage?: string;
@@ -34,7 +45,13 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
   /** Default file patterns for Vue components */
   private static readonly DEFAULT_PATTERNS = ["**/*.vue"];
 
+  /** Aggregator for collecting signals across all scanned files */
+  private signalAggregator: SignalAggregator = createSignalAggregator();
+
   async scan(): Promise<ScanResult<Component>> {
+    // Clear signals from previous scan
+    this.signalAggregator.clear();
+
     const result = await this.runScan(
       (file) => this.parseFile(file),
       VueComponentScanner.DEFAULT_PATTERNS,
@@ -44,6 +61,41 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     this.resolveExtendsInheritance(result.items);
 
     return result;
+  }
+
+  /**
+   * Scan and return signals along with components.
+   * This is the signal-enriched version of scan().
+   */
+  async scanWithSignals(): Promise<SignalEnrichedScanResult<Component>> {
+    const result = await this.scan();
+    return {
+      ...result,
+      signals: this.signalAggregator.getAllSignals(),
+      signalStats: {
+        total: this.signalAggregator.getStats().total,
+        byType: this.signalAggregator.getStats().byType,
+      },
+    };
+  }
+
+  /**
+   * Get signals collected during the last scan.
+   * Call after scan() to retrieve signals.
+   */
+  getCollectedSignals(): RawSignal[] {
+    return this.signalAggregator.getAllSignals();
+  }
+
+  /**
+   * Get signal statistics from the last scan.
+   */
+  getSignalStats(): CollectorStats {
+    const stats = this.signalAggregator.getStats();
+    return {
+      total: stats.total,
+      byType: stats.byType,
+    };
   }
 
   /**
@@ -79,6 +131,9 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
   private async parseFile(filePath: string): Promise<Component[]> {
     const content = await readFile(filePath, "utf-8");
     const relativePath = relative(this.config.projectRoot, filePath);
+
+    // Create signal collector for this file
+    const signalCollector = createScannerSignalCollector('vue', relativePath);
 
     // Extract component name from filename (e.g., MyButton.vue -> MyButton)
     const fileBaseName = basename(filePath, ".vue");
@@ -121,7 +176,7 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
       }
     }
 
-    const dependencies = this.extractDependencies(content);
+    const dependencies = this.extractDependencies(content, signalCollector);
     const metadata = this.extractMetadata(scriptContent, content, isSetup, scriptAttrs, props);
 
     // Use defineOptions name if available (Element Plus pattern), otherwise use filename
@@ -132,7 +187,11 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
 
     // Only process PascalCase component names
     // Either the filename starts with uppercase OR defineOptions/Options API provides a PascalCase name
-    if (!/^[A-Z]/.test(componentName)) return [];
+    if (!/^[A-Z]/.test(componentName)) {
+      // Still add signals even if we don't return the component
+      this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
+      return [];
+    }
 
     const source: VueSource = {
       type: "vue",
@@ -142,7 +201,18 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     };
 
     // Extract hardcoded values from template
-    const hardcodedValues = this.extractHardcodedValuesFromTemplate(content);
+    const hardcodedValues = this.extractHardcodedValuesFromTemplate(content, signalCollector);
+
+    // Emit component definition signal
+    signalCollector.collectComponentDef(componentName, 1, {
+      propsCount: props.length,
+      hasHardcodedValues: hardcodedValues.length > 0,
+      dependencyCount: dependencies.length,
+      isSetup,
+    });
+
+    // Add this file's signals to the aggregator
+    this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
 
     return [
       {
@@ -890,7 +960,10 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     }
   }
 
-  private extractDependencies(content: string): string[] {
+  private extractDependencies(
+    content: string,
+    signalCollector?: ScannerSignalCollector,
+  ): string[] {
     const deps: Set<string> = new Set();
 
     // Find component usage in template: <ComponentName or <component-name
@@ -903,7 +976,11 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
       // PascalCase components
       const pascalMatches = template.matchAll(/<([A-Z][a-zA-Z0-9]+)/g);
       for (const m of pascalMatches) {
-        if (m[1]) deps.add(m[1]);
+        if (m[1]) {
+          deps.add(m[1]);
+          // Emit component usage signal
+          signalCollector?.collectComponentUsage(m[1], 1);
+        }
       }
 
       // kebab-case components (convert to PascalCase)
@@ -915,6 +992,8 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
             .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
             .join("");
           deps.add(pascal);
+          // Emit component usage signal
+          signalCollector?.collectComponentUsage(pascal, 1);
         }
       }
     }
@@ -932,7 +1011,10 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
    * - style="color: #FF0000"
    * - :style="{ color: '#FF0000', padding: '16px' }"
    */
-  private extractHardcodedValuesFromTemplate(content: string): HardcodedValue[] {
+  private extractHardcodedValuesFromTemplate(
+    content: string,
+    signalCollector?: ScannerSignalCollector,
+  ): HardcodedValue[] {
     const hardcoded: HardcodedValue[] = [];
     const templateMatch = content.match(/<template[^>]*>([\s\S]*?)<\/template>/);
     if (!templateMatch) return hardcoded;
@@ -960,6 +1042,8 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
                 property,
                 location: "template",
               });
+              // Emit signal for hardcoded value
+              signalCollector?.collectFromValue(trimmedValue, property, 1);
             }
           }
         }
@@ -985,6 +1069,8 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
                 property,
                 location: "template",
               });
+              // Emit signal for hardcoded value
+              signalCollector?.collectFromValue(value, property, 1);
             }
           }
         }

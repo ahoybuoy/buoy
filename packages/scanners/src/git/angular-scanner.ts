@@ -4,6 +4,17 @@ import { createComponentId } from "@buoy-design/core";
 import * as ts from "typescript";
 import { readFileSync } from "fs";
 import { relative } from "path";
+import {
+  createScannerSignalCollector,
+  type ScannerSignalCollector,
+  type SignalEnrichedScanResult,
+  type CollectorStats,
+} from "../signals/scanner-integration.js";
+import {
+  createSignalAggregator,
+  type SignalAggregator,
+  type RawSignal,
+} from "../signals/index.js";
 
 /** Extended PropDefinition with deprecated field for Angular scanner */
 interface ExtendedPropDefinition extends PropDefinition {
@@ -35,11 +46,52 @@ export class AngularComponentScanner extends Scanner<
    */
   private static readonly DEFAULT_PATTERNS = ["**/*.ts"];
 
+  /** Aggregator for collecting signals across all scanned files */
+  private signalAggregator: SignalAggregator = createSignalAggregator();
+
   async scan(): Promise<ScanResult<Component>> {
+    // Clear signals from previous scan
+    this.signalAggregator.clear();
+
     return this.runScan(
       (file) => this.parseFile(file),
       AngularComponentScanner.DEFAULT_PATTERNS,
     );
+  }
+
+  /**
+   * Scan and return signals along with components.
+   * This is the signal-enriched version of scan().
+   */
+  async scanWithSignals(): Promise<SignalEnrichedScanResult<Component>> {
+    const result = await this.scan();
+    return {
+      ...result,
+      signals: this.signalAggregator.getAllSignals(),
+      signalStats: {
+        total: this.signalAggregator.getStats().total,
+        byType: this.signalAggregator.getStats().byType,
+      },
+    };
+  }
+
+  /**
+   * Get signals collected during the last scan.
+   * Call after scan() to retrieve signals.
+   */
+  getCollectedSignals(): RawSignal[] {
+    return this.signalAggregator.getAllSignals();
+  }
+
+  /**
+   * Get signal statistics from the last scan.
+   */
+  getSignalStats(): CollectorStats {
+    const stats = this.signalAggregator.getStats();
+    return {
+      total: stats.total,
+      byType: stats.byType,
+    };
   }
 
   getSourceType(): string {
@@ -60,6 +112,9 @@ export class AngularComponentScanner extends Scanner<
       const components: Component[] = [];
       const relativePath = relative(this.config.projectRoot, filePath);
 
+      // Create signal collector for this file
+      const signalCollector = createScannerSignalCollector('angular', relativePath);
+
       const visit = (node: ts.Node) => {
         // Find classes with @Component or @Directive decorator
         if (ts.isClassDeclaration(node) && node.name) {
@@ -70,6 +125,7 @@ export class AngularComponentScanner extends Scanner<
               decorator,
               sourceFile,
               relativePath,
+              signalCollector,
             );
             if (comp) components.push(comp);
           }
@@ -79,6 +135,10 @@ export class AngularComponentScanner extends Scanner<
       };
 
       ts.forEachChild(sourceFile, visit);
+
+      // Add this file's signals to the aggregator
+      this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
+
       return components;
     } catch (error) {
       // Log error and return empty array for graceful degradation
@@ -113,6 +173,7 @@ export class AngularComponentScanner extends Scanner<
     decorator: ts.Decorator,
     sourceFile: ts.SourceFile,
     relativePath: string,
+    signalCollector?: ScannerSignalCollector,
   ): Component | null {
     if (!node.name) return null;
 
@@ -157,13 +218,28 @@ export class AngularComponentScanner extends Scanner<
     const hostDirectives = this.extractHostDirectives(decorator, sourceFile);
 
     // Extract hardcoded values from template
-    const hardcodedValues = this.extractHardcodedValuesFromTemplate(decorator);
+    const hardcodedValues = this.extractHardcodedValuesFromTemplate(decorator, signalCollector);
+
+    const allProps = [...props, ...metadataInputs, ...outputs, ...metadataOutputs, ...modelSignals, ...signalQueries];
+
+    // Emit component definition signal
+    signalCollector?.collectComponentDef(name, line, {
+      propsCount: allProps.length,
+      hasHardcodedValues: hardcodedValues.length > 0,
+      dependencyCount: hostDirectives.length,
+      selector: primarySelector,
+    });
+
+    // Emit component usage signals for host directives (dependencies)
+    for (const dep of hostDirectives) {
+      signalCollector?.collectComponentUsage(dep, line);
+    }
 
     return {
       id: createComponentId(source as any, name),
       name,
       source: source as any,
-      props: [...props, ...metadataInputs, ...outputs, ...metadataOutputs, ...modelSignals, ...signalQueries],
+      props: allProps,
       variants: [],
       tokens: [],
       dependencies: hostDirectives,
@@ -1115,6 +1191,7 @@ export class AngularComponentScanner extends Scanner<
    */
   private extractHardcodedValuesFromTemplate(
     decorator: ts.Decorator,
+    signalCollector?: ScannerSignalCollector,
   ): HardcodedValue[] {
     const hardcoded: HardcodedValue[] = [];
 
@@ -1162,6 +1239,8 @@ export class AngularComponentScanner extends Scanner<
                 property,
                 location: "template",
               });
+              // Emit signal for hardcoded value
+              signalCollector?.collectFromValue(trimmedValue, property, 1);
             }
           }
         }
@@ -1187,6 +1266,8 @@ export class AngularComponentScanner extends Scanner<
                 property,
                 location: "template",
               });
+              // Emit signal for hardcoded value
+              signalCollector?.collectFromValue(value, property, 1);
             }
           }
         }
@@ -1212,6 +1293,8 @@ export class AngularComponentScanner extends Scanner<
                 property,
                 location: "template",
               });
+              // Emit signal for hardcoded value
+              signalCollector?.collectFromValue(value, property, 1);
             }
           }
         }

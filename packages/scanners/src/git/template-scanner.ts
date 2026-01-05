@@ -4,6 +4,17 @@ import { createComponentId } from '@buoy-design/core';
 import { glob } from 'glob';
 import { readFile } from 'fs/promises';
 import { relative, basename } from 'path';
+import {
+  createScannerSignalCollector,
+  type ScannerSignalCollector,
+  type SignalEnrichedScanResult,
+  type CollectorStats,
+} from '../signals/scanner-integration.js';
+import {
+  createSignalAggregator,
+  type SignalAggregator,
+  type RawSignal,
+} from '../signals/index.js';
 
 // Template types that should always be treated as components regardless of path
 // (based on file extension matching the framework)
@@ -512,7 +523,13 @@ const TEMPLATE_CONFIG: Record<string, { ext: string; patterns: RegExp[] }> = {
 };
 
 export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
+  /** Aggregator for collecting signals across all scanned files */
+  private signalAggregator: SignalAggregator = createSignalAggregator();
+
   async scan(): Promise<ScanResult<Component>> {
+    // Clear signals from previous scan
+    this.signalAggregator.clear();
+
     const startTime = Date.now();
     const files = await this.findTemplateFiles();
     const components: Component[] = [];
@@ -539,6 +556,41 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
     };
 
     return { items: components, errors, stats };
+  }
+
+  /**
+   * Scan and return signals along with components.
+   * This is the signal-enriched version of scan().
+   */
+  async scanWithSignals(): Promise<SignalEnrichedScanResult<Component>> {
+    const result = await this.scan();
+    return {
+      ...result,
+      signals: this.signalAggregator.getAllSignals(),
+      signalStats: {
+        total: this.signalAggregator.getStats().total,
+        byType: this.signalAggregator.getStats().byType,
+      },
+    };
+  }
+
+  /**
+   * Get signals collected during the last scan.
+   * Call after scan() to retrieve signals.
+   */
+  getCollectedSignals(): RawSignal[] {
+    return this.signalAggregator.getAllSignals();
+  }
+
+  /**
+   * Get signal statistics from the last scan.
+   */
+  getSignalStats(): CollectorStats {
+    const stats = this.signalAggregator.getStats();
+    return {
+      total: stats.total,
+      byType: stats.byType,
+    };
   }
 
   getSourceType(): string {
@@ -576,6 +628,9 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
     const content = await readFile(filePath, 'utf-8');
     const relativePath = relative(this.config.projectRoot, filePath);
 
+    // Create signal collector for this file (use null for template frameworks not in the core Framework type)
+    const signalCollector = createScannerSignalCollector(null, relativePath);
+
     // Generate component name from file path
     // e.g., resources/views/components/button.blade.php -> Button
     // e.g., app/views/shared/_header.html.erb -> Header
@@ -583,10 +638,12 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
 
     // Skip non-component files (layouts, pages, etc.)
     if (!this.isLikelyComponent(filePath, content)) {
+      // Still add signals even if we skip the component
+      this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
       return null;
     }
 
-    const dependencies = this.extractDependencies(content);
+    const dependencies = this.extractDependencies(content, signalCollector);
 
     // Extract props based on template type
     const props = this.extractProps(content);
@@ -597,6 +654,16 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
       exportName: name,
       line: 1,
     };
+
+    // Emit component definition signal
+    signalCollector.collectComponentDef(name, 1, {
+      propsCount: props.length,
+      dependencyCount: dependencies.length,
+      templateType: this.config.templateType,
+    });
+
+    // Add this file's signals to the aggregator
+    this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
 
     return {
       id: createComponentId(source as any, name),
@@ -894,7 +961,10 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
     return false;
   }
 
-  private extractDependencies(content: string): string[] {
+  private extractDependencies(
+    content: string,
+    signalCollector?: ScannerSignalCollector,
+  ): string[] {
     const deps: Set<string> = new Set();
     const templateConfig = TEMPLATE_CONFIG[this.config.templateType];
 
@@ -911,6 +981,8 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
           const depPath = match[1];
           const depName = this.pathToComponentName(depPath);
           deps.add(depName);
+          // Emit component usage signal
+          signalCollector?.collectComponentUsage(depName, 1);
         }
       }
     }

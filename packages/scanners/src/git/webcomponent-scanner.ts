@@ -5,6 +5,16 @@ import * as ts from 'typescript';
 import { glob } from 'glob';
 import { readFileSync } from 'fs';
 import { relative } from 'path';
+import {
+  createScannerSignalCollector,
+  type SignalEnrichedScanResult,
+  type CollectorStats,
+} from '../signals/scanner-integration.js';
+import {
+  createSignalAggregator,
+  type SignalAggregator,
+  type RawSignal,
+} from '../signals/index.js';
 
 export interface WebComponentScannerConfig extends ScannerConfig {
   framework?: 'lit' | 'stencil' | 'auto';
@@ -82,7 +92,13 @@ interface ExtendedPropDefinition extends PropDefinition {
 }
 
 export class WebComponentScanner extends Scanner<Component, WebComponentScannerConfig> {
+  /** Aggregator for collecting signals across all scanned files */
+  private signalAggregator: SignalAggregator = createSignalAggregator();
+
   async scan(): Promise<ScanResult<Component>> {
+    // Clear signals from previous scan
+    this.signalAggregator.clear();
+
     const startTime = Date.now();
     const files = await this.findComponentFiles();
     const components: Component[] = [];
@@ -109,6 +125,41 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
     };
 
     return { items: components, errors, stats };
+  }
+
+  /**
+   * Scan and return signals along with components.
+   * This is the signal-enriched version of scan().
+   */
+  async scanWithSignals(): Promise<SignalEnrichedScanResult<Component>> {
+    const result = await this.scan();
+    return {
+      ...result,
+      signals: this.signalAggregator.getAllSignals(),
+      signalStats: {
+        total: this.signalAggregator.getStats().total,
+        byType: this.signalAggregator.getStats().byType,
+      },
+    };
+  }
+
+  /**
+   * Get signals collected during the last scan.
+   * Call after scan() to retrieve signals.
+   */
+  getCollectedSignals(): RawSignal[] {
+    return this.signalAggregator.getAllSignals();
+  }
+
+  /**
+   * Get signal statistics from the last scan.
+   */
+  getSignalStats(): CollectorStats {
+    const stats = this.signalAggregator.getStats();
+    return {
+      total: stats.total,
+      byType: stats.byType,
+    };
   }
 
   getSourceType(): string {
@@ -152,6 +203,9 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
 
     const components: Component[] = [];
     const relativePath = relative(this.config.projectRoot, filePath);
+
+    // Create signal collector for this file (use 'vanilla' as framework since webcomponents are vanilla JS)
+    const signalCollector = createScannerSignalCollector('vanilla', relativePath);
 
     // Detect framework from imports
     const isLit = content.includes('lit') || content.includes('LitElement');
@@ -237,6 +291,22 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
     };
 
     ts.forEachChild(sourceFile, visit);
+
+    // Emit component definition signals for all found components
+    for (const comp of components) {
+      const framework = isLit ? 'lit' : isStencil ? 'stencil' : isFast ? 'fast' : isHaunted ? 'haunted' : isHybrids ? 'hybrids' : 'vanilla';
+      const sourceLine = 'line' in comp.source ? (comp.source as any).line : 1;
+      signalCollector.collectComponentDef(comp.name, sourceLine, {
+        propsCount: comp.props.length,
+        dependencyCount: comp.dependencies.length,
+        framework,
+        tagName: (comp.source as any).tagName,
+      });
+    }
+
+    // Add this file's signals to the aggregator
+    this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
+
     return components;
   }
 
