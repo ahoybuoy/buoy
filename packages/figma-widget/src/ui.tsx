@@ -236,20 +236,20 @@ function getScoreColor(score: number): string {
 
 function getScoreMessage(score: number): { title: string; description: string } {
   if (score >= 90) return {
-    title: 'Excellent!',
-    description: 'Your design system is well-defined. Save it to Buoy to catch drift in code.'
+    title: 'Looking great!',
+    description: 'Your design system is solid. I can help keep your code in sync.'
   };
   if (score >= 70) return {
-    title: 'Good foundation',
-    description: 'A few improvements would make your system more robust.'
+    title: 'Nice work!',
+    description: 'A few tweaks and you\'ll be in great shape.'
   };
   if (score >= 50) return {
-    title: 'Room to grow',
-    description: 'Defining more styles and components will help maintain consistency.'
+    title: 'Getting there!',
+    description: 'Adding more styles will help me catch more drift.'
   };
   return {
-    title: 'Early stages',
-    description: 'Start by creating color and text styles for your most-used values.'
+    title: 'Let\'s get started!',
+    description: 'Create some color and text styles so I can track them.'
   };
 }
 
@@ -372,7 +372,7 @@ function HealthOverview({
 
       {insights.length > 0 ? (
         <div style={styles.section}>
-          <div style={styles.sectionTitle}>Recommended Actions</div>
+          <div style={styles.sectionTitle}>I noticed a few things</div>
           {insights.slice(0, 3).map((insight, i) => (
             <div
               key={i}
@@ -389,9 +389,9 @@ function HealthOverview({
         </div>
       ) : (
         <div style={{ ...styles.issueCard, background: '#F0FDF4', marginTop: '8px' }}>
-          <div style={{ ...styles.issueTitle, color: '#16A34A' }}>✓ Looking great!</div>
+          <div style={{ ...styles.issueTitle, color: '#16A34A' }}>✓ All good here!</div>
           <div style={styles.issueDescription}>
-            Your design system is well-structured. Save it to Buoy to track drift in code.
+            I'll keep an eye on things. Export to start tracking drift in code.
           </div>
         </div>
       )}
@@ -646,10 +646,10 @@ function ExportView({
         ← Back to Overview
       </button>
 
-      <div style={styles.sectionTitle}>Export Design Intent</div>
+      <div style={styles.sectionTitle}>Share Your Design System</div>
 
       <p style={{ fontSize: '12px', color: '#57534E', marginBottom: '16px', lineHeight: 1.5 }}>
-        Your design tokens and components can be used by Buoy to detect drift in code.
+        I'll help keep your code in sync with these design decisions.
       </p>
 
       {/* Summary of what's being exported */}
@@ -669,32 +669,26 @@ function ExportView({
         </div>
       </div>
 
-      {/* Copy JSON button */}
-      <button
-        style={styles.button}
-        onClick={handleCopyJson}
-      >
-        {jsonCopied ? '✓ Copied to Clipboard!' : 'Copy as JSON'}
-      </button>
-
-      <div style={{ fontSize: '11px', color: '#57534E', marginTop: '12px', textAlign: 'center', lineHeight: 1.4 }}>
-        Paste this JSON into your <code style={{ background: '#F5F5F4', padding: '2px 4px', borderRadius: '3px' }}>buoy.config.mjs</code> or use the Buoy dashboard to import.
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button
+          style={{ ...styles.button, flex: 1 }}
+          onClick={handleCopyJson}
+        >
+          {jsonCopied ? '✓ Copied!' : 'Copy JSON'}
+        </button>
+        <button
+          style={{ ...styles.button, flex: 1, background: '#16A34A' }}
+          onClick={() => parent.postMessage({ pluginMessage: { type: 'create-page' } }, '*')}
+        >
+          Add Dashboard Page
+        </button>
       </div>
 
-      {/* Coming soon section */}
-      <div style={{
-        marginTop: '24px',
-        padding: '12px',
-        background: '#F0F9FF',
-        borderRadius: '8px',
-        border: '1px solid #BAE6FD'
-      }}>
-        <div style={{ fontSize: '12px', fontWeight: 500, color: '#0369A1', marginBottom: '4px' }}>
-          Coming Soon: Auto-sync
-        </div>
-        <div style={{ fontSize: '11px', color: '#57534E', lineHeight: 1.4 }}>
-          Connect your Buoy account to automatically sync design changes and invite developers directly from Figma.
-        </div>
+      <div style={{ fontSize: '11px', color: '#57534E', marginTop: '12px', textAlign: 'center', lineHeight: 1.4 }}>
+        <strong>Copy JSON</strong> for your <code style={{ background: '#F5F5F4', padding: '2px 4px', borderRadius: '3px' }}>buoy.config.mjs</code>
+        <br />
+        <strong>Add Dashboard Page</strong> creates a health report in this file
       </div>
     </>
   );
@@ -762,7 +756,7 @@ function App() {
     return (
       <div style={styles.loading}>
         <div style={styles.spinner} />
-        <div style={{ fontSize: '12px', color: '#57534E' }}>Analyzing your file...</div>
+        <div style={{ fontSize: '12px', color: '#57534E' }}>🛟 Taking a look around...</div>
       </div>
     );
   }

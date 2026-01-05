@@ -1,5 +1,13 @@
 import { ProjectDetector, type DetectedProject } from '../detect/project-detector.js';
 
+const FRAMEWORK_FAMILIES = {
+  react: ['react', 'nextjs', 'remix', 'gatsby'],
+  vue: ['vue', 'nuxt'],
+  svelte: ['svelte', 'sveltekit'],
+  angular: ['angular'],
+  webcomponents: ['lit', 'stencil'],
+} as const;
+
 export interface ProjectInsights {
   project: DetectedProject;
   summary: InsightSummary;
@@ -51,38 +59,43 @@ function buildSummary(project: DetectedProject): InsightSummary {
     frameworkLine = `${capitalize(primary.name)}${ts}${version}`;
   }
 
-  const fileBreakdown: FileBreakdown[] = [];
-  const scannableTypes = ['jsx', 'tsx', 'vue', 'svelte', 'angular'];
+  // Determine which component types are scannable based on detected frameworks
+  const hasReact = project.frameworks.some(f => FRAMEWORK_FAMILIES.react.includes(f.name as typeof FRAMEWORK_FAMILIES.react[number]));
+  const hasVue = project.frameworks.some(f => FRAMEWORK_FAMILIES.vue.includes(f.name as typeof FRAMEWORK_FAMILIES.vue[number]));
+  const hasSvelte = project.frameworks.some(f => FRAMEWORK_FAMILIES.svelte.includes(f.name as typeof FRAMEWORK_FAMILIES.svelte[number]));
+  const hasAngular = project.frameworks.some(f => FRAMEWORK_FAMILIES.angular.includes(f.name as typeof FRAMEWORK_FAMILIES.angular[number]));
+  const hasWebComponents = project.frameworks.some(f => FRAMEWORK_FAMILIES.webcomponents.includes(f.name as typeof FRAMEWORK_FAMILIES.webcomponents[number]));
+  const hasAstro = project.frameworks.some(f => f.name === 'astro');
 
+  const scannableTypes = new Set<string>();
+  if (hasReact) { scannableTypes.add('jsx'); scannableTypes.add('tsx'); }
+  if (hasVue) scannableTypes.add('vue');
+  if (hasSvelte) scannableTypes.add('svelte');
+  if (hasAngular) scannableTypes.add('angular');
+
+  const fileBreakdown: FileBreakdown[] = [];
   for (const loc of project.components) {
     fileBreakdown.push({
       type: getTypeLabel(loc.type),
       count: loc.fileCount,
       path: loc.path,
-      scannable: scannableTypes.includes(loc.type || ''),
+      scannable: scannableTypes.has(loc.type || ''),
     });
   }
 
   let tokenSummary: string | null = null;
   if (project.tokens.length > 0) {
-    const tokenTypes = project.tokens.map(t => t.type);
-    const hasCss = tokenTypes.includes('css') || tokenTypes.includes('scss');
-    const hasTailwind = tokenTypes.includes('tailwind');
+    const cssTokens = project.tokens.filter(t => t.type === 'css' || t.type === 'scss');
+    const hasCss = cssTokens.length > 0;
+    const hasTailwind = project.tokens.some(t => t.type === 'tailwind');
 
     const parts: string[] = [];
     if (hasTailwind) parts.push('Tailwind config');
-    if (hasCss) parts.push(`${project.tokens.filter(t => t.type === 'css' || t.type === 'scss').length} CSS file(s)`);
+    if (hasCss) parts.push(`${cssTokens.length} CSS file(s)`);
     tokenSummary = parts.join(', ');
   }
 
   const scannerStatus: ScannerStatus[] = [];
-
-  const hasReact = project.frameworks.some(f => ['react', 'nextjs', 'remix', 'gatsby'].includes(f.name));
-  const hasVue = project.frameworks.some(f => ['vue', 'nuxt'].includes(f.name));
-  const hasSvelte = project.frameworks.some(f => ['svelte', 'sveltekit'].includes(f.name));
-  const hasAngular = project.frameworks.some(f => f.name === 'angular');
-  const hasAstro = project.frameworks.some(f => f.name === 'astro');
-  const hasLit = project.frameworks.some(f => f.name === 'lit');
 
   if (hasReact) scannerStatus.push({ name: 'React', available: true, reason: 'React detected' });
   if (hasVue) scannerStatus.push({ name: 'Vue', available: true, reason: 'Vue detected' });
@@ -90,7 +103,7 @@ function buildSummary(project: DetectedProject): InsightSummary {
   if (hasAngular) scannerStatus.push({ name: 'Angular', available: true, reason: 'Angular detected' });
 
   if (hasAstro) scannerStatus.push({ name: 'Astro', available: false, reason: 'Astro scanner coming soon' });
-  if (hasLit) scannerStatus.push({ name: 'Lit', available: false, reason: 'Lit scanner coming soon' });
+  if (hasWebComponents) scannerStatus.push({ name: 'Lit', available: false, reason: 'Lit scanner coming soon' });
 
   const hasTailwindDs = project.designSystem?.type === 'tailwind' || project.tokens.some(t => t.type === 'tailwind');
   if (hasTailwindDs) {
