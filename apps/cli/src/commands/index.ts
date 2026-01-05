@@ -17,6 +17,7 @@ export { createCompareCommand } from "./compare.js";
 export { createAuditCommand } from "./audit.js";
 export { createGraphCommand } from "./graph.js";
 export { createImportCommand } from "./import.js";
+export { createHistoryCommand } from "./history.js";
 
 // Cloud commands
 export { createLoginCommand } from "./login.js";

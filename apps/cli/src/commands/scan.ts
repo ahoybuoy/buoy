@@ -28,6 +28,7 @@ import {
   hasQueuedScans,
   getQueueCount,
 } from "../cloud/index.js";
+import { createStore, getProjectName, wouldUseCloud, type ScanStore } from "../store/index.js";
 
 export function createScanCommand(): Command {
   const cmd = new Command("scan")
@@ -38,12 +39,14 @@ export function createScanCommand(): Command {
     )
     .option("--json", "Output as JSON")
     .option("-v, --verbose", "Verbose output")
+    .option("--no-persist", "Skip saving results to local database")
     .action(async (options) => {
       // Set JSON mode before creating spinner to redirect spinner to stderr
       if (options.json) {
         setJsonMode(true);
       }
       const spin = spinner("Loading configuration...");
+      let store: ScanStore | undefined;
 
       try {
         // Load config, or auto-detect if none exists
@@ -133,6 +136,37 @@ export function createScanCommand(): Command {
           },
         });
 
+        // Persist results to store (unless --no-persist)
+        let scanId: string | undefined;
+        if (options.persist !== false) {
+          try {
+            spin.text = "Saving scan results...";
+            store = createStore({ forceLocal: !wouldUseCloud() });
+            const projectName = config.project?.name || getProjectName();
+            const project = await store.getOrCreateProject(projectName);
+            const scan = await store.startScan(project.id, sourcesToScan);
+            scanId = scan.id;
+
+            // Complete the scan with results (no drift signals from basic scan)
+            await store.completeScan(scan.id, {
+              components: results.components,
+              tokens: results.tokens,
+              drifts: [],
+              errors: results.errors.map(e => `[${e.source}] ${e.file || ""}: ${e.message}`),
+            });
+
+            if (options.verbose) {
+              info(`Saved to ${wouldUseCloud() ? 'Buoy Cloud' : 'local database'} (${scan.id})`);
+            }
+          } catch (storeErr) {
+            // Don't fail the whole scan if persistence fails
+            if (options.verbose) {
+              const msg = storeErr instanceof Error ? storeErr.message : String(storeErr);
+              warning(`Failed to save scan: ${msg}`);
+            }
+          }
+        }
+
         spin.stop();
 
         // Output results
@@ -140,6 +174,7 @@ export function createScanCommand(): Command {
           console.log(
             JSON.stringify(
               {
+                scanId,
                 components: results.components,
                 tokens: results.tokens,
                 errors: results.errors.map(
@@ -150,6 +185,7 @@ export function createScanCommand(): Command {
               2,
             ),
           );
+          store?.close();
           return;
         }
 
@@ -207,7 +243,11 @@ export function createScanCommand(): Command {
           newline();
         }
 
-        success("Scan complete");
+        if (scanId) {
+          success(`Scan complete (${scanId})`);
+        } else {
+          success("Scan complete");
+        }
 
         // Cloud sync if linked
         const cloudProjectId = (config as BuoyConfig & { cloudProjectId?: string }).cloudProjectId;
@@ -279,8 +319,12 @@ export function createScanCommand(): Command {
               " to save this configuration"
           );
         }
+
+        // Cleanup store connection
+        store?.close();
       } catch (err) {
         spin.stop();
+        store?.close();
         const message = err instanceof Error ? err.message : String(err);
         error(`Scan failed: ${message}`);
         process.exit(1);

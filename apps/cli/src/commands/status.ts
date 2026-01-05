@@ -9,25 +9,30 @@ import {
   info,
   coverageGrid,
   setJsonMode,
+  newline,
   type CoverageStats,
 } from "../output/reporters.js";
 import { ProjectDetector } from "../detect/project-detector.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import type { BuoyConfig } from "../config/schema.js";
-import type { DriftSignal } from "@buoy-design/core";
+import type { DriftSignal, Component } from "@buoy-design/core";
 import { discoverProject, formatInsightsBlock, promptNextAction, isTTY } from '../insights/index.js';
+import { createStore, getProjectName, type ScanStore, type ScanSnapshot } from '../store/index.js';
 
 export function createStatusCommand(): Command {
   const cmd = new Command("status")
     .description("Show design system coverage at a glance")
     .option("--json", "Output as JSON")
     .option("-v, --verbose", "Verbose output")
+    .option("--cached", "Use last scan results instead of rescanning")
+    .option("--trend", "Show historical trend data")
     .action(async (options) => {
       // Set JSON mode before creating spinner to redirect spinner to stderr
       if (options.json) {
         setJsonMode(true);
       }
       const spin = spinner("Analyzing design system coverage...");
+      let store: ScanStore | undefined;
 
       try {
         // Load config, or auto-detect if none exists
@@ -61,14 +66,52 @@ export function createStatusCommand(): Command {
           }
         }
 
-        // Scan components using orchestrator
-        spin.text = "Scanning components...";
-        const orchestrator = new ScanOrchestrator(config);
-        const { components } = await orchestrator.scanComponents({
-          onProgress: (msg) => {
-            spin.text = msg;
-          },
-        });
+        // Initialize store for caching/trends
+        let snapshots: ScanSnapshot[] = [];
+        let components: Component[] = [];
+
+        try {
+          store = createStore();
+          const projectName = config.project?.name || getProjectName();
+          const project = await store.getOrCreateProject(projectName);
+
+          // Load historical snapshots for trend data
+          if (options.trend || options.cached) {
+            snapshots = await store.getSnapshots(project.id, 10);
+          }
+
+          // Use cached results if requested and available
+          if (options.cached) {
+            const latestScan = await store.getLatestScan(project.id);
+            if (latestScan && latestScan.status === 'completed') {
+              spin.text = "Loading cached results...";
+              components = await store.getComponents(latestScan.id);
+
+              if (components.length > 0) {
+                if (options.verbose) {
+                  info(`Using cached scan from ${latestScan.completedAt?.toLocaleDateString() || 'unknown'}`);
+                }
+              }
+            }
+          }
+        } catch {
+          // Store not available, continue with live scan
+          if (options.verbose) {
+            info("No cached data available, running live scan");
+          }
+        }
+
+        // If no cached components, run live scan
+        if (components.length === 0) {
+          spin.text = "Scanning components...";
+          const orchestrator = new ScanOrchestrator(config);
+          const scanResult = await orchestrator.scanComponents({
+            onProgress: (msg) => {
+              spin.text = msg;
+            },
+          });
+          components = scanResult.components;
+        }
 
         // Detect frameworks for sprawl check
         spin.text = "Detecting frameworks...";
@@ -149,11 +192,20 @@ export function createStatusCommand(): Command {
                     path: "path" in c.source ? c.source.path : undefined,
                   })),
                 },
+                history: snapshots.map(s => ({
+                  scanId: s.scanId,
+                  date: s.createdAt,
+                  componentCount: s.componentCount,
+                  tokenCount: s.tokenCount,
+                  driftCount: s.driftCount,
+                  summary: s.summary,
+                })),
               },
               null,
               2,
             ),
           );
+          store?.close();
           return;
         }
 
@@ -231,6 +283,42 @@ export function createStatusCommand(): Command {
           error("Low alignment. Run buoy drift check for details.");
         }
 
+        // Show trend data if requested and available
+        if (options.trend && snapshots.length > 1) {
+          newline();
+          console.log(chalk.bold("Trend") + chalk.dim(" (last " + snapshots.length + " scans)"));
+          console.log(chalk.dim("─".repeat(40)));
+
+          // Show mini sparkline of drift counts
+          const driftCounts = snapshots.map(s => s.driftCount).reverse();
+          const maxDrift = Math.max(...driftCounts, 1);
+          const bars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+          const sparkline = driftCounts.map(count => {
+            const idx = Math.min(Math.floor((count / maxDrift) * (bars.length - 1)), bars.length - 1);
+            return count > 0 ? chalk.yellow(bars[idx]) : chalk.green(bars[0]);
+          }).join('');
+
+          console.log(`Drift: ${sparkline} ${chalk.dim(`(${driftCounts[driftCounts.length - 1]} now)`)}`);
+
+          // Show component count trend
+          const compCounts = snapshots.map(s => s.componentCount).reverse();
+          const current = compCounts[compCounts.length - 1] ?? 0;
+          const previous = compCounts.length > 1 ? (compCounts[compCounts.length - 2] ?? current) : current;
+          const delta = current - previous;
+
+          if (delta > 0) {
+            console.log(`Components: ${current} ${chalk.green(`+${delta}`)}`);
+          } else if (delta < 0) {
+            console.log(`Components: ${current} ${chalk.red(`${delta}`)}`);
+          } else {
+            console.log(`Components: ${current} ${chalk.dim('(no change)')}`);
+          }
+        } else if (options.trend) {
+          newline();
+          info("No historical data yet. Run more scans to see trends.");
+        }
+
         // Show hint to save config if we auto-detected
         if (isAutoDetected) {
           console.log("");
@@ -242,8 +330,12 @@ export function createStatusCommand(): Command {
               " to save this configuration"
           );
         }
+
+        // Cleanup store connection
+        store?.close();
       } catch (err) {
         spin.stop();
+        store?.close();
         const message = err instanceof Error ? err.message : String(err);
         error(`Status check failed: ${message}`);
 

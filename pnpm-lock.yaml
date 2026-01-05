@@ -69,6 +69,9 @@ importers:
       '@buoy-design/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@buoy-design/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@buoy-design/scanners':
         specifier: workspace:*
         version: link:../../packages/scanners
@@ -87,6 +90,9 @@ importers:
       commander:
         specifier: ^12.1.0
         version: 12.1.0
+      drizzle-orm:
+        specifier: ^0.38.3
+        version: 0.38.4(@cloudflare/workers-types@4.20260103.0)(@types/better-sqlite3@7.6.13)(@types/react@18.3.27)(better-sqlite3@11.10.0)(react@18.3.1)
       glob:
         specifier: ^11.0.0
         version: 11.1.0
