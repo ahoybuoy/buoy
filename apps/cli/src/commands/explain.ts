@@ -17,6 +17,7 @@ import {
 import { loadConfig } from "../config/loader.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import type { DriftSignal } from "@buoy-design/core";
+import { discoverProject, formatInsightsBlock } from "../insights/index.js";
 
 export function createExplainCommand(): Command {
   const cmd = new Command("explain")
@@ -37,11 +38,23 @@ export function createExplainCommand(): Command {
         if (!target) {
           target = await runScanAndBuildTarget();
           if (!target) {
-            success("No drift detected. Your design system is aligned!");
+            // No drift found - but show what we know about the codebase
+            const insights = await discoverProject(process.cwd());
+
+            console.log(formatInsightsBlock(insights));
+            newline();
+            console.log(chalk.green('✓') + ' No drift detected in scannable components.');
             newline();
             info("To investigate specific code, try:");
-            console.log(chalk.gray("  buoy explain src/components/Button.tsx"));
-            console.log(chalk.gray("  buoy explain src/components/"));
+
+            // Suggest based on actual files found
+            if (insights.summary.fileBreakdown.length > 0) {
+              const firstPath = insights.summary.fileBreakdown[0]!.path;
+              console.log(chalk.gray(`  buoy explain ${firstPath}`));
+            } else {
+              console.log(chalk.gray("  buoy explain src/components/Button.tsx"));
+            }
+            console.log(chalk.gray("  buoy explain src/"));
             return;
           }
         }
