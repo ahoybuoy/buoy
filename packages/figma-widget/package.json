@@ -1,0 +1,27 @@
+{
+  "name": "@buoy-design/figma-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Figma plugin for Buoy design system health monitoring",
+  "scripts": {
+    "build": "pnpm build:plugin && pnpm build:ui",
+    "build:plugin": "esbuild src/plugin.ts --bundle --outfile=dist/plugin.js --target=es2020",
+    "build:ui": "esbuild src/ui.tsx --bundle --outfile=dist/ui.js --target=es2020 --loader:.tsx=tsx && pnpm build:html",
+    "build:html": "node scripts/build-html.js",
+    "watch": "concurrently \"pnpm build:plugin --watch\" \"pnpm build:ui --watch\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.98.0",
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "concurrently": "^8.2.0",
+    "esbuild": "^0.19.8",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.3.0",
+    "vitest": "^2.1.0"
+  }
+}
