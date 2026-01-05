@@ -1,4 +1,4 @@
-import type { DashboardData, HealthData, InboxItem, GuardrailConfig, ActivityItem } from '../types';
+import type { DashboardData, HealthData, InboxItem, GuardrailConfig, ActivityItem, DesignIntent, OnboardingStatus } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
@@ -41,4 +41,39 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(config),
     }),
+
+  // Design Intent APIs
+  getDesignIntent: () => fetchApi<DesignIntent>('/design-intent'),
+
+  getOnboardingStatus: async (): Promise<OnboardingStatus> => {
+    // Fetch design intent and dashboard to determine onboarding step
+    const [designIntent, dashboard] = await Promise.all([
+      fetchApi<DesignIntent>('/design-intent').catch(() => null),
+      fetchApi<DashboardData>('/dashboard').catch(() => null),
+    ]);
+
+    const hasDesignIntent = !!(designIntent?.tokens?.length || designIntent?.components?.length);
+    const hasScans = !!(dashboard?.health?.componentsTotal && dashboard.health.componentsTotal > 0);
+    // For now, we consider repo connected if we have any scans
+    const hasConnectedRepo = hasScans;
+
+    let step: OnboardingStatus['step'];
+    if (!hasDesignIntent) {
+      step = 'no-design-intent';
+    } else if (!hasConnectedRepo) {
+      step = 'design-intent-only';
+    } else if (!hasScans) {
+      step = 'awaiting-scan';
+    } else {
+      step = 'ready';
+    }
+
+    return {
+      step,
+      hasDesignIntent,
+      hasConnectedRepo,
+      hasScans,
+      designIntent: designIntent || undefined,
+    };
+  },
 };

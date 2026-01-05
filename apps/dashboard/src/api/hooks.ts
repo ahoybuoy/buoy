@@ -61,3 +61,17 @@ export function useUpdateGuardrails() {
     },
   });
 }
+
+export function useDesignIntent() {
+  return useQuery({
+    queryKey: ['design-intent'],
+    queryFn: () => api.getDesignIntent(),
+  });
+}
+
+export function useOnboardingStatus() {
+  return useQuery({
+    queryKey: ['onboarding-status'],
+    queryFn: () => api.getOnboardingStatus(),
+  });
+}

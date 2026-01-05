@@ -1,14 +1,16 @@
 import { useDashboardStore } from '../store/dashboard';
-import { useDashboard, useInboxAction, useUpdateGuardrails } from '../api/hooks';
+import { useDashboard, useInboxAction, useUpdateGuardrails, useOnboardingStatus } from '../api/hooks';
 import { RingHero, BarHero, CardsHero } from '../components/Hero';
 import { Inbox } from '../components/Inbox';
 import { Guardrails } from '../components/Guardrails';
 import { DeepDive } from '../components/DeepDive';
 import { Activity } from '../components/Activity';
+import { OnboardingWizard, ConnectRepo, AwaitingScan } from '../components/Onboarding';
 import styles from './Dashboard.module.css';
 
 export function Dashboard() {
   const { style } = useDashboardStore();
+  const { data: onboarding, isLoading: onboardingLoading } = useOnboardingStatus();
   const { data, isLoading, error } = useDashboard();
   const inboxAction = useInboxAction();
   const updateGuardrails = useUpdateGuardrails();
@@ -30,7 +32,8 @@ export function Dashboard() {
     updateGuardrails.mutate({ sensitivity });
   };
 
-  if (isLoading) {
+  // Show loading while checking onboarding status
+  if (onboardingLoading || isLoading) {
     return (
       <div className={styles.dashboard}>
         <div className={styles.loading}>Loading dashboard...</div>
@@ -38,6 +41,32 @@ export function Dashboard() {
     );
   }
 
+  // Show onboarding screens based on step
+  if (onboarding?.step === 'no-design-intent') {
+    return (
+      <div className={styles.dashboard}>
+        <OnboardingWizard />
+      </div>
+    );
+  }
+
+  if (onboarding?.step === 'design-intent-only' && onboarding.designIntent) {
+    return (
+      <div className={styles.dashboard}>
+        <ConnectRepo designIntent={onboarding.designIntent} />
+      </div>
+    );
+  }
+
+  if (onboarding?.step === 'awaiting-scan') {
+    return (
+      <div className={styles.dashboard}>
+        <AwaitingScan />
+      </div>
+    );
+  }
+
+  // Handle error case
   if (error || !data) {
     return (
       <div className={styles.dashboard}>
