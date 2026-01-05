@@ -234,6 +234,25 @@ function getScoreColor(score: number): string {
   return '#EF4444';
 }
 
+function getScoreMessage(score: number): { title: string; description: string } {
+  if (score >= 90) return {
+    title: 'Excellent!',
+    description: 'Your design system is well-defined. Save it to Buoy to catch drift in code.'
+  };
+  if (score >= 70) return {
+    title: 'Good foundation',
+    description: 'A few improvements would make your system more robust.'
+  };
+  if (score >= 50) return {
+    title: 'Room to grow',
+    description: 'Defining more styles and components will help maintain consistency.'
+  };
+  return {
+    title: 'Early stages',
+    description: 'Start by creating color and text styles for your most-used values.'
+  };
+}
+
 function HealthOverview({
   analysis,
   onNavigate,
@@ -241,32 +260,76 @@ function HealthOverview({
   analysis: AnalysisResult;
   onNavigate: (view: View) => void;
 }) {
-  const { health, colors, typography, components } = analysis;
-  const issues: Array<{ title: string; description: string; view: View }> = [];
+  const { health, colors, typography, spacing, components } = analysis;
+  const scoreMessage = getScoreMessage(health.score);
 
-  if (colors.duplicates.length > 0) {
-    issues.push({
-      title: `${colors.duplicates.length} duplicate colors found`,
-      description: 'Similar colors that could be merged',
+  // Build actionable insights
+  const insights: Array<{ title: string; description: string; action: string; view: View }> = [];
+
+  if (colors.defined.length === 0) {
+    insights.push({
+      title: 'No color styles defined',
+      description: 'Create color styles in Figma to establish your palette',
+      action: 'Learn more →',
+      view: 'colors',
+    });
+  } else if (colors.duplicates.length > 0) {
+    insights.push({
+      title: `${colors.duplicates.length} similar colors found`,
+      description: 'Consolidating these would simplify your palette',
+      action: 'Review colors →',
       view: 'colors',
     });
   }
 
-  if (typography.orphaned > 0) {
-    issues.push({
-      title: `${typography.orphaned} text without styles`,
-      description: 'Text nodes not using defined text styles',
+  if (typography.defined.length === 0) {
+    insights.push({
+      title: 'No text styles defined',
+      description: 'Create text styles for headings, body, and UI text',
+      action: 'Learn more →',
+      view: 'typography',
+    });
+  } else if (typography.orphaned > 0) {
+    insights.push({
+      title: `${typography.orphaned} text nodes without styles`,
+      description: 'Applying text styles ensures consistency when coded',
+      action: 'See details →',
       view: 'typography',
     });
   }
 
-  if (components.orphaned > 0) {
-    issues.push({
-      title: `${components.orphaned} orphaned instances`,
-      description: 'Component instances without a main component',
+  if (!spacing.hasScale && spacing.values.length > 0) {
+    insights.push({
+      title: 'Inconsistent spacing values',
+      description: 'Using a 4px or 8px scale makes spacing predictable',
+      action: 'Review spacing →',
+      view: 'spacing',
+    });
+  }
+
+  if (components.defined.length === 0) {
+    insights.push({
+      title: 'No components defined',
+      description: 'Turn repeated UI elements into reusable components',
+      action: 'Learn more →',
+      view: 'components',
+    });
+  } else if (components.orphaned > 0) {
+    insights.push({
+      title: `${components.orphaned} detached instances`,
+      description: 'These won\'t update when you change the main component',
+      action: 'See details →',
       view: 'components',
     });
   }
+
+  // Summary stats
+  const stats = {
+    colors: colors.defined.length,
+    typography: typography.defined.length,
+    components: components.defined.length,
+    spacing: spacing.values.length,
+  };
 
   return (
     <>
@@ -274,61 +337,74 @@ function HealthOverview({
         <div style={{ ...styles.healthScore, color: getScoreColor(health.score) }}>
           {health.score}%
         </div>
-        <div style={styles.healthLabel}>Design System Health</div>
+        <div style={styles.healthLabel}>{scoreMessage.title}</div>
+        <div style={{ fontSize: '12px', color: '#57534E', marginTop: '8px', lineHeight: 1.4 }}>
+          {scoreMessage.description}
+        </div>
 
         <div style={styles.breakdown}>
           <div style={styles.breakdownItem} onClick={() => onNavigate('colors')}>
             <div style={styles.breakdownLabel}>Colors</div>
             <div style={{ ...styles.breakdownValue, color: getScoreColor(health.breakdown.colorScore) }}>
-              {health.breakdown.colorScore}%
+              {stats.colors}
             </div>
           </div>
           <div style={styles.breakdownItem} onClick={() => onNavigate('typography')}>
             <div style={styles.breakdownLabel}>Typography</div>
             <div style={{ ...styles.breakdownValue, color: getScoreColor(health.breakdown.typographyScore) }}>
-              {health.breakdown.typographyScore}%
+              {stats.typography}
             </div>
           </div>
           <div style={styles.breakdownItem} onClick={() => onNavigate('spacing')}>
             <div style={styles.breakdownLabel}>Spacing</div>
             <div style={{ ...styles.breakdownValue, color: getScoreColor(health.breakdown.spacingScore) }}>
-              {health.breakdown.spacingScore}%
+              {stats.spacing}
             </div>
           </div>
           <div style={styles.breakdownItem} onClick={() => onNavigate('components')}>
             <div style={styles.breakdownLabel}>Components</div>
             <div style={{ ...styles.breakdownValue, color: getScoreColor(health.breakdown.componentScore) }}>
-              {health.breakdown.componentScore}%
+              {stats.components}
             </div>
           </div>
         </div>
       </div>
 
-      {issues.length > 0 && (
+      {insights.length > 0 ? (
         <div style={styles.section}>
-          <div style={styles.sectionTitle}>Issues Found</div>
-          {issues.map((issue, i) => (
+          <div style={styles.sectionTitle}>Recommended Actions</div>
+          {insights.slice(0, 3).map((insight, i) => (
             <div
               key={i}
-              style={{ ...styles.issueCard, cursor: 'pointer' }}
-              onClick={() => onNavigate(issue.view)}
+              style={{ ...styles.issueCard, cursor: 'pointer', background: '#FFFBEB' }}
+              onClick={() => onNavigate(insight.view)}
             >
-              <div style={styles.issueTitle}>{issue.title}</div>
-              <div style={styles.issueDescription}>{issue.description}</div>
+              <div style={{ ...styles.issueTitle, color: '#B45309' }}>{insight.title}</div>
+              <div style={styles.issueDescription}>{insight.description}</div>
+              <div style={{ fontSize: '11px', color: '#0EA5E9', marginTop: '6px', fontWeight: 500 }}>
+                {insight.action}
+              </div>
             </div>
           ))}
+        </div>
+      ) : (
+        <div style={{ ...styles.issueCard, background: '#F0FDF4', marginTop: '8px' }}>
+          <div style={{ ...styles.issueTitle, color: '#16A34A' }}>✓ Looking great!</div>
+          <div style={styles.issueDescription}>
+            Your design system is well-structured. Save it to Buoy to track drift in code.
+          </div>
         </div>
       )}
 
       <div style={{ marginTop: 'auto' }}>
         <button style={styles.button} onClick={() => onNavigate('export')}>
-          Save Design Intent
+          Export Design Intent
         </button>
         <button
           style={styles.secondaryButton}
           onClick={() => parent.postMessage({ pluginMessage: { type: 'analyze' } }, '*')}
         >
-          Refresh Analysis
+          Re-analyze
         </button>
       </div>
     </>
@@ -521,6 +597,7 @@ function ExportView({
   saved,
   inviteUrl,
   generatingInvite,
+  saveError,
 }: {
   analysis: AnalysisResult;
   onBack: () => void;
@@ -528,8 +605,10 @@ function ExportView({
   saved: boolean;
   inviteUrl: string | null;
   generatingInvite: boolean;
+  saveError: string | null;
 }) {
   const [copied, setCopied] = useState(false);
+  const [jsonCopied, setJsonCopied] = useState(false);
 
   const handleCopy = async () => {
     if (inviteUrl) {
@@ -539,87 +618,83 @@ function ExportView({
     }
   };
 
+  const handleCopyJson = async () => {
+    const exportData = {
+      source: 'figma',
+      exportedAt: new Date().toISOString(),
+      colors: analysis.colors.defined.map(c => ({ name: c.name, value: c.value })),
+      typography: analysis.typography.defined.map(t => ({
+        name: t.name,
+        fontFamily: t.fontFamily,
+        fontSize: t.fontSize,
+        fontWeight: t.fontWeight,
+      })),
+      components: analysis.components.defined.map(c => ({ name: c.name, description: c.description })),
+      spacing: analysis.spacing.values.slice(0, 8).map(s => s.value),
+    };
+    await navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
+    setJsonCopied(true);
+    setTimeout(() => setJsonCopied(false), 2000);
+  };
+
+  const step = saved ? (inviteUrl ? 3 : 2) : 1;
+  const needsSignup = saveError !== null;
+
   return (
     <>
       <button style={styles.backButton} onClick={onBack}>
         ← Back to Overview
       </button>
 
-      <div style={styles.sectionTitle}>Save Your Design Intent</div>
+      <div style={styles.sectionTitle}>Export Design Intent</div>
 
       <p style={{ fontSize: '12px', color: '#57534E', marginBottom: '16px', lineHeight: 1.5 }}>
-        Save your design system definition to Buoy. This will be used to compare against your
-        codebase and catch drift.
+        Your design tokens and components can be used by Buoy to detect drift in code.
       </p>
 
+      {/* Summary of what's being exported */}
       <div style={{ background: '#FAFAF9', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
-        <div style={{ fontSize: '11px', color: '#A8A29E', marginBottom: '8px' }}>WILL INCLUDE:</div>
+        <div style={{ fontSize: '11px', color: '#A8A29E', marginBottom: '8px' }}>EXPORTING:</div>
         <div style={{ fontSize: '12px', marginBottom: '4px' }}>
-          ✓ {analysis.colors.defined.length} colors
+          {analysis.colors.defined.length > 0 ? '✓' : '○'} {analysis.colors.defined.length} color{analysis.colors.defined.length !== 1 ? 's' : ''}
         </div>
         <div style={{ fontSize: '12px', marginBottom: '4px' }}>
-          ✓ {analysis.typography.defined.length} text styles
+          {analysis.typography.defined.length > 0 ? '✓' : '○'} {analysis.typography.defined.length} text style{analysis.typography.defined.length !== 1 ? 's' : ''}
         </div>
         <div style={{ fontSize: '12px', marginBottom: '4px' }}>
-          ✓ {analysis.components.defined.length} components
+          {analysis.components.defined.length > 0 ? '✓' : '○'} {analysis.components.defined.length} component{analysis.components.defined.length !== 1 ? 's' : ''}
         </div>
         <div style={{ fontSize: '12px' }}>
-          ✓ {analysis.spacing.values.length} spacing values
+          {analysis.spacing.values.length > 0 ? '✓' : '○'} {Math.min(8, analysis.spacing.values.length)} spacing value{analysis.spacing.values.length !== 1 ? 's' : ''}
         </div>
       </div>
 
-      {saved ? (
-        <div style={{ ...styles.issueCard, background: '#F0FDF4', marginBottom: '16px' }}>
-          <div style={{ ...styles.issueTitle, color: '#16A34A' }}>✓ Design intent saved!</div>
-        </div>
-      ) : (
-        <button
-          style={{ ...styles.button, opacity: saving ? 0.7 : 1 }}
-          onClick={() => parent.postMessage({ pluginMessage: { type: 'save-design-intent' } }, '*')}
-          disabled={saving}
-        >
-          {saving ? 'Saving...' : 'Save to Buoy'}
-        </button>
-      )}
+      {/* Copy JSON button */}
+      <button
+        style={styles.button}
+        onClick={handleCopyJson}
+      >
+        {jsonCopied ? '✓ Copied to Clipboard!' : 'Copy as JSON'}
+      </button>
 
-      <div style={{ textAlign: 'center', marginTop: '16px' }}>
-        <div style={{ fontSize: '12px', color: '#A8A29E', marginBottom: '8px' }}>
-          Then invite a developer to connect your repo
-        </div>
+      <div style={{ fontSize: '11px', color: '#57534E', marginTop: '12px', textAlign: 'center', lineHeight: 1.4 }}>
+        Paste this JSON into your <code style={{ background: '#F5F5F4', padding: '2px 4px', borderRadius: '3px' }}>buoy.config.mjs</code> or use the Buoy dashboard to import.
+      </div>
 
-        {inviteUrl ? (
-          <div style={{ background: '#FAFAF9', borderRadius: '8px', padding: '12px' }}>
-            <div style={{ fontSize: '11px', color: '#A8A29E', marginBottom: '8px' }}>INVITE LINK:</div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                value={inviteUrl}
-                readOnly
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  border: '1px solid #E7E5E4',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                }}
-              />
-              <button
-                style={{ ...styles.button, width: 'auto', padding: '8px 16px' }}
-                onClick={handleCopy}
-              >
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            style={{ ...styles.secondaryButton, marginTop: '0', opacity: generatingInvite ? 0.7 : 1 }}
-            onClick={() => parent.postMessage({ pluginMessage: { type: 'generate-invite' } }, '*')}
-            disabled={generatingInvite}
-          >
-            {generatingInvite ? 'Generating...' : 'Generate Invite Link'}
-          </button>
-        )}
+      {/* Coming soon section */}
+      <div style={{
+        marginTop: '24px',
+        padding: '12px',
+        background: '#F0F9FF',
+        borderRadius: '8px',
+        border: '1px solid #BAE6FD'
+      }}>
+        <div style={{ fontSize: '12px', fontWeight: 500, color: '#0369A1', marginBottom: '4px' }}>
+          Coming Soon: Auto-sync
+        </div>
+        <div style={{ fontSize: '11px', color: '#57534E', lineHeight: 1.4 }}>
+          Connect your Buoy account to automatically sync design changes and invite developers directly from Figma.
+        </div>
       </div>
     </>
   );
@@ -636,6 +711,7 @@ function App() {
   const [view, setView] = useState<View>('overview');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [generatingInvite, setGeneratingInvite] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
 
@@ -666,6 +742,7 @@ function App() {
           break;
         case 'save-error':
           setSaving(false);
+          setSaveError(msg.payload || 'Failed to save');
           break;
         case 'generating-invite':
           setGeneratingInvite(true);
@@ -731,6 +808,7 @@ function App() {
           saved={saved}
           inviteUrl={inviteUrl}
           generatingInvite={generatingInvite}
+          saveError={saveError}
         />
       )}
     </div>

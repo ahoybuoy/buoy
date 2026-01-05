@@ -1,19 +1,22 @@
 {
-  "name": "@buoy-design/figma-plugin",
+  "name": "@buoy-design/figma-widget",
   "version": "0.1.0",
   "private": true,
-  "description": "Figma plugin for Buoy design system health monitoring",
+  "description": "Figma widget for Buoy design system health monitoring",
   "scripts": {
-    "build": "pnpm build:plugin && pnpm build:ui",
-    "build:plugin": "esbuild src/plugin.ts --bundle --outfile=dist/plugin.js --target=es2020",
-    "build:ui": "esbuild src/ui.tsx --bundle --outfile=dist/ui.js --target=es2020 --loader:.tsx=tsx && pnpm build:html",
+    "build": "pnpm build:widget",
+    "build:widget": "esbuild src/widget.tsx --bundle --outfile=dist/widget.js --target=es6 --jsx=transform --jsx-factory=figma.widget.h --jsx-fragment=figma.widget.Fragment",
+    "build:plugin": "pnpm build:plugin-code && pnpm build:plugin-ui",
+    "build:plugin-code": "esbuild src/plugin.ts --bundle --outfile=dist/plugin.js --target=es6",
+    "build:plugin-ui": "esbuild src/ui.tsx --bundle --outfile=dist/ui.js --target=es2020 --loader:.tsx=tsx && pnpm build:html",
     "build:html": "node scripts/build-html.js",
-    "watch": "concurrently \"pnpm build:plugin --watch\" \"pnpm build:ui --watch\"",
+    "watch": "esbuild src/widget.tsx --bundle --outfile=dist/widget.js --target=es6 --jsx=transform --jsx-factory=figma.widget.h --jsx-fragment=figma.widget.Fragment --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.98.0",
+    "@figma/widget-typings": "^1.12.1",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",

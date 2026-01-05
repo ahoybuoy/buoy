@@ -208,14 +208,14 @@ async function analyzeColors(): Promise<AnalysisResult['colors']> {
   const usedColors = new Map<string, ColorToken>();
 
   // Get all paint styles (defined colors)
-  const paintStyles = figma.getLocalPaintStyles();
+  const paintStyles = await figma.getLocalPaintStylesAsync();
   for (const style of paintStyles) {
     const paint = style.paints[0];
     if (paint && paint.type === 'SOLID') {
       defined.push({
         name: style.name,
         value: rgbToHex(paint.color.r, paint.color.g, paint.color.b),
-        opacity: paint.opacity ?? 1,
+        opacity: paint.opacity !== undefined ? paint.opacity : 1,
         source: 'style',
       });
     }
@@ -238,7 +238,7 @@ async function analyzeColors(): Promise<AnalysisResult['colors']> {
             usedColors.set(hex, {
               name: '',
               value: hex,
-              opacity: fill.opacity ?? 1,
+              opacity: fill.opacity !== undefined ? fill.opacity : 1,
               source: 'usage',
               usageCount: 1,
             });
@@ -281,7 +281,7 @@ async function analyzeTypography(): Promise<AnalysisResult['typography']> {
   let orphaned = 0;
 
   // Get all text styles
-  const textStyles = figma.getLocalTextStyles();
+  const textStyles = await figma.getLocalTextStylesAsync();
   for (const style of textStyles) {
     defined.push({
       name: style.name,
@@ -377,32 +377,44 @@ async function analyzeComponents(): Promise<AnalysisResult['components']> {
     (node) => node.type === 'COMPONENT' || node.type === 'COMPONENT_SET'
   ) as (ComponentNode | ComponentSetNode)[];
 
+  // Get all instances
+  const allInstances = figma.currentPage.findAll(
+    (node) => node.type === 'INSTANCE'
+  ) as InstanceNode[];
+
+  // Build a map of instance -> mainComponent using async API
+  const instanceMainComponents = new Map<string, ComponentNode | null>();
+  for (const instance of allInstances) {
+    const mainComp = await instance.getMainComponentAsync();
+    instanceMainComponents.set(instance.id, mainComp);
+    if (!mainComp) {
+      orphaned++;
+    }
+  }
+
+  // Count instances for each component
   for (const component of components) {
-    const instances = figma.currentPage.findAll(
-      (node) =>
-        node.type === 'INSTANCE' &&
-        (node.mainComponent?.id === component.id ||
-          (component.type === 'COMPONENT_SET' &&
-            component.children.some((c) => c.id === node.mainComponent?.id)))
-    ) as InstanceNode[];
+    let instanceCount = 0;
+
+    for (const instance of allInstances) {
+      const mainComp = instanceMainComponents.get(instance.id);
+      if (!mainComp) continue;
+
+      if (mainComp.id === component.id) {
+        instanceCount++;
+      } else if (component.type === 'COMPONENT_SET') {
+        const isVariant = component.children.some((c) => c.id === mainComp.id);
+        if (isVariant) instanceCount++;
+      }
+    }
 
     defined.push({
       id: component.id,
       name: component.name,
       description: component.description || '',
-      instanceCount: instances.length,
+      instanceCount,
       variantCount: component.type === 'COMPONENT_SET' ? component.children.length : 0,
     });
-  }
-
-  // Count instances without main component (orphaned)
-  const allInstances = figma.currentPage.findAll(
-    (node) => node.type === 'INSTANCE'
-  ) as InstanceNode[];
-  for (const instance of allInstances) {
-    if (!instance.mainComponent) {
-      orphaned++;
-    }
   }
 
   return { defined, orphaned };
@@ -459,11 +471,27 @@ function calculateHealth(analysis: Omit<AnalysisResult, 'health'>): AnalysisResu
 // ============================================================================
 
 async function runAnalysis(): Promise<AnalysisResult> {
+  console.log('Starting analysis...');
+
+  console.log('Analyzing colors...');
   const colors = await analyzeColors();
+  console.log('Colors done:', colors.defined.length, 'defined');
+
+  console.log('Analyzing typography...');
   const typography = await analyzeTypography();
+  console.log('Typography done:', typography.defined.length, 'defined');
+
+  console.log('Analyzing spacing...');
   const spacing = await analyzeSpacing();
+  console.log('Spacing done:', spacing.values.length, 'values');
+
+  console.log('Analyzing components...');
   const components = await analyzeComponents();
+  console.log('Components done:', components.defined.length, 'defined');
+
+  console.log('Calculating health...');
   const health = calculateHealth({ colors, typography, spacing, components });
+  console.log('Health score:', health.score);
 
   return { colors, typography, spacing, components, health };
 }
@@ -536,7 +564,16 @@ figma.ui.onmessage = async (msg: { type: string; payload?: unknown }) => {
 };
 
 // Run initial analysis
-runAnalysis().then((result) => {
-  lastAnalysis = result;
-  figma.ui.postMessage({ type: 'analysis-complete', payload: result });
-});
+runAnalysis()
+  .then((result) => {
+    console.log('Analysis complete:', result);
+    lastAnalysis = result;
+    figma.ui.postMessage({ type: 'analysis-complete', payload: result });
+  })
+  .catch((error) => {
+    console.error('Analysis failed:', error);
+    figma.ui.postMessage({
+      type: 'error',
+      payload: error instanceof Error ? error.message : 'Analysis failed',
+    });
+  });
