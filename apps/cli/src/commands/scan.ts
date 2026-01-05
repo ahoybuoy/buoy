@@ -19,6 +19,7 @@ import {
 } from "../output/formatters.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import type { BuoyConfig } from "../config/schema.js";
+import { discoverProject, formatInsightsBlock } from "../insights/index.js";
 import {
   isLoggedIn,
   syncScan,
@@ -158,6 +159,18 @@ export function createScanCommand(): Command {
 
         header("Scan Results");
         newline();
+
+        // If we found nothing, show insights instead of bare zeros
+        if (results.components.length === 0 && results.tokens.length === 0) {
+          console.log(chalk.dim('Components: 0 (no scanners matched your framework)'));
+          console.log(chalk.dim('Tokens: 0'));
+          newline();
+
+          // Show what we DID find
+          const insights = await discoverProject(process.cwd());
+          console.log(formatInsightsBlock(insights));
+          return;
+        }
 
         keyValue("Components found", String(results.components.length));
         keyValue("Tokens found", String(results.tokens.length));
