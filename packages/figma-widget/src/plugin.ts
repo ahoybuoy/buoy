@@ -186,26 +186,8 @@ async function analyzeColors(): Promise<AnalysisResult['colors']> {
     (a, b) => (b.usageCount || 0) - (a.usageCount || 0)
   );
 
-  // Find duplicates (colors within distance of 10)
-  const duplicates: Array<{ colors: ColorToken[]; suggestion: string }> = [];
-  const processed = new Set<string>();
-
-  for (const color1 of defined) {
-    if (processed.has(color1.value)) continue;
-
-    const similar = defined.filter(
-      (c) => c.value !== color1.value && colorDistance(color1.value, c.value) < 15
-    );
-
-    if (similar.length > 0) {
-      const group = [color1, ...similar];
-      group.forEach((c) => processed.add(c.value));
-      duplicates.push({
-        colors: group,
-        suggestion: `Consider merging to ${color1.name}`,
-      });
-    }
-  }
+  // Find duplicates using shared logic
+  const duplicates = findDuplicateColors(defined);
 
   return { defined, used, duplicates };
 }
@@ -246,24 +228,6 @@ async function analyzeTypography(): Promise<AnalysisResult['typography']> {
   return { defined, orphaned };
 }
 
-function getFontWeight(style: string): number {
-  const weights: Record<string, number> = {
-    Thin: 100,
-    ExtraLight: 200,
-    Light: 300,
-    Regular: 400,
-    Medium: 500,
-    SemiBold: 600,
-    Bold: 700,
-    ExtraBold: 800,
-    Black: 900,
-  };
-  for (const [name, weight] of Object.entries(weights)) {
-    if (style.includes(name)) return weight;
-  }
-  return 400;
-}
-
 async function analyzeSpacing(): Promise<AnalysisResult['spacing']> {
   const spacingCounts = new Map<number, number>();
 
@@ -294,10 +258,8 @@ async function analyzeSpacing(): Promise<AnalysisResult['spacing']> {
     .map(([value, usageCount]) => ({ value, usageCount }))
     .sort((a, b) => b.usageCount - a.usageCount);
 
-  // Check if values follow a scale (multiples of 4 or 8)
-  const hasScale =
-    values.length > 0 &&
-    values.slice(0, 5).every((v) => v.value % 4 === 0 || v.value % 8 === 0);
+  // Check if values follow a scale using shared logic
+  const hasScale = hasConsistentSpacingScale(values);
 
   return { values, hasScale };
 }
@@ -354,62 +316,9 @@ async function analyzeComponents(): Promise<AnalysisResult['components']> {
   return { defined, orphaned };
 }
 
-function calculateHealth(analysis: Omit<AnalysisResult, 'health'>): AnalysisResult['health'] {
-  // Color score: penalize duplicates and undefined colors in use
-  const definedColorHexes = new Set(analysis.colors.defined.map((c) => c.value));
-  const undefinedUsed = analysis.colors.used.filter((c) => !definedColorHexes.has(c.value));
-  const colorScore = Math.max(
-    0,
-    100 - analysis.colors.duplicates.length * 10 - undefinedUsed.length * 5
-  );
-
-  // Typography score: penalize orphaned text
-  const totalText = analysis.typography.defined.length + analysis.typography.orphaned;
-  const typographyScore =
-    totalText > 0
-      ? Math.round((analysis.typography.defined.length / Math.max(1, totalText)) * 100)
-      : 100;
-
-  // Spacing score: reward having a scale
-  const spacingScore = analysis.spacing.hasScale ? 100 : analysis.spacing.values.length > 0 ? 60 : 0;
-
-  // Component score: penalize orphaned instances
-  const totalInstances =
-    analysis.components.defined.reduce((sum, c) => sum + c.instanceCount, 0) +
-    analysis.components.orphaned;
-  const componentScore =
-    totalInstances > 0
-      ? Math.round(
-          ((totalInstances - analysis.components.orphaned) / Math.max(1, totalInstances)) * 100
-        )
-      : 100;
-
-  // Overall score is weighted average
-  const score = Math.round(
-    colorScore * 0.3 + typographyScore * 0.25 + spacingScore * 0.2 + componentScore * 0.25
-  );
-
-  return {
-    score,
-    breakdown: {
-      colorScore,
-      typographyScore,
-      spacingScore,
-      componentScore,
-    },
-  };
-}
-
 // ============================================================================
 // Create Implementation Page
 // ============================================================================
-
-function getScoreColor(score: number): RGB {
-  if (score >= 90) return { r: 0.52, g: 0.8, b: 0.09 }; // green
-  if (score >= 70) return { r: 0.92, g: 0.7, b: 0.03 }; // yellow
-  if (score >= 50) return { r: 0.98, g: 0.45, b: 0.09 }; // orange
-  return { r: 0.94, g: 0.27, b: 0.27 }; // red
-}
 
 async function createImplementationPage(analysis: AnalysisResult): Promise<void> {
   // Check if page already exists
@@ -502,7 +411,7 @@ async function createImplementationPage(analysis: AnalysisResult): Promise<void>
   scoreValue.characters = `${analysis.health.score}%`;
   scoreValue.fontSize = 48;
   scoreValue.fontName = { family: 'Inter', style: 'Bold' };
-  scoreValue.fills = [{ type: 'SOLID', color: getScoreColor(analysis.health.score) }];
+  scoreValue.fills = [{ type: 'SOLID', color: getScoreColorRGB(analysis.health.score) }];
   scoreCard.appendChild(scoreValue);
 
   const scoreLabel = figma.createText();
@@ -540,7 +449,7 @@ async function createImplementationPage(analysis: AnalysisResult): Promise<void>
     valueText.characters = String(value);
     valueText.fontSize = 28;
     valueText.fontName = { family: 'Inter', style: 'Semi Bold' };
-    valueText.fills = [{ type: 'SOLID', color: getScoreColor(score) }];
+    valueText.fills = [{ type: 'SOLID', color: getScoreColorRGB(score) }];
     card.appendChild(valueText);
 
     const labelText = figma.createText();
