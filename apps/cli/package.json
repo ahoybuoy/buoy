@@ -1,6 +1,6 @@
 {
   "name": "@buoy-design/cli",
-  "version": "0.1.14",
+  "version": "0.1.17",
   "description": "Buoy CLI - Design drift detection for the AI era",
   "type": "module",
   "license": "MIT",
