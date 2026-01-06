@@ -10,12 +10,13 @@
 
 This document defines a comprehensive feature set for keeping AI agents on track with design systems. The core insight: **AI needs guardrails, not just detection.** We provide guardrails through multiple channels:
 
-1. **Skills** - Teach AI HOW to use the design system (progressive disclosure)
-2. **MCP Server** - Provide runtime access to tokens, components, patterns
-3. **CLAUDE.md Generation** - Embed design system rules in project context
-4. **Sub Agents** - Specialized agents for design system tasks
-5. **Tokens as Context** - Rich token format optimized for AI understanding
-6. **Deterministic CI** - Exit codes that enforce compliance
+1. **Setup Wizard** - One-click AI guardrails configuration via `buoy begin`
+2. **Skills** - Teach AI HOW to use the design system (progressive disclosure)
+3. **MCP Server** - Provide runtime access to tokens, components, patterns
+4. **CLAUDE.md Generation** - Embed design system rules in project context
+5. **Sub Agents** - Specialized agents for design system tasks
+6. **Tokens as Context** - Rich token format optimized for AI understanding
+7. **Deterministic CI** - Exit codes that enforce compliance
 
 ---
 
@@ -23,6 +24,7 @@ This document defines a comprehensive feature set for keeping AI agents on track
 
 | Feature | Type | Status | AI Benefit |
 |---------|------|--------|------------|
+| `buoy begin` wizard | CLI | Enhanced | One-click AI guardrails setup |
 | `buoy skill export` | CLI | New | Generates portable design system skill |
 | `buoy context` | CLI | New | Generates CLAUDE.md section for design system |
 | MCP Server | Package | Planned | Real-time token/component queries |
@@ -546,27 +548,318 @@ buoy check --staged --fail-on-critical
 
 ---
 
+## 9. Setup Wizard Integration (`buoy begin`)
+
+### Purpose
+
+Automatically configure AI guardrails during initial project setup. When users run `buoy begin`, the wizard should offer AI guardrails setup as a first-class option alongside CI integration.
+
+### Menu Integration
+
+Add "Set up AI guardrails" to the main menu:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  What would you like to do?                             │
+├─────────────────────────────────────────────────────────┤
+│  ○ Review critical issues (3)                           │
+│  ○ Review all drift (7)                                 │
+│  ○ Save configuration                                   │
+│  ○ Set up CI integration                                │
+│  ● Set up AI guardrails          ← NEW                  │
+│  ○ Learn more about Buoy                                │
+│  ○ Exit                                                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Wizard Flow
+
+```typescript
+// apps/cli/src/wizard/ai-guardrails-generator.ts
+
+export async function setupAIGuardrails(cwd: string): Promise<void> {
+  sectionHeader('Set Up AI Guardrails');
+
+  info('AI tools generate code 10x faster—and 10x more drift.');
+  info('Guardrails help AI use your design system correctly.');
+  console.log('');
+
+  // Show what was detected
+  const detected = await detectDesignSystemAssets(cwd);
+  showDetectedAssets(detected);
+
+  // Ask what to set up
+  const action = await showMenu<'all' | 'skill' | 'context' | 'customize' | 'skip'>('', [
+    { label: 'Set up everything (Recommended)', value: 'all' },
+    { label: 'Just the skill', value: 'skill' },
+    { label: 'Just CLAUDE.md', value: 'context' },
+    { label: 'Customize', value: 'customize' },
+    { label: 'Skip for now', value: 'skip' },
+  ]);
+
+  if (action === 'skip') return;
+
+  // Execute the appropriate commands
+  if (action === 'all' || action === 'skill') {
+    await exportSkill(cwd, detected);
+  }
+
+  if (action === 'all' || action === 'context') {
+    await generateContext(cwd, detected);
+  }
+
+  if (action === 'customize') {
+    await customizeGuardrails(cwd, detected);
+  }
+
+  showGuardrailsSuccess(action);
+}
+```
+
+### Detection Phase
+
+Before showing options, detect what's available:
+
+```typescript
+interface DetectedAssets {
+  tokens: {
+    colors: number;
+    spacing: number;
+    typography: number;
+    total: number;
+  };
+  components: {
+    count: number;
+    frameworks: string[];
+  };
+  patterns: {
+    forms: boolean;
+    navigation: boolean;
+    cards: boolean;
+    modals: boolean;
+  };
+  existing: {
+    skill: boolean;      // .claude/skills/design-system exists
+    claudeMd: boolean;   // CLAUDE.md exists
+    mcpConfig: boolean;  // .claude/settings.json has buoy
+  };
+}
+
+async function detectDesignSystemAssets(cwd: string): Promise<DetectedAssets> {
+  // Scan tokens
+  const tokenScanner = new TokenScanner(cwd);
+  const tokens = await tokenScanner.scan();
+
+  // Scan components
+  const orchestrator = new ScanOrchestrator(config);
+  const { components } = await orchestrator.scanComponents();
+
+  // Detect patterns from component usage
+  const patterns = detectPatterns(components);
+
+  // Check existing guardrails
+  const existing = {
+    skill: existsSync(join(cwd, '.claude/skills/design-system/SKILL.md')),
+    claudeMd: existsSync(join(cwd, 'CLAUDE.md')),
+    mcpConfig: checkMcpConfig(cwd),
+  };
+
+  return { tokens, components, patterns, existing };
+}
+```
+
+### Display Detected Assets
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Set Up AI Guardrails                                   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  AI tools generate code 10x faster—and 10x more drift.  │
+│  Guardrails help AI use your design system correctly.   │
+│                                                         │
+│  This will:                                             │
+│    • Generate a design system skill for AI agents       │
+│    • Add design system rules to CLAUDE.md               │
+│    • (Optional) Configure MCP server for Claude Code    │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ Detected:                                        │    │
+│  │   • 24 color tokens                              │    │
+│  │   • 8 spacing tokens                             │    │
+│  │   • 15 components (React)                        │    │
+│  │   • 3 patterns (forms, cards, navigation)        │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                         │
+│  ○ Set up everything (Recommended)                      │
+│  ○ Just the skill                                       │
+│  ○ Just CLAUDE.md                                       │
+│  ○ Customize                                            │
+│  ○ Skip for now                                         │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Success Output
+
+After setup completes:
+
+```
+  ✓ Created .claude/skills/design-system/
+      • SKILL.md (entry point)
+      • tokens/ (24 tokens with usage guidance)
+      • components/ (15 components)
+      • patterns/ (3 patterns)
+      • anti-patterns/ (accessibility, common mistakes)
+
+  ✓ Updated CLAUDE.md with design system rules
+
+  AI agents will now:
+    • Load your design system skill when building UI
+    • See token rules in project context
+    • Get validation feedback from buoy check
+
+  Next steps:
+    • Run 'buoy check' after AI generates code
+    • Update guardrails when design system changes:
+      buoy skill export && buoy context --append
+```
+
+### Customize Flow
+
+When user selects "Customize":
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Customize AI Guardrails                                │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  What to include in the skill?                          │
+│                                                         │
+│  [x] Color tokens (24 found)                            │
+│  [x] Spacing tokens (8 found)                           │
+│  [x] Typography tokens (6 found)                        │
+│  [x] Component inventory (15 components)                │
+│  [x] Usage patterns                                     │
+│  [x] Anti-patterns & accessibility rules                │
+│  [ ] Full component documentation (larger context)      │
+│                                                         │
+│  Where to create the skill?                             │
+│                                                         │
+│  ○ .claude/skills/design-system/ (Recommended)          │
+│  ○ Global skills (~/.claude/skills/)                    │
+│  ○ Custom path...                                       │
+│                                                         │
+│  CLAUDE.md options:                                     │
+│                                                         │
+│  ○ Append to existing CLAUDE.md                         │
+│  ○ Create new CLAUDE.md                                 │
+│  ○ Skip CLAUDE.md                                       │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### State Tracking
+
+Add to wizard state:
+
+```typescript
+interface WizardState {
+  configSaved: boolean;
+  ciSetup: boolean;
+  criticalReviewed: boolean;
+  allReviewed: boolean;
+  aiGuardrailsSetup: boolean;  // NEW
+}
+
+// Check existing setup
+const state: WizardState = {
+  // ...existing
+  aiGuardrailsSetup: existsSync(join(cwd, '.claude/skills/design-system/SKILL.md')),
+};
+```
+
+### Menu Action
+
+```typescript
+type MenuAction =
+  | 'review-critical'
+  | 'review-all'
+  | 'save-config'
+  | 'setup-ci'
+  | 'setup-ai-guardrails'  // NEW
+  | 'learn-more'
+  | 'exit';
+
+// In showMainMenu()
+if (!state.aiGuardrailsSetup) {
+  options.push({
+    label: 'Set up AI guardrails',
+    value: 'setup-ai-guardrails',
+  });
+}
+
+// In menuLoop()
+case 'setup-ai-guardrails': {
+  await setupAIGuardrails(cwd);
+  state.aiGuardrailsSetup = true;
+  if (!(await askAnythingElse())) return;
+  break;
+}
+```
+
+### File Structure
+
+```
+apps/cli/src/wizard/
+├── menu.ts
+├── issue-reviewer.ts
+├── ci-generator.ts
+├── ai-guardrails-generator.ts   # NEW
+└── index.ts
+```
+
+### Commands Triggered
+
+The wizard internally calls these commands:
+
+```bash
+# Behind the scenes when "Set up everything" is selected:
+buoy skill export --output .claude/skills/design-system/
+buoy context --append
+
+# With customize options:
+buoy skill export \
+  --output .claude/skills/design-system/ \
+  --sections tokens,components,patterns,anti-patterns
+
+buoy context --detail standard --append
+```
+
+---
+
 ## Implementation Priority
 
 ### Phase 1: Foundation (Week 1-2)
 1. `buoy skill export` - Generate portable skill
 2. `buoy context` - Generate CLAUDE.md section
-3. `buoy check --format ai-feedback` - AI-friendly output
+3. `buoy begin` wizard integration - "Set up AI guardrails" menu option
+4. `buoy check --format ai-feedback` - AI-friendly output
 
 ### Phase 2: Context (Week 3-4)
-4. Token context format with intent
-5. Enhanced CI exit codes and thresholds
-6. GitHub Action for PR comments
+5. Token context format with intent
+6. Enhanced CI exit codes and thresholds
+7. GitHub Action for PR comments
 
 ### Phase 3: Intelligence (Week 5-6)
-7. MCP server basic resources
-8. Sub agent definitions
-9. Feedback loop documentation
+8. MCP server basic resources
+9. Sub agent definitions
+10. Feedback loop documentation
 
 ### Phase 4: Polish (Week 7-8)
-10. MCP server tools
-11. IDE integrations
-12. Watch mode and auto-update
+11. MCP server tools
+12. IDE integrations
+13. Watch mode and auto-update
 
 ---
 
