@@ -23,12 +23,18 @@ import {
 import { reviewIssues } from '../wizard/issue-reviewer.js';
 import { setupCI } from '../wizard/ci-generator.js';
 import { setupAIGuardrails } from '../wizard/ai-guardrails-generator.js';
+import {
+  setupHooks as installHooks,
+  generateStandaloneHook,
+  detectHookSystem,
+} from '../hooks/index.js';
 
 type MenuAction =
   | 'anchor'
   | 'onboard'
   | 'review-issues'
   | 'check-drift'
+  | 'setup-hooks'
   | 'setup-ci'
   | 'learn-more'
   | 'exit';
@@ -38,8 +44,10 @@ interface WizardState {
   hasTokens: boolean;
   tokenFiles: string[];
   hasAISetup: boolean;
+  hasHooks: boolean;
   hasCISetup: boolean;
   hasConfig: boolean;
+  hasBaseline: boolean;
   // Scan results
   hasScanned: boolean;
   components: Component[];
@@ -83,6 +91,59 @@ async function detectTokens(cwd: string): Promise<{ hasTokens: boolean; files: s
   }
 
   return { hasTokens: files.length > 0, files: [...new Set(files)] };
+}
+
+/**
+ * Detect if pre-commit hooks are set up.
+ */
+function detectHooks(cwd: string): boolean {
+  const gitHookPath = join(cwd, '.git', 'hooks', 'pre-commit');
+  if (existsSync(gitHookPath)) {
+    try {
+      const content = readFileSync(gitHookPath, 'utf-8');
+      if (content.includes('buoy')) {
+        return true;
+      }
+    } catch {
+      // Ignore read errors
+    }
+  }
+
+  // Check for husky
+  const huskyPath = join(cwd, '.husky', 'pre-commit');
+  if (existsSync(huskyPath)) {
+    try {
+      const content = readFileSync(huskyPath, 'utf-8');
+      if (content.includes('buoy')) {
+        return true;
+      }
+    } catch {
+      // Ignore read errors
+    }
+  }
+
+  // Check for lint-staged config with buoy
+  const packageJsonPath = join(cwd, 'package.json');
+  if (existsSync(packageJsonPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+      if (pkg['lint-staged'] && JSON.stringify(pkg['lint-staged']).includes('buoy')) {
+        return true;
+      }
+    } catch {
+      // Ignore read errors
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Detect if baseline is set up.
+ */
+function detectBaseline(cwd: string): boolean {
+  return existsSync(join(cwd, '.buoy', 'baseline.json')) ||
+         existsSync(join(cwd, 'buoy-baseline.json'));
 }
 
 /**
@@ -131,6 +192,8 @@ export function createBeginCommand(): Command {
 
       const tokenResult = await detectTokens(cwd);
       const hasAISetup = detectAISetup(cwd);
+      const hasHooks = detectHooks(cwd);
+      const hasBaseline = detectBaseline(cwd);
       const hasCISetup = existsSync(join(cwd, '.github', 'workflows', 'buoy.yml')) ||
                          existsSync(join(cwd, '.gitlab-ci.yml'));
       const hasConfig = !!getConfigPath();
@@ -140,8 +203,10 @@ export function createBeginCommand(): Command {
         hasTokens: tokenResult.hasTokens,
         tokenFiles: tokenResult.files,
         hasAISetup,
+        hasHooks,
         hasCISetup,
         hasConfig,
+        hasBaseline,
         hasScanned: false,
         components: [],
         tokens: [],
@@ -188,11 +253,23 @@ function showProjectStatus(state: WizardState): void {
     console.log(`  ${chalk.yellow('○')} AI guardrails not set up`);
   }
 
+  // Pre-commit hooks
+  if (state.hasHooks) {
+    console.log(`  ${chalk.green('✓')} Pre-commit hooks active`);
+  } else {
+    console.log(`  ${chalk.dim('○')} Pre-commit hooks not set up`);
+  }
+
   // CI Setup
   if (state.hasCISetup) {
     console.log(`  ${chalk.green('✓')} CI/CD integration active`);
   } else {
     console.log(`  ${chalk.dim('○')} CI/CD not configured`);
+  }
+
+  // Baseline
+  if (state.hasBaseline) {
+    console.log(`  ${chalk.green('✓')} Baseline established`);
   }
 
   console.log('');
@@ -314,6 +391,58 @@ function showScanResults(
 }
 
 /**
+ * Setup pre-commit hooks with celebration!
+ * This is the "lock in your gains" moment.
+ */
+async function setupHooks(cwd: string): Promise<{ success: boolean }> {
+  console.log('');
+  console.log(chalk.cyan.bold('  🔒 Locking in your design system...'));
+  console.log('');
+
+  const hookSystem = detectHookSystem(cwd);
+
+  let success = false;
+
+  if (hookSystem) {
+    console.log(chalk.dim(`  Detected: ${hookSystem}`));
+    const result = installHooks(cwd);
+    success = result.success;
+
+    if (result.success) {
+      console.log(`  ${chalk.green('✓')} ${result.message}`);
+    } else {
+      console.log(`  ${chalk.yellow('!')} ${result.message}`);
+    }
+  } else {
+    // Generate standalone hook
+    const result = generateStandaloneHook(cwd);
+    success = result.success;
+
+    if (result.success) {
+      console.log(`  ${chalk.green('✓')} ${result.message}`);
+    } else {
+      console.log(`  ${chalk.yellow('!')} ${result.message}`);
+    }
+  }
+
+  if (success) {
+    // Celebration!
+    console.log('');
+    console.log(chalk.green.bold('  ━'.repeat(24)));
+    console.log('');
+    console.log(chalk.green.bold('    🎉 Your design system is protected!'));
+    console.log('');
+    console.log(chalk.green.bold('  ━'.repeat(24)));
+    console.log('');
+    console.log(chalk.dim('  Every commit will now be checked for drift.'));
+    console.log(chalk.dim('  Use --no-verify to bypass if needed.'));
+    console.log('');
+  }
+
+  return { success };
+}
+
+/**
  * Main menu loop - smart recommendations based on project state.
  */
 async function menuLoop(
@@ -404,6 +533,14 @@ async function menuLoop(
         break;
       }
 
+      case 'setup-hooks': {
+        const result = await setupHooks(cwd);
+        if (result.success) {
+          state.hasHooks = true;
+        }
+        break;
+      }
+
       case 'setup-ci': {
         await setupCI(cwd);
         state.hasCISetup = true;
@@ -470,8 +607,22 @@ async function showMainMenu(state: WizardState): Promise<MenuAction> {
     });
   }
 
-  // CI setup if not done
-  if (!state.hasCISetup && state.hasTokens) {
+  // Hook setup - only show after baseline is set OR no drift OR issues reviewed
+  // This is the "lock in your gains" moment
+  const isCleanState = state.hasBaseline ||
+                       (state.hasScanned && state.drifts.length === 0) ||
+                       state.issuesReviewed;
+
+  if (!state.hasHooks && state.hasTokens && isCleanState) {
+    options.push({
+      label: '🔒 Lock it in with pre-commit hooks',
+      value: 'setup-hooks',
+      description: 'Catch new drift before it\'s committed',
+    });
+  }
+
+  // CI setup - show after hooks are set up, or if they explicitly want it
+  if (!state.hasCISetup && state.hasTokens && (state.hasHooks || isCleanState)) {
     options.push({
       label: '🚦 Add to CI/CD',
       value: 'setup-ci',
