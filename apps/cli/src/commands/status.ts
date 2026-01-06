@@ -18,6 +18,7 @@ import type { BuoyConfig } from "../config/schema.js";
 import type { DriftSignal, Component } from "@buoy-design/core";
 import { discoverProject, formatInsightsBlock, promptNextAction, isTTY } from '../insights/index.js';
 import { createStore, getProjectName, type ScanStore, type ScanSnapshot } from '../store/index.js';
+import { ScanCache } from "@buoy-design/scanners";
 
 export function createStatusCommand(): Command {
   const cmd = new Command("status")
@@ -26,6 +27,8 @@ export function createStatusCommand(): Command {
     .option("-v, --verbose", "Verbose output")
     .option("--cached", "Use last scan results instead of rescanning")
     .option("--trend", "Show historical trend data")
+    .option("--no-cache", "Disable incremental scanning cache")
+    .option("--clear-cache", "Clear cache before scanning")
     .action(async (options) => {
       // Set JSON mode before creating spinner to redirect spinner to stderr
       if (options.json) {
@@ -104,13 +107,33 @@ export function createStatusCommand(): Command {
         // If no cached components, run live scan
         if (components.length === 0) {
           spin.text = "Scanning components...";
-          const orchestrator = new ScanOrchestrator(config);
+
+          // Initialize cache if enabled
+          let scanCache: ScanCache | undefined;
+          if (options.cache !== false) {
+            scanCache = new ScanCache(process.cwd());
+            await scanCache.load();
+
+            if (options.clearCache) {
+              scanCache.clear();
+              if (options.verbose) {
+                info("Cache cleared");
+              }
+            }
+          }
+
+          const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache: scanCache });
           const scanResult = await orchestrator.scanComponents({
             onProgress: (msg) => {
               spin.text = msg;
             },
           });
           components = scanResult.components;
+
+          // Save cache after scan
+          if (scanCache) {
+            await scanCache.save();
+          }
         }
 
         // Detect frameworks for sprawl check

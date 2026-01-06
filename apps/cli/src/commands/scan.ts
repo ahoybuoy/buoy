@@ -29,6 +29,7 @@ import {
   getQueueCount,
 } from "../cloud/index.js";
 import { createStore, getProjectName, wouldUseCloud, type ScanStore } from "../store/index.js";
+import { ScanCache } from "@buoy-design/scanners";
 
 export function createScanCommand(): Command {
   const cmd = new Command("scan")
@@ -40,6 +41,8 @@ export function createScanCommand(): Command {
     .option("--json", "Output as JSON")
     .option("-v, --verbose", "Verbose output")
     .option("--no-persist", "Skip saving results to local database")
+    .option("--no-cache", "Disable incremental scanning cache")
+    .option("--clear-cache", "Clear cache before scanning")
     .action(async (options) => {
       // Set JSON mode before creating spinner to redirect spinner to stderr
       if (options.json) {
@@ -90,8 +93,22 @@ export function createScanCommand(): Command {
 
         spin.text = "Scanning sources...";
 
+        // Initialize cache if enabled
+        let cache: ScanCache | undefined;
+        if (options.cache !== false) {
+          cache = new ScanCache(process.cwd());
+          await cache.load();
+
+          if (options.clearCache) {
+            cache.clear();
+            if (options.verbose) {
+              info("Cache cleared");
+            }
+          }
+        }
+
         // Create orchestrator and determine sources
-        const orchestrator = new ScanOrchestrator(config);
+        const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
         const sourcesToScan: string[] =
           options.source || orchestrator.getEnabledSources();
 
@@ -135,6 +152,12 @@ export function createScanCommand(): Command {
             spin.text = msg;
           },
         });
+
+        // Save cache after scan
+        if (cache) {
+          spin.text = "Saving cache...";
+          await cache.save();
+        }
 
         // Persist results to store (unless --no-persist)
         let scanId: string | undefined;
@@ -180,6 +203,7 @@ export function createScanCommand(): Command {
                 errors: results.errors.map(
                   (e) => `[${e.source}] ${e.file || ""}: ${e.message}`,
                 ),
+                cacheStats: results.cacheStats,
               },
               null,
               2,
@@ -221,6 +245,14 @@ export function createScanCommand(): Command {
         keyValue("Components found", String(results.components.length));
         keyValue("Tokens found", String(results.tokens.length));
         keyValue("Errors", String(results.errors.length));
+
+        // Display cache statistics if caching was used
+        if (results.cacheStats) {
+          const { hits, misses } = results.cacheStats;
+          const total = hits + misses;
+          const hitRate = total > 0 ? Math.round((hits / total) * 100) : 0;
+          keyValue("Cache", `${hits} hits, ${misses} misses (${hitRate}% hit rate)`);
+        }
         newline();
 
         if (results.components.length > 0) {

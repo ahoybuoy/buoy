@@ -24,6 +24,18 @@ vi.mock('@buoy-design/scanners/git', () => ({
   TokenScanner: vi.fn(),
 }));
 
+vi.mock('@buoy-design/scanners', () => ({
+  ScanCache: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue(undefined),
+    save: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn(),
+    checkFiles: vi.fn().mockResolvedValue({ filesToScan: [], cachedFiles: [], cachedEntries: [] }),
+    storeResult: vi.fn().mockResolvedValue(undefined),
+    getCachedResult: vi.fn().mockReturnValue(null),
+    getStats: vi.fn().mockReturnValue({ entryCount: 0, totalSize: 0 }),
+  })),
+}));
+
 vi.mock('../../output/reporters.js', () => ({
   spinner: vi.fn(() => ({
     start: vi.fn(),

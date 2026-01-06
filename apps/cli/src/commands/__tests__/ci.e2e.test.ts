@@ -78,6 +78,21 @@ vi.mock("@buoy-design/core/analysis", () => ({
   }),
 }));
 
+vi.mock("@buoy-design/scanners", () => ({
+  ScanCache: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue(undefined),
+    save: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn(),
+    checkFiles: vi.fn().mockResolvedValue({ filesToScan: [], cachedFiles: [], cachedEntries: [] }),
+    storeResult: vi.fn().mockResolvedValue(undefined),
+    getCachedResult: vi.fn().mockReturnValue(null),
+    getStats: vi.fn().mockReturnValue({ entryCount: 0, totalSize: 0 }),
+  })),
+  TailwindScanner: vi.fn().mockImplementation(() => ({
+    scan: vi.fn().mockResolvedValue({ items: [], errors: [], drifts: [] }),
+  })),
+}));
+
 vi.mock("../../output/reporters.js", () => ({
   setJsonMode: vi.fn(),
 }));

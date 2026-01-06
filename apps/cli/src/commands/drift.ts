@@ -24,6 +24,7 @@ import {
 import { writeFileSync } from "fs";
 import type { DriftSignal, Severity } from "@buoy-design/core";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
+import { ScanCache } from "@buoy-design/scanners";
 
 export function createDriftCommand(): Command {
   const cmd = new Command("drift").description(
@@ -46,6 +47,8 @@ export function createDriftCommand(): Command {
     .option("--compact", "Compact table output (less detail)")
     .option("-v, --verbose", "Verbose output")
     .option("--include-baseline", "Include baselined drifts (show all)")
+    .option("--no-cache", "Disable incremental scanning cache")
+    .option("--clear-cache", "Clear cache before scanning")
     .action(async (options) => {
       // Set JSON mode before creating spinner to redirect spinner to stderr
       if (options.json || options.agent) {
@@ -57,6 +60,20 @@ export function createDriftCommand(): Command {
         const { config } = await loadConfig();
         spin.text = "Scanning for drift...";
 
+        // Initialize cache if enabled
+        let cache: ScanCache | undefined;
+        if (options.cache !== false) {
+          cache = new ScanCache(process.cwd());
+          await cache.load();
+
+          if (options.clearCache) {
+            cache.clear();
+            if (options.verbose) {
+              info("Cache cleared");
+            }
+          }
+        }
+
         // Use consolidated drift analysis service
         const service = new DriftAnalysisService(config);
         const result = await service.analyze({
@@ -66,7 +83,13 @@ export function createDriftCommand(): Command {
           includeBaseline: options.includeBaseline,
           minSeverity: options.severity as Severity | undefined,
           filterType: options.type,
+          cache,
         });
+
+        // Save cache after scan
+        if (cache) {
+          await cache.save();
+        }
 
         const drifts = result.drifts;
         const sourceComponents = result.components;
