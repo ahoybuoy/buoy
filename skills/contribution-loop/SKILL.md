@@ -55,6 +55,9 @@ Use the agents from `@buoy-design/agents`:
 1. **HistoryAgent** - Check git blame: Was this intentional?
 2. **ReviewAgent** - Did Buoy miss anything obvious?
 3. **AcceptanceAgent** - Will this repo accept external PRs?
+   - **IMPORTANT**: Check the `contributionProcess` in the response
+   - If `issueRequired: true` or `preferredFlow: 'issue-then-pr'`, open issue first
+   - If `directPRsAllowed: 'small-fixes'`, design fixes are usually acceptable
 4. **FixabilityAgent** - Tier each signal: slam-dunk, review, or skip
 
 ### 4. Triage Phase

@@ -7,6 +7,7 @@ import type {
   AcceptanceResult,
   AcceptanceLikelihood,
   AgentResult,
+  ContributionProcess,
 } from './types.js';
 
 const MODEL = 'claude-sonnet-4-20250514';
@@ -26,17 +27,18 @@ export class AcceptanceAgent {
   async predict(input: AcceptanceInput): Promise<AgentResult<AcceptanceResult>> {
     try {
       const prompt = this.buildPrompt(input);
+      const hasContributingMd = Boolean(input.contributingMd);
 
       const response = await this.client.messages.create({
         model: MODEL,
-        max_tokens: 1500,
+        max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }],
       });
 
       const textContent = response.content.find((c) => c.type === 'text');
       const responseText = textContent?.type === 'text' ? textContent.text : '';
 
-      const parsed = this.parseResponse(responseText);
+      const parsed = this.parseResponse(responseText, hasContributingMd);
 
       return {
         success: true,
@@ -88,6 +90,14 @@ Predict likelihood of accepting a PR that:
 - Has clear explanation of why the change matters
 - Comes from an external contributor
 
+**IMPORTANT**: Also extract the contribution process preference from CONTRIBUTING.md.
+Look for phrases like:
+- "open an issue first" / "please file an issue"
+- "submit a PR directly" / "PRs welcome"
+- "for small fixes, PRs are fine"
+- "discuss in an issue before implementing"
+- "RFC required for major changes"
+
 Respond with JSON:
 {
   "likelihood": "high" | "medium" | "low",
@@ -95,7 +105,15 @@ Respond with JSON:
   "reasoning": "2-3 sentences explaining your prediction",
   "suggestedApproach": "How to frame the PR for best reception",
   "redFlags": ["List of concerns"],
-  "greenFlags": ["List of positive signals"]
+  "greenFlags": ["List of positive signals"],
+  "contributionProcess": {
+    "issueRequired": true | false | "features-only" | "major-only",
+    "directPRsAllowed": "all" | "small-fixes" | "none",
+    "discussionFirst": true | false,
+    "preferredFlow": "issue-then-pr" | "pr-directly" | "discussion-first" | "depends-on-scope",
+    "evidence": "Direct quote from CONTRIBUTING.md (or 'No CONTRIBUTING.md found')",
+    "confidence": 0-100
+  }
 }`;
   }
 
@@ -132,12 +150,12 @@ Respond with JSON:
   /**
    * Parse Claude's response
    */
-  private parseResponse(response: string): AcceptanceResult {
+  private parseResponse(response: string, hasContributingMd: boolean): AcceptanceResult {
     try {
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return {
+        const result: AcceptanceResult = {
           likelihood: this.validateLikelihood(parsed.likelihood),
           score: Math.min(100, Math.max(0, Number(parsed.score) || 50)),
           reasoning: String(parsed.reasoning ?? ''),
@@ -149,6 +167,16 @@ Respond with JSON:
             ? parsed.greenFlags.map(String)
             : [],
         };
+
+        // Parse contribution process if present
+        if (parsed.contributionProcess) {
+          result.contributionProcess = this.parseContributionProcess(
+            parsed.contributionProcess,
+            hasContributingMd
+          );
+        }
+
+        return result;
       }
     } catch {
       // Fall through
@@ -161,6 +189,48 @@ Respond with JSON:
       suggestedApproach: 'Follow standard contribution guidelines',
       redFlags: [],
       greenFlags: [],
+    };
+  }
+
+  /**
+   * Parse and validate contribution process from response
+   */
+  private parseContributionProcess(
+    raw: unknown,
+    hasContributingMd: boolean
+  ): ContributionProcess {
+    const obj = raw as Record<string, unknown>;
+
+    // Validate issueRequired
+    let issueRequired: ContributionProcess['issueRequired'] = false;
+    if (obj.issueRequired === true || obj.issueRequired === false) {
+      issueRequired = obj.issueRequired;
+    } else if (obj.issueRequired === 'features-only' || obj.issueRequired === 'major-only') {
+      issueRequired = obj.issueRequired;
+    }
+
+    // Validate directPRsAllowed
+    let directPRsAllowed: ContributionProcess['directPRsAllowed'] = 'all';
+    if (obj.directPRsAllowed === 'all' || obj.directPRsAllowed === 'small-fixes' || obj.directPRsAllowed === 'none') {
+      directPRsAllowed = obj.directPRsAllowed;
+    }
+
+    // Validate preferredFlow
+    let preferredFlow: ContributionProcess['preferredFlow'] = 'depends-on-scope';
+    const validFlows = ['issue-then-pr', 'pr-directly', 'discussion-first', 'depends-on-scope'];
+    if (validFlows.includes(obj.preferredFlow as string)) {
+      preferredFlow = obj.preferredFlow as ContributionProcess['preferredFlow'];
+    }
+
+    return {
+      issueRequired,
+      directPRsAllowed,
+      discussionFirst: Boolean(obj.discussionFirst),
+      preferredFlow,
+      evidence: hasContributingMd
+        ? String(obj.evidence ?? 'Could not extract specific guidance')
+        : 'No CONTRIBUTING.md found',
+      confidence: Math.min(100, Math.max(0, Number(obj.confidence) || (hasContributingMd ? 70 : 30))),
     };
   }
 

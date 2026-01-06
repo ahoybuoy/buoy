@@ -160,6 +160,48 @@ export const AcceptanceLikelihoodSchema = z.enum(['high', 'medium', 'low']);
 
 export type AcceptanceLikelihood = z.infer<typeof AcceptanceLikelihoodSchema>;
 
+/**
+ * Extracted contribution process preferences from CONTRIBUTING.md
+ */
+export interface ContributionProcess {
+  /**
+   * Whether an issue is required before submitting a PR
+   * - true: Always require issue first
+   * - false: Direct PRs allowed
+   * - 'features-only': Issues required for features, not bug fixes
+   * - 'major-only': Issues required for major changes only
+   */
+  issueRequired: boolean | 'features-only' | 'major-only';
+
+  /**
+   * What types of direct PRs are allowed
+   * - 'all': Any PR welcome without issue
+   * - 'small-fixes': Only typos, docs, small bug fixes
+   * - 'none': Must always open issue first
+   */
+  directPRsAllowed: 'all' | 'small-fixes' | 'none';
+
+  /**
+   * Whether discussion/RFC is expected before implementation
+   */
+  discussionFirst: boolean;
+
+  /**
+   * Preferred way to propose changes
+   */
+  preferredFlow: 'issue-then-pr' | 'pr-directly' | 'discussion-first' | 'depends-on-scope';
+
+  /**
+   * Direct quote from CONTRIBUTING.md supporting this interpretation
+   */
+  evidence: string;
+
+  /**
+   * Confidence in the extraction (0-100)
+   */
+  confidence: number;
+}
+
 export interface AcceptanceResult {
   likelihood: AcceptanceLikelihood;
   score: number;  // 0-100
@@ -167,6 +209,11 @@ export interface AcceptanceResult {
   suggestedApproach: string;
   redFlags: string[];
   greenFlags: string[];
+  /**
+   * Extracted contribution process from CONTRIBUTING.md
+   * Only present if contributingMd was provided
+   */
+  contributionProcess?: ContributionProcess;
 }
 
 // ============================================================================
