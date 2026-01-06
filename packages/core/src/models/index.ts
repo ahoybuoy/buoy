@@ -130,3 +130,23 @@ export type {
   IntentAttachmentType,
   IntentContext,
 } from './intent.js';
+
+// Fix models
+export {
+  FixSchema,
+  FixResultSchema,
+  FixSessionSchema,
+  ConfidenceLevelSchema,
+  createFixId,
+  getConfidenceLevel,
+  meetsConfidenceThreshold,
+} from './fix.js';
+
+export type {
+  Fix,
+  FixResult,
+  FixSession,
+  ConfidenceLevel,
+  FixGeneratorOptions,
+  FixApplyOptions,
+} from './fix.js';

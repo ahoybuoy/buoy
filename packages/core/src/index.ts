@@ -18,3 +18,6 @@ export * from './tokens/index.js';
 
 // Re-export graph
 export * from './graph/index.js';
+
+// Re-export fix
+export * from './fix/index.js';

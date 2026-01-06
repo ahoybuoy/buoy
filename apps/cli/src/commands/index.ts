@@ -20,6 +20,8 @@ export { createImportCommand } from "./import.js";
 export { createHistoryCommand } from "./history.js";
 export { createBeginCommand } from "./begin.js";
 export { createSkillCommand } from "./skill.js";
+export { createFixCommand } from "./fix.js";
+export { createContextCommand } from "./context.js";
 
 // Cloud commands
 export { createLoginCommand } from "./login.js";

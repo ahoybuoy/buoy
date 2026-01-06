@@ -18,6 +18,8 @@ import {
   createHistoryCommand,
   createBeginCommand,
   createSkillCommand,
+  createFixCommand,
+  createContextCommand,
   // Cloud commands
   createLoginCommand,
   createLogoutCommand,
@@ -56,6 +58,8 @@ export function createCli(): Command {
   program.addCommand(createHistoryCommand());
   program.addCommand(createBeginCommand());
   program.addCommand(createSkillCommand());
+  program.addCommand(createFixCommand());
+  program.addCommand(createContextCommand());
 
   // Cloud commands
   program.addCommand(createLoginCommand());
