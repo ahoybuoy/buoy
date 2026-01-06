@@ -182,14 +182,14 @@ Track contribution state in `.buoy/contributions.json`:
 
 ## Running the Loop
 
-⚠️ **Do NOT use Ralph Wiggum for the full loop.** The Review Phase (step 6) requires human approval before PR submission. Ralph Wiggum is designed for tasks with measurable completion criteria, not tasks requiring mid-stream approval.
+You *can* use Ralph Wiggum for full autonomous execution—but remember, **your name goes on these PRs**. Best practice is to keep a tight leash on what you're submitting to other people's repos.
 
-**Safe to automate:** Discovery → Scanning → Analysis → Triage → Generation
-**Requires human:** Review → Submission
+**Safe to let loose:** Discovery → Scanning → Analysis → Triage → Generation
+**Best to review:** Submission (your reputation is on the line)
 
-Run a single iteration manually:
+Run a single iteration:
 1. Find 5 candidate repos
 2. Scan each with Buoy
 3. Analyze signals with agents
 4. Generate PRs for slam-dunks
-5. **STOP and review before submitting**
+5. Review before submitting (recommended)
