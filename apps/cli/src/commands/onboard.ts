@@ -178,7 +178,24 @@ export function createOnboardCommand(): Command {
         if (options.claudeHooks) {
           if (options.dryRun) {
             console.log(chalk.dim('  Would create: .claude/settings.local.json'));
+            console.log(chalk.dim('  Would create: .claude/buoy-context.md'));
           } else {
+            // Generate condensed context file for session injection
+            const exportService = new SkillExportService(projectName);
+            const condensedContext = exportService.generateCondensedContext({
+              tokens: scanResult.tokens,
+              components: scanResult.components,
+              drifts: diffResult.drifts,
+              projectName,
+            });
+
+            const claudeDir = resolve(cwd, '.claude');
+            if (!existsSync(claudeDir)) {
+              mkdirSync(claudeDir, { recursive: true });
+            }
+            writeFileSync(resolve(claudeDir, 'buoy-context.md'), condensedContext);
+
+            // Setup the hooks
             const claudeResult = setupClaudeHooks(cwd);
 
             if (claudeResult.success) {
@@ -213,7 +230,7 @@ export function createOnboardCommand(): Command {
           if (results.claudeHooksCreated) {
             console.log(`  ${chalk.green('✓')} Created Claude Code hooks`);
             console.log(chalk.dim(`      ${results.claudeHooksPath}`));
-            console.log(chalk.dim('      Session reminder + on-demand validation'));
+            console.log(chalk.dim(`      .claude/buoy-context.md (injected at session start)`));
           }
 
           console.log('');

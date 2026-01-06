@@ -696,4 +696,111 @@ Run \`buoy check\` to see current violations with fix suggestions.
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   }
+
+  /**
+   * Generate condensed context for session hook injection
+   * Contains all crucial info in a compact format (~500-1500 tokens)
+   */
+  generateCondensedContext(data: ScanData): string {
+    const lines: string[] = [];
+
+    lines.push(`# ${data.projectName} Design System`);
+    lines.push('');
+
+    // Components - compact list
+    if (data.components.length > 0) {
+      lines.push('## Components');
+      lines.push('Use these existing components instead of creating new ones:');
+      for (const comp of data.components.slice(0, 30)) {
+        const props = comp.props.slice(0, 5).map(p => p.name).join(', ');
+        lines.push(`- \`${comp.name}\`${props ? ` (${props})` : ''}`);
+      }
+      if (data.components.length > 30) {
+        lines.push(`- ... and ${data.components.length - 30} more`);
+      }
+      lines.push('');
+    }
+
+    // Tokens - grouped and compact
+    if (data.tokens.length > 0) {
+      lines.push('## Tokens');
+      lines.push('NEVER hardcode these values. Use tokens instead.');
+      lines.push('');
+
+      const colorTokens = data.tokens.filter(t => t.category === 'color');
+      const spacingTokens = data.tokens.filter(t => t.category === 'spacing');
+      const typographyTokens = data.tokens.filter(t => t.category === 'typography');
+
+      if (colorTokens.length > 0) {
+        lines.push('**Colors:**');
+        for (const token of colorTokens.slice(0, 20)) {
+          const value = token.value.type === 'color' ? token.value.hex : String(token.value);
+          lines.push(`- \`${token.name}\`: ${value}`);
+        }
+        if (colorTokens.length > 20) {
+          lines.push(`- ... and ${colorTokens.length - 20} more`);
+        }
+        lines.push('');
+      }
+
+      if (spacingTokens.length > 0) {
+        lines.push('**Spacing:**');
+        for (const token of spacingTokens.slice(0, 15)) {
+          let value = '';
+          if (token.value.type === 'spacing') {
+            value = `${token.value.value}${token.value.unit}`;
+          }
+          lines.push(`- \`${token.name}\`: ${value}`);
+        }
+        if (spacingTokens.length > 15) {
+          lines.push(`- ... and ${spacingTokens.length - 15} more`);
+        }
+        lines.push('');
+      }
+
+      if (typographyTokens.length > 0) {
+        lines.push('**Typography:**');
+        for (const token of typographyTokens.slice(0, 10)) {
+          let value = '';
+          if (token.value.type === 'typography') {
+            value = `${token.value.fontFamily}, ${token.value.fontSize}px`;
+          }
+          lines.push(`- \`${token.name}\`: ${value}`);
+        }
+        if (typographyTokens.length > 10) {
+          lines.push(`- ... and ${typographyTokens.length - 10} more`);
+        }
+        lines.push('');
+      }
+    }
+
+    // Anti-patterns - what to avoid
+    if (data.drifts.length > 0) {
+      lines.push('## Anti-Patterns (AVOID)');
+      const criticalDrifts = data.drifts.filter(d => d.severity === 'critical');
+      const warningDrifts = data.drifts.filter(d => d.severity === 'warning');
+
+      for (const drift of criticalDrifts.slice(0, 5)) {
+        lines.push(`- 🔴 ${drift.message}`);
+      }
+      for (const drift of warningDrifts.slice(0, 5)) {
+        lines.push(`- 🟡 ${drift.message}`);
+      }
+      if (data.drifts.length > 10) {
+        lines.push(`- ... and ${data.drifts.length - 10} more issues`);
+      }
+      lines.push('');
+    }
+
+    // Quick rules
+    lines.push('## Rules');
+    lines.push('1. Check existing components before creating new ones');
+    lines.push('2. Use design tokens, never hardcode colors/spacing');
+    lines.push('3. Run `buoy check` before committing');
+    lines.push('');
+    lines.push('---');
+    lines.push('🛟 Buoy Design System Guard | Run `buoy check` to validate');
+
+    return lines.join('\n');
+  }
 }

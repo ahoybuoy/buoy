@@ -367,6 +367,7 @@ export interface ClaudeHooksConfig {
 
 /**
  * Generate Claude Code hooks configuration for design system awareness
+ * Injects condensed design system context at session start
  */
 export function generateClaudeHooksConfig(): ClaudeHooksConfig {
   return {
@@ -377,7 +378,7 @@ export function generateClaudeHooksConfig(): ClaudeHooksConfig {
             {
               type: "command",
               command:
-                'echo "🛟 Design system active. Run \\"buoy check\\" to validate compliance, or \\"buoy sweep\\" for full scan."',
+                'cat .claude/buoy-context.md 2>/dev/null || echo "🛟 Design system active. Run buoy onboard to set up context."',
             },
           ],
         },
