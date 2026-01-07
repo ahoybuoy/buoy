@@ -119,3 +119,14 @@ export function getAuthenticatedUser(): {
     email: config.email,
   };
 }
+
+/**
+ * Show auth prompt for unauthenticated users
+ * Returns the commands they can run
+ */
+export function getAuthCommands(): { login: string; signup: string } {
+  return {
+    login: 'buoy login',
+    signup: 'buoy login --signup',
+  };
+}

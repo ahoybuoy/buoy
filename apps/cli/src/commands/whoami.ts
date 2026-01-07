@@ -23,7 +23,8 @@ export function createWhoamiCommand(): Command {
           console.log(JSON.stringify({ loggedIn: false }));
         } else {
           warning('Not logged in');
-          info('Run `buoy login` to authenticate');
+          info('Run `buoy login` to sign in');
+          info('Run `buoy login --signup` to create an account');
         }
         return;
       }

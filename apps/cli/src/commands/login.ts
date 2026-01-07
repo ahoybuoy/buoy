@@ -99,6 +99,7 @@ export function createLoginCommand(): Command {
     .description('Authenticate with Buoy Cloud')
     .option('-t, --token <token>', 'API token (skip browser flow)')
     .option('--no-browser', 'Do not open browser automatically')
+    .option('--signup', 'Create a new account instead of logging in')
     .action(async (options) => {
       // Check if already logged in
       if (isLoggedIn()) {
@@ -117,12 +118,19 @@ export function createLoginCommand(): Command {
         // Token provided directly
         token = options.token;
       } else {
-        // Interactive login flow
+        // Interactive login/signup flow
         const endpoint = getApiEndpoint();
-        const authUrl = `${endpoint.replace('api.', 'app.')}/cli-auth`;
+        const isSignup = options.signup;
+        const authPath = isSignup ? '/signup?source=cli' : '/cli-auth';
+        const authUrl = `${endpoint.replace('api.', 'app.')}${authPath}`;
 
         newline();
-        info('Opening browser to authenticate with Buoy Cloud...');
+        if (isSignup) {
+          info('Opening browser to create your Buoy account...');
+          info('After signup, you\'ll get an API token to paste here.');
+        } else {
+          info('Opening browser to authenticate with Buoy Cloud...');
+        }
         newline();
 
         if (options.browser !== false) {

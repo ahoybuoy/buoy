@@ -27,14 +27,8 @@ import { DriftAnalysisService } from "../services/drift-analysis.js";
 import { ScanCache } from "@buoy-design/scanners";
 
 export function createDriftCommand(): Command {
-  const cmd = new Command("drift").description(
-    "Detect and manage design system drift",
-  );
-
-  // drift check
-  cmd
-    .command("check")
-    .description("Check for drift in the current project")
+  const cmd = new Command("drift")
+    .description("Detect design system drift in your codebase")
     .option(
       "-S, --severity <level>",
       "Filter by minimum severity (info, warning, critical)",
@@ -163,9 +157,8 @@ export function createDriftCommand(): Command {
             info("No drift detected, but no reference source is configured.");
             newline();
             info("To detect hardcoded values vs design tokens:");
-            info("  1. Run " + chalk.cyan("buoy extract") + " to find hardcoded values");
-            info("  2. Run " + chalk.cyan("buoy tokenize") + " to generate design-tokens.css");
-            info("  3. Configure tokens in buoy.config.mjs:");
+            info("  1. Run " + chalk.cyan("buoy tokens") + " to extract design tokens");
+            info("  2. Configure tokens in buoy.config.mjs:");
             console.log(chalk.gray(`
      sources: {
        tokens: {
@@ -195,12 +188,6 @@ export function createDriftCommand(): Command {
         process.exit(1);
       }
     });
-
-  // NOTE: `drift explain` and `drift resolve` commands are planned but not yet implemented.
-  // They will be added once the following are complete:
-  // - drift explain: Requires Claude API integration and git forensics
-  // - drift resolve: Requires persistence layer for tracking resolutions
-  // See: docs/ROADMAP.md for implementation timeline
 
   return cmd;
 }

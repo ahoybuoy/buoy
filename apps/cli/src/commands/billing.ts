@@ -51,7 +51,8 @@ async function showBillingStatus(options: { json?: boolean }): Promise<void> {
       console.log(JSON.stringify({ error: 'Not logged in' }));
     } else {
       error('Not logged in');
-      info('Run `buoy login` first');
+      info('Run `buoy login` to sign in');
+      info('Run `buoy login --signup` to create an account');
     }
     process.exit(1);
   }
@@ -162,7 +163,8 @@ function createUpgradeCommand(): Command {
     .action(async () => {
       if (!isLoggedIn()) {
         error('Not logged in');
-        info('Run `buoy login` first');
+        info('Run `buoy login` to sign in');
+        info('Run `buoy login --signup` to create an account');
         process.exit(1);
       }
 
@@ -222,7 +224,8 @@ function createPortalCommand(): Command {
     .action(async () => {
       if (!isLoggedIn()) {
         error('Not logged in');
-        info('Run `buoy login` first');
+        info('Run `buoy login` to sign in');
+        info('Run `buoy login --signup` to create an account');
         process.exit(1);
       }
 
@@ -275,7 +278,8 @@ function createInvoicesCommand(): Command {
           console.log(JSON.stringify({ error: 'Not logged in' }));
         } else {
           error('Not logged in');
-          info('Run `buoy login` first');
+          info('Run `buoy login` to sign in');
+          info('Run `buoy login --signup` to create an account');
         }
         process.exit(1);
       }

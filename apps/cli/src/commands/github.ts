@@ -15,6 +15,7 @@ import {
   listGitHubInstallations,
   revokeGitHubInstallation,
   getGitHubInstallUrl,
+  requireFeature,
 } from '../cloud/index.js';
 import {
   spinner,
@@ -49,7 +50,8 @@ function createStatusCommand(): Command {
           console.log(JSON.stringify({ error: 'Not logged in' }));
         } else {
           error('Not logged in');
-          info('Run `buoy login` first');
+          info('Run `buoy login` to sign in');
+          info('Run `buoy login --signup` to create an account');
         }
         process.exit(1);
       }
@@ -120,9 +122,9 @@ function createConnectCommand(): Command {
   return new Command('connect')
     .description('Install the Buoy GitHub App')
     .action(async () => {
-      if (!isLoggedIn()) {
-        error('Not logged in');
-        info('Run `buoy login` first');
+      // Check feature access (handles login check and plan check)
+      const allowed = await requireFeature('github-pr-comments');
+      if (!allowed) {
         process.exit(1);
       }
 
@@ -162,7 +164,8 @@ function createDisconnectCommand(): Command {
           console.log(JSON.stringify({ error: 'Not logged in' }));
         } else {
           error('Not logged in');
-          info('Run `buoy login` first');
+          info('Run `buoy login` to sign in');
+          info('Run `buoy login --signup` to create an account');
         }
         process.exit(1);
       }

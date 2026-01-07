@@ -33,6 +33,7 @@ import {
   createGitHubCommand,
   createBillingCommand,
   createPlansCommand,
+  createComponentsCommand,
 } from "./commands/index.js";
 
 export function createCli(): Command {
@@ -48,19 +49,21 @@ export function createCli(): Command {
     })
     .addHelpText('after', `
 Command Groups:
-  Getting Started    begin, sweep, dock
-  Drift Detection    drift, lighthouse, check, fix, baseline
+  Getting Started    begin, dock
+  Scanning           scan, drift, audit
+  CI/Hooks           check, lighthouse, baseline
+  Fixing             fix
   AI Integration     onboard, skill, context
   Design Tokens      tokens, anchor, compare, import
-  Analysis           audit, graph, history, learn, plugins
+  Analysis           graph, history, learn, plugins, components
   Cloud              login, logout, whoami, link, unlink, sync, billing, plans
   GitHub             github
 
 Quick Start:
   $ buoy              # auto-launches wizard if no config
-  $ buoy sweep        # scan your codebase
-  $ buoy drift        # check for design drift
-  $ buoy onboard      # set up AI guardrails
+  $ buoy scan --json  # get design system context (components + tokens)
+  $ buoy drift --json # get drift signals (problems to fix)
+  $ buoy audit --json # get health score
 `);
 
   // === Getting Started ===
@@ -94,6 +97,7 @@ Quick Start:
   program.addCommand(createHistoryCommand());
   program.addCommand(createLearnCommand());
   program.addCommand(createPluginsCommand());
+  program.addCommand(createComponentsCommand());
 
   // === Cloud ===
   program.addCommand(createLoginCommand());

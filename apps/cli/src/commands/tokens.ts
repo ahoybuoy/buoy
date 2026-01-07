@@ -26,10 +26,17 @@ import {
   generateTokens,
   type ExtractedValue,
 } from '@buoy-design/core';
+import { createTokensLookupCommand } from './tokens-lookup.js';
 
 export function createTokensCommand(): Command {
   const cmd = new Command('tokens')
-    .description('Generate design tokens from your codebase')
+    .description('Generate and search design tokens');
+
+  // Add lookup subcommand
+  cmd.addCommand(createTokensLookupCommand());
+
+  // Default action (generate tokens)
+  cmd
     .option('-o, --output <path>', 'Output file path (auto-detected if not specified)')
     .option('--format <format>', 'Output format: css, json, tailwind, ai-context (auto-detected if not specified)')
     .option('--dry-run', 'Preview without writing files')

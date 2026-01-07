@@ -306,7 +306,7 @@ export function createCheckCommand(): Command {
             }
 
             console.log("");
-            console.log("Run `buoy drift check` for details");
+            console.log("Run `buoy drift` for details");
           }
         }
 

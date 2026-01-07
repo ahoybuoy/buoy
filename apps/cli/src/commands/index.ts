@@ -34,3 +34,4 @@ export { createSyncCommand } from "./sync.js";
 export { createGitHubCommand } from "./github.js";
 export { createBillingCommand } from "./billing.js";
 export { createPlansCommand } from "./plans.js";
+export { createComponentsCommand } from "./components.js";
