@@ -25,25 +25,35 @@ const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 
 // Plan configuration
+// Pricing: $25/dev/month or $240/dev/year (20% off)
 const PLANS = {
   free: {
     name: 'Free',
     priceId: null,
-    userLimit: 3,
-    features: ['CLI access', 'Local scans', 'Up to 3 users'],
-  },
-  pro: {
-    name: 'Pro',
-    priceId: 'price_1SlgHXAo0W5eA8UvGqHwZWCR',
-    amount: 29900, // $299.00 in cents
-    userLimit: null, // Unlimited
+    userLimit: null, // Unlimited - CLI is fully free
     features: [
-      'Unlimited users',
-      'Web dashboard',
-      'Historical trends',
-      'GitHub App integration',
-      'Figma sync',
-      'Priority support',
+      'Auto-detect design system',
+      'All drift detection commands',
+      'Token import (JSON, CSS, Tokens Studio)',
+      'AI guardrails (skills, MCP, context)',
+      'Local scan history',
+    ],
+  },
+  team: {
+    name: 'Team',
+    // Per-seat pricing: $25/dev/month or $240/dev/year (20% off)
+    priceIdMonthly: 'price_team_monthly', // TODO: Create in Stripe - $25/seat/month
+    priceIdAnnual: 'price_team_annual',   // TODO: Create in Stripe - $240/seat/year
+    amountMonthly: 2500, // $25.00 in cents per seat
+    amountAnnual: 24000, // $240.00 in cents per seat/year (20% off)
+    userLimit: null, // Per-seat, no limit
+    features: [
+      'Everything in Free',
+      'Unlimited repos',
+      'GitHub PR comments',
+      'Slack & Teams alerts',
+      'Cloud history & trends',
+      'Figma Monitor plugin',
     ],
   },
   enterprise: {
@@ -51,12 +61,13 @@ const PLANS = {
     priceId: null, // Custom pricing
     userLimit: null,
     features: [
-      'Everything in Pro',
-      'SSO/SAML',
-      'Multi-repo support',
-      'Dedicated support',
-      'Custom SLAs',
-      'On-premise option',
+      'Everything in Team',
+      'SSO / SAML',
+      'Audit logs',
+      'SLA guarantees',
+      'Design system implementation consulting',
+      'Dedicated Slack channel',
+      'Custom integrations',
     ],
   },
 } as const;
@@ -332,7 +343,8 @@ billing.get('/billing/invoices', async (c) => {
 });
 
 /**
- * Create checkout session for upgrading to Pro
+ * Create checkout session for upgrading to Team plan
+ * Per-seat pricing: $25/dev/month or $240/dev/year (20% off)
  */
 billing.post('/billing/checkout', async (c) => {
   const session = c.get('session');
@@ -349,6 +361,20 @@ billing.post('/billing/checkout', async (c) => {
     return c.json({ error: 'Only account owners can manage billing' }, 403);
   }
 
+  // Parse request body for billing options
+  const schema = z.object({
+    seats: z.number().int().min(1).default(1),
+    billingPeriod: z.enum(['monthly', 'annual']).default('monthly'),
+  });
+
+  let options: z.infer<typeof schema>;
+  try {
+    const rawBody = await c.req.json().catch(() => ({}));
+    options = schema.parse(rawBody);
+  } catch {
+    options = { seats: 1, billingPeriod: 'monthly' };
+  }
+
   try {
     const account = await c.env.PLATFORM_DB.prepare(`
       SELECT id, name, slug, stripe_customer_id, plan
@@ -359,8 +385,8 @@ billing.post('/billing/checkout', async (c) => {
       return c.json({ error: 'Account not found' }, 404);
     }
 
-    if (account.plan === 'pro') {
-      return c.json({ error: 'Already on Pro plan' }, 400);
+    if (account.plan === 'team') {
+      return c.json({ error: 'Already on Team plan' }, 400);
     }
 
     // Get user email for Stripe
@@ -392,7 +418,12 @@ billing.post('/billing/checkout', async (c) => {
       `).bind(customerId, session.accountId).run();
     }
 
-    // Create checkout session
+    // Select price based on billing period
+    const priceId = options.billingPeriod === 'annual'
+      ? PLANS.team.priceIdAnnual
+      : PLANS.team.priceIdMonthly;
+
+    // Create checkout session with per-seat quantity
     const checkoutSession = await stripeRequest<{
       id: string;
       url: string;
@@ -404,11 +435,14 @@ billing.post('/billing/checkout', async (c) => {
         body: encodeFormData({
           customer: customerId,
           mode: 'subscription',
-          'line_items[0][price]': PLANS.pro.priceId || '',
-          'line_items[0][quantity]': 1,
+          'line_items[0][price]': priceId,
+          'line_items[0][quantity]': options.seats,
+          'line_items[0][adjustable_quantity][enabled]': true,
+          'line_items[0][adjustable_quantity][minimum]': 1,
           success_url: `${c.env.CORS_ORIGIN}/settings/billing?success=true`,
           cancel_url: `${c.env.CORS_ORIGIN}/settings/billing?canceled=true`,
           'subscription_data[metadata][buoy_account_id]': account.id as string,
+          'subscription_data[metadata][initial_seats]': options.seats,
           allow_promotion_codes: true,
         }),
       }
@@ -417,6 +451,11 @@ billing.post('/billing/checkout', async (c) => {
     return c.json({
       checkoutUrl: checkoutSession.url,
       sessionId: checkoutSession.id,
+      seats: options.seats,
+      billingPeriod: options.billingPeriod,
+      pricePerSeat: options.billingPeriod === 'annual'
+        ? PLANS.team.amountAnnual / 12
+        : PLANS.team.amountMonthly,
     });
   } catch (error) {
     console.error('Error creating checkout:', error);
@@ -641,11 +680,11 @@ async function handleCheckoutCompleted(
 
   const now = new Date().toISOString();
 
-  // Upgrade to Pro
+  // Upgrade to Team
   await env.PLATFORM_DB.prepare(`
     UPDATE accounts
     SET
-      plan = 'pro',
+      plan = 'team',
       stripe_subscription_id = ?,
       user_limit = NULL,
       trial_converted = 1,
@@ -654,7 +693,7 @@ async function handleCheckoutCompleted(
     WHERE id = ?
   `).bind(subscriptionId, now, account.id).run();
 
-  console.log(`Account ${account.id} upgraded to Pro`);
+  console.log(`Account ${account.id} upgraded to Team`);
 }
 
 async function handleSubscriptionUpdated(
@@ -713,13 +752,13 @@ async function handleSubscriptionDeleted(
 
   const now = new Date().toISOString();
 
-  // Downgrade to Free
+  // Downgrade to Free (no user limit on free tier)
   await env.PLATFORM_DB.prepare(`
     UPDATE accounts
     SET
       plan = 'free',
       stripe_subscription_id = NULL,
-      user_limit = 3,
+      user_limit = NULL,
       payment_status = 'active',
       canceled_at = ?,
       updated_at = ?
