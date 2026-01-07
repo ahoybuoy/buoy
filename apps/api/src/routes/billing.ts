@@ -42,8 +42,8 @@ const PLANS = {
   team: {
     name: 'Team',
     // Per-seat pricing: $25/dev/month or $240/dev/year (20% off)
-    priceIdMonthly: 'price_team_monthly', // TODO: Create in Stripe - $25/seat/month
-    priceIdAnnual: 'price_team_annual',   // TODO: Create in Stripe - $240/seat/year
+    priceIdMonthly: 'price_1SmmuUH6AdYcVyeguHV6ACMn', // $25/seat/month
+    priceIdAnnual: 'price_1SmmuWH6AdYcVyegQ465xfHd',  // $240/seat/year
     amountMonthly: 2500, // $25.00 in cents per seat
     amountAnnual: 24000, // $240.00 in cents per seat/year (20% off)
     userLimit: null, // Per-seat, no limit
