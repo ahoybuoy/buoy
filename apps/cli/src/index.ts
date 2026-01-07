@@ -3,37 +3,13 @@ import { existsSync } from "fs";
 import { join } from "path";
 import {
   createDockCommand,
-  createScanCommand,
-  createDriftCommand,
-  createTokensCommand,
-  createAnchorCommand,
   createPluginsCommand,
-  createCICommand,
   createCheckCommand,
   createBaselineCommand,
-  createCompareCommand,
-  createAuditCommand,
-  createGraphCommand,
-  createImportCommand,
-  createHistoryCommand,
   createBeginCommand,
-  createSkillCommand,
   createFixCommand,
-  createContextCommand,
-  createOnboardCommand,
-  createLearnCommand,
-  createCommandsCommand,
-  // Cloud commands
-  createLoginCommand,
-  createLogoutCommand,
-  createWhoamiCommand,
-  createLinkCommand,
-  createUnlinkCommand,
-  createSyncCommand,
-  createGitHubCommand,
-  createBillingCommand,
-  createPlansCommand,
-  createComponentsCommand,
+  createShowCommand,
+  createShipCommand,
 } from "./commands/index.js";
 
 export function createCli(): Command {
@@ -49,68 +25,40 @@ export function createCli(): Command {
     })
     .addHelpText('after', `
 Command Groups:
-  Getting Started    begin, dock
-  Scanning           scan, drift, audit
-  CI/Hooks           check, lighthouse, baseline
+  For AI Agents      show (components, tokens, drift, health, all, history)
+  Getting Started    begin, dock (config, skills, agents, context, hooks)
+  CI/Hooks           check, baseline
   Fixing             fix
-  AI Integration     onboard, skill, context
-  Design Tokens      tokens, anchor, compare, import
-  Analysis           graph, history, learn, plugins, components
-  Cloud              login, logout, whoami, link, unlink, sync, billing, plans
-  GitHub             github
+  Plugins            plugins
+  Ship (Cloud)       ship (login, logout, status, github, gitlab, billing, plans)
 
 Quick Start:
-  $ buoy              # auto-launches wizard if no config
-  $ buoy scan --json  # get design system context (components + tokens)
-  $ buoy drift --json # get drift signals (problems to fix)
-  $ buoy audit --json # get health score
+  $ buoy                    # auto-launches wizard if no config
+  $ buoy show all           # everything an AI agent needs
+  $ buoy show drift         # design system violations
+  $ buoy dock               # set up config, skills, agents, hooks
 `);
+
+  // === For AI Agents (primary interface) ===
+  program.addCommand(createShowCommand());
 
   // === Getting Started ===
   const beginCommand = createBeginCommand();
   program.addCommand(beginCommand);
-  program.addCommand(createScanCommand());
   program.addCommand(createDockCommand());
 
-  // === Drift Detection ===
+  // === CI/Hooks ===
   program.addCommand(createCheckCommand());
-  program.addCommand(createDriftCommand());
-  program.addCommand(createCICommand());
-  program.addCommand(createFixCommand());
   program.addCommand(createBaselineCommand());
 
-  // === AI Integration ===
-  program.addCommand(createOnboardCommand());
-  program.addCommand(createSkillCommand());
-  program.addCommand(createContextCommand());
-  program.addCommand(createCommandsCommand());
+  // === Fixing ===
+  program.addCommand(createFixCommand());
 
-  // === Design Tokens ===
-  program.addCommand(createTokensCommand());
-  program.addCommand(createAnchorCommand());
-  program.addCommand(createCompareCommand());
-  program.addCommand(createImportCommand());
-
-  // === Analysis ===
-  program.addCommand(createAuditCommand());
-  program.addCommand(createGraphCommand());
-  program.addCommand(createHistoryCommand());
-  program.addCommand(createLearnCommand());
+  // === Plugins ===
   program.addCommand(createPluginsCommand());
-  program.addCommand(createComponentsCommand());
 
-  // === Cloud ===
-  program.addCommand(createLoginCommand());
-  program.addCommand(createLogoutCommand());
-  program.addCommand(createWhoamiCommand());
-  program.addCommand(createLinkCommand());
-  program.addCommand(createUnlinkCommand());
-  program.addCommand(createSyncCommand());
-  program.addCommand(createBillingCommand());
-  program.addCommand(createPlansCommand());
-
-  // === GitHub ===
-  program.addCommand(createGitHubCommand());
+  // === Ship (Cloud) ===
+  program.addCommand(createShipCommand());
 
   // Default action: run wizard if no config exists
   program.action(async () => {
