@@ -54,7 +54,7 @@ repos:
   - repo: local
     hooks:
       - id: buoy
-        name: buoy drift check
+        name: buoy show drift
         entry: buoy check --staged --fail-on critical
         language: system
         types: [file]
@@ -252,7 +252,7 @@ function setupPreCommitConfig(projectRoot: string): SetupHooksResult {
     return {
       success: false,
       hookSystem: "pre-commit",
-      message: `Add buoy hook to your .pre-commit-config.yaml:\n\n  - repo: local\n    hooks:\n      - id: buoy\n        name: buoy drift check\n        entry: buoy check --staged --fail-on critical\n        language: system\n        types: [file]\n        files: \\.(tsx|jsx|ts|js|vue|svelte)$`,
+      message: `Add buoy hook to your .pre-commit-config.yaml:\n\n  - repo: local\n    hooks:\n      - id: buoy\n        name: buoy show drift\n        entry: buoy check --staged --fail-on critical\n        language: system\n        types: [file]\n        files: \\.(tsx|jsx|ts|js|vue|svelte)$`,
       filePath: configPath,
     };
   }

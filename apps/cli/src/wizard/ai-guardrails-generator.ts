@@ -188,7 +188,7 @@ buoy check
 
 For detailed drift report:
 \`\`\`bash
-buoy drift check
+buoy show drift
 \`\`\`
 
 ## More Details

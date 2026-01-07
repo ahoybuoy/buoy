@@ -40,7 +40,7 @@ export function createSyncCommand(): Command {
           console.log(JSON.stringify({ error: 'Not logged in' }));
         } else {
           error('Not logged in');
-          info('Run `buoy login` first');
+          info('Run `buoy ship login` first');
         }
         process.exit(1);
       }

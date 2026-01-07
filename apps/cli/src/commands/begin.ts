@@ -277,7 +277,7 @@ async function runQuickOnboard(cwd: string): Promise<void> {
   console.log(chalk.green.bold('  ━'.repeat(24)));
   console.log('');
   console.log(chalk.dim('  Next steps:'));
-  console.log(`    ${chalk.cyan('buoy sweep')}     Check for drift`);
+  console.log(`    ${chalk.cyan('buoy show all')}     Check for drift`);
   console.log(`    ${chalk.cyan('buoy check')}    Pre-commit validation`);
   console.log(`    ${chalk.cyan('buoy begin')}    Interactive setup`);
   console.log('');
@@ -486,7 +486,7 @@ function showScanResults(
     console.log(`  ${chalk.green('✓')} Scanned ${components.length} component${components.length === 1 ? '' : 's'}`);
   } else {
     console.log(`  ${chalk.yellow('○')} No components found to scan`);
-    console.log(chalk.dim('    Tip: Run buoy sweep --verbose to see what paths are being searched'));
+    console.log(chalk.dim('    Tip: Run buoy show all --verbose to see what paths are being searched'));
   }
 
   // Drift summary - clearer language about severity
@@ -800,8 +800,8 @@ function showExitMessage(): void {
   console.log(chalk.green('  ✓ You\'re all set!'));
   console.log('');
   console.log(chalk.dim('  Quick commands:'));
-  console.log(`    ${chalk.cyan('buoy sweep')}     Scan for drift`);
-  console.log(`    ${chalk.cyan('buoy sweep')}   Quick health overview`);
+  console.log(`    ${chalk.cyan('buoy show all')}     Scan for drift`);
+  console.log(`    ${chalk.cyan('buoy show all')}   Quick health overview`);
   console.log(`    ${chalk.cyan('buoy check')}    Pre-commit validation`);
   console.log('');
   console.log(chalk.dim(`  Run ${chalk.cyan('buoy begin')} anytime to return here.`));
@@ -945,6 +945,6 @@ Analyzing your project...
     const message = err instanceof Error ? err.message : String(err);
     console.log(`Analysis failed: ${message}`);
     console.log('');
-    console.log('Try running: buoy sweep');
+    console.log('Try running: buoy show all');
   }
 }

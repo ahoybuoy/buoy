@@ -129,7 +129,7 @@ function generateComponentSection(
 
   if (detailLevel !== 'minimal') {
     lines.push('');
-    lines.push('See full inventory: `buoy sweep --components`');
+    lines.push('See full inventory: `buoy show all --components`');
   }
 
   return lines.join('\n');
@@ -257,7 +257,7 @@ function generateValidationSection(): string {
 Run before committing:
 \`\`\`bash
 buoy check          # Quick validation
-buoy drift check    # Detailed drift analysis
+buoy show drift    # Detailed drift analysis
 buoy fix --dry-run  # See suggested fixes
 \`\`\``;
 }

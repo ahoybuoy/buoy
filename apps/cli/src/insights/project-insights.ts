@@ -138,15 +138,6 @@ function buildSuggestions(project: DetectedProject, summary: InsightSummary): Su
     });
   }
 
-  if (summary.fileBreakdown.length > 0) {
-    const firstPath = summary.fileBreakdown[0]!.path;
-    suggestions.push({
-      command: `buoy explain ${firstPath}`,
-      description: 'AI-powered investigation of your code',
-      reason: 'Works on any file type',
-    });
-  }
-
   return suggestions;
 }
 

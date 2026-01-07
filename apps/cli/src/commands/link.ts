@@ -173,7 +173,7 @@ export function createLinkCommand(): Command {
       // Check login
       if (!isLoggedIn()) {
         error('Not logged in');
-        info('Run `buoy login` first');
+        info('Run `buoy ship login` first');
         process.exit(1);
       }
 
@@ -324,7 +324,7 @@ export function createLinkCommand(): Command {
 
       newline();
       info('Your scans will now sync to Buoy Cloud.');
-      info('Run `buoy sweep` to upload your first scan.');
+      info('Run `buoy show all` to upload your first scan.');
     });
 
   return cmd;

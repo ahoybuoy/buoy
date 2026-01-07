@@ -1,4 +1,4 @@
-# 🛟 Buoy
+# Buoy
 
 **Catch design drift before it ships.**
 
@@ -8,7 +8,7 @@ Buoy watches for these issues and helps you fix them.
 
 ```
 src/components/Button.tsx:24
-  ⚠ hardcoded-value: #3b82f6 → var(--color-primary) (92% match)
+  hardcoded-value: #3b82f6 → var(--color-primary) (92% match)
 ```
 
 ## Quick Start
@@ -17,8 +17,8 @@ src/components/Button.tsx:24
 # Interactive setup wizard
 npx @buoy-design/cli begin
 
-# Or jump straight in (zero config!)
-npx @buoy-design/cli sweep
+# Or see your design system immediately (zero config!)
+npx @buoy-design/cli show all
 ```
 
 No config needed. Buoy auto-detects your framework and starts working immediately.
@@ -36,211 +36,138 @@ No config needed. Buoy auto-detects your framework and starts working immediatel
 
 ## Commands
 
-### Getting Started
+```
+buoy
+├── show                    # Read design system info (for AI agents)
+│   ├── components          # Components in codebase
+│   ├── tokens              # Design tokens found
+│   ├── drift               # Design system violations
+│   ├── health              # Health score
+│   ├── history             # Scan history
+│   └── all                 # Everything combined
+├── begin                   # Interactive wizard
+├── dock                    # Configure project
+│   ├── config              # Create buoy.config.mjs
+│   ├── skills              # Create AI agent skills
+│   ├── agents              # Set up AI agents
+│   ├── context             # Generate CLAUDE.md context
+│   └── hooks               # Set up git hooks
+├── check                   # Pre-commit drift check
+├── baseline                # Accept existing drift
+├── fix                     # Suggest/apply fixes
+├── plugins                 # Show available scanners
+└── ship                    # Cloud features
+    ├── login               # Authenticate
+    ├── logout              # Sign out
+    ├── status              # Account + bot + sync status
+    ├── github              # Set up GitHub PR bot
+    ├── gitlab              # Set up GitLab PR bot (soon)
+    ├── billing             # Manage subscription
+    └── plans               # Compare pricing
+```
 
-| Command | Purpose |
-|---------|---------|
-| `buoy begin` | Interactive wizard to get started with Buoy |
-| `buoy sweep` | Scan components and tokens, visual health check |
-| `buoy dock` | Initialize Buoy in your project |
+## For AI Agents
 
-### Drift Detection
+The `show` command outputs JSON for AI agents to consume:
 
-| Command | Purpose |
-|---------|---------|
-| `buoy drift` | Detect and manage design system drift |
-| `buoy check` | Fast pre-commit hook check |
-| `buoy lighthouse` | CI mode with GitHub PR comments |
-| `buoy fix` | Suggest and apply fixes for drift issues |
-| `buoy baseline` | Accept current drift, flag only new issues |
+```bash
+# Get everything an AI agent needs
+buoy show all --json
 
-### AI Integration
+# Just drift signals
+buoy show drift --json
 
-| Command | Purpose |
-|---------|---------|
-| `buoy onboard` | Set up AI guardrails (skills, hooks, CLAUDE.md) |
-| `buoy skill` | Generate design system skills for AI agents |
-| `buoy context` | Generate design system context for CLAUDE.md |
-| `buoy explain [target]` | AI-powered investigation of drift |
-| `buoy commands` | Install Claude Code slash commands |
+# Components inventory
+buoy show components --json
+```
 
-### Design Tokens
+Example output:
+```json
+{
+  "components": [...],
+  "tokens": [...],
+  "drift": {
+    "signals": [...],
+    "summary": { "total": 12, "critical": 2, "warning": 7, "info": 3 }
+  },
+  "health": { "score": 78 }
+}
+```
 
-| Command | Purpose |
-|---------|---------|
-| `buoy tokens` | Generate tokens from existing code |
-| `buoy anchor` | Analyze code and establish design tokens |
-| `buoy compare <file>` | Compare tokens against codebase |
-| `buoy import <file>` | Import tokens from external sources |
+## Getting Started
 
-### Analysis
-
-| Command | Purpose |
-|---------|---------|
-| `buoy audit` | Full design system health audit |
-| `buoy graph` | Build and query the design system knowledge graph |
-| `buoy history` | View scan history and trends |
-| `buoy learn` | Analyze drift history for patterns and learnings |
-| `buoy plugins` | Show available scanners and plugins |
-
-### Buoy Cloud
-
-| Command | Purpose |
-|---------|---------|
-| `buoy login` | Authenticate with Buoy Cloud |
-| `buoy link` | Connect project to Buoy Cloud |
-| `buoy sync` | Sync scans to cloud dashboard |
-| `buoy billing` | Manage subscription and billing |
-| `buoy github` | Manage GitHub App integration |
-
-## The `begin` Command
-
-Interactive wizard that gets you up and running:
+### Interactive Wizard
 
 ```bash
 buoy begin
 ```
 
-```
-🛟 Welcome to Buoy
-
-Let's get your project set up for design drift detection.
-
-Scanning project...
-
-✓ Detected frameworks:
-  • React (package.json)
-  • Tailwind CSS (tailwind.config.js)
-
-✓ Found 2 token files:
-  • src/styles/variables.css
-  • tailwind.config.js
-
-? What would you like to do?
-  ❯ Run a quick scan to see current drift
-    Set up CI integration
-    Configure Figma connection
-    Save configuration to buoy.config.mjs
-```
-
-The wizard walks you through:
+Walks you through:
 - **Framework detection** — Confirms what Buoy found
 - **Token discovery** — Shows your design tokens
 - **Quick scan** — Immediate drift report
 - **CI setup** — GitHub Actions configuration
 - **Figma connection** — Link your design files
 
-## The `sweep` Command
-
-Get a quick visual health check:
+### Configure Your Project
 
 ```bash
-buoy sweep
+buoy dock
 ```
 
-```
-⚡ Zero-config mode
-   Auto-detected:
-   • React (package.json)
-   • Tailwind CSS (tailwind.config.js)
-   • 2 token file(s)
+Smart walkthrough that sets up:
+1. `buoy.config.mjs` — Project configuration
+2. AI agent skills — For Claude Code, Copilot, etc.
+3. CLAUDE.md context — Design system documentation
+4. Git hooks — Pre-commit drift checking
 
-Component Coverage
-                                    47/52 components · 90% aligned
-⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛀ ⛁ ⛁
-⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛀
+## Drift Detection
 
-✓ Good coverage. Minor drift to review.
-```
-
-## The `explain` Command
-
-AI-powered investigation of your design system:
+### Quick Check
 
 ```bash
-# Explain a specific file
-buoy explain src/components/Button.tsx
-
-# Explain specific drift
-buoy explain drift:abc123
-
-# Explain everything
-buoy explain --all
+buoy check
 ```
 
-Returns natural language explanations with fix suggestions.
+Fast pre-commit hook friendly. Exits with error code if drift found.
 
-## The `drift check` Command
-
-Detailed drift analysis with actionable suggestions:
+### Detailed Analysis
 
 ```bash
-buoy drift check
+buoy show drift
 ```
 
-```
-━━━ CRITICAL (1) ━━━
-
-! #1 Accessibility Issue
-  Component: LoginForm
-  Location:  src/components/LoginForm.tsx:42
-  Issue:     Missing aria-label on interactive element
-
-  Actions:
-    1. Add aria-label to button element
-    2. Run accessibility audit
-
-━━━ WARNING (3) ━━━
-
-~ #2 Using wrong color/size
-  Component: Button
-  Location:  src/components/Button.tsx:24
-  Issue:     Hardcoded color #3b82f6 should use design token
-
-  Actions:
-    1. Replace hardcoded colors with design tokens
-    2. Example: Change #3b82f6 → var(--color-primary)
+```json
+{
+  "drifts": [
+    {
+      "type": "hardcoded-value",
+      "severity": "warning",
+      "file": "src/components/Button.tsx",
+      "line": 24,
+      "message": "#3b82f6 should use var(--color-primary)",
+      "suggestion": "var(--color-primary)"
+    }
+  ]
+}
 ```
 
-### Output Formats
+### Fix Issues
 
 ```bash
-buoy drift check --json          # JSON for CI pipelines
-buoy drift check --markdown      # Markdown for docs
-buoy drift check --html          # HTML report (shareable with designers)
-buoy drift check --agent         # Optimized for AI agents
+buoy fix                    # Interactive fix suggestions
+buoy fix --dry-run          # Preview changes
+buoy fix --auto             # Auto-apply safe fixes
 ```
 
-The `--html` flag generates a beautiful, designer-friendly report:
+### Accept Existing Drift
+
+For brownfield projects, baseline existing issues and only flag new ones:
 
 ```bash
-buoy drift check --html report.html
-# ✓ HTML report saved to report.html
+buoy baseline               # Accept current drift
+buoy check                  # Only fails on new drift
 ```
-
-### Ignoring Specific Lines
-
-Use `// buoy-ignore` to skip detection on specific lines:
-
-```tsx
-// buoy-ignore
-<div style={{ color: '#ff0000' }}>Intentionally hardcoded</div>
-
-{/* buoy-ignore */}
-<Box backgroundColor="#custom" />
-```
-
-## Figma Plugin
-
-Buoy includes a Figma plugin that analyzes your design files:
-
-- **Health Score** — See how well-structured your design system is
-- **Color Analysis** — Find duplicate and similar colors
-- **Typography Check** — Identify orphaned text nodes
-- **Spacing Audit** — Verify consistent spacing scale
-- **Auto Dashboard** — Creates a health report page in your Figma file
-
-The plugin syncs with Buoy Cloud to keep designers and developers aligned.
 
 ## CI Integration
 
@@ -255,49 +182,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Run Buoy
-        run: npx @buoy-design/cli ci
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: npx @buoy-design/cli check
 ```
 
-### Options
+### PR Comments with Buoy Cloud
 
 ```bash
-buoy lighthouse                      # Comment on PR, don't fail
-buoy lighthouse --fail-on critical   # Fail on critical issues only
-buoy lighthouse --fail-on warning    # Strict mode
+# Set up GitHub PR bot
+buoy ship login
+buoy ship github
 ```
+
+The GitHub bot automatically comments on PRs with drift analysis.
 
 ## AI Guardrails
 
 Keep AI coding assistants (Copilot, Claude, Cursor) aligned with your design system:
 
 ```bash
-# Full AI onboarding - skills, hooks, and CLAUDE.md
-buoy onboard
-
-# Install Claude Code hooks for auto-injection
-buoy onboard --claude-hooks
-
-# Run MCP server for real-time context
-npx @buoy-design/mcp serve
+# Set up AI agents with design system context
+buoy dock agents
 ```
 
-### What `buoy onboard` Creates
-
-- **AI Skill** - Design system knowledge for Claude Code
-- **Claude Hooks** - Auto-inject context at session start
-- **CLAUDE.md** - Project-specific AI instructions
-- **Slash Commands** - `/contribution-loop` and more
+Creates:
+- **AI Skills** — Design system knowledge for Claude Code
+- **Claude Hooks** — Auto-inject context at session start
+- **CLAUDE.md** — Project-specific AI instructions
 
 ### MCP Server
 
@@ -323,7 +236,7 @@ The MCP server provides real-time design system context to AI agents:
 Works without config, but you can save settings:
 
 ```bash
-buoy dock
+buoy dock config
 ```
 
 Creates `buoy.config.mjs`:
@@ -345,6 +258,22 @@ export default {
 };
 ```
 
+## Buoy Cloud
+
+Ship your drift detection to the cloud:
+
+```bash
+buoy ship login             # Authenticate
+buoy ship status            # View account, bot, sync status
+buoy ship github            # Set up GitHub PR bot
+buoy ship billing           # Manage subscription
+```
+
+Features:
+- **PR Bot** — Automatic comments on pull requests
+- **Dashboard** — View drift trends over time
+- **Team sync** — Share results across team members
+
 ## Supported Frameworks
 
 **Components:** React, Vue, Svelte, Angular, Lit, Stencil, Alpine, HTMX
@@ -362,10 +291,9 @@ export default {
 Buoy shows you what's happening without getting in your way. Teams adopt enforcement when they're ready:
 
 ```bash
-buoy sweep                  # Just show me
-buoy lighthouse                      # Comment on PR, don't fail
-buoy lighthouse --fail-on critical   # Fail on critical only
-buoy lighthouse --fail-on warning    # Strict mode
+buoy show drift             # Just show me
+buoy check                  # Pre-commit check (fails on drift)
+buoy check --severity critical  # Only fail on critical
 ```
 
 ## Development
@@ -381,7 +309,7 @@ pnpm build
 pnpm test
 
 # Run CLI locally
-node apps/cli/dist/bin.js sweep
+node apps/cli/dist/bin.js show all
 ```
 
 ## Packages

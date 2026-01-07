@@ -13,8 +13,8 @@ Buoy is a design drift detection tool for AI-generated code. It scans codebases 
 pnpm build
 
 # Build specific package
-pnpm --filter @buoy/cli build
-pnpm --filter @buoy/core build
+pnpm --filter @buoy-design/cli build
+pnpm --filter @buoy-design/core build
 
 # Run CLI locally (after building)
 node apps/cli/dist/bin.js <command>
@@ -75,25 +75,68 @@ External services that require API keys are in `packages/scanners/`:
 
 ## CLI Commands
 
+```
+buoy
+├── show                    # Read design system info (for AI agents)
+│   ├── components          # Components in codebase
+│   ├── tokens              # Design tokens found
+│   ├── drift               # Design system violations
+│   ├── health              # Health score
+│   ├── history             # Scan history
+│   └── all                 # Everything combined
+├── begin                   # Interactive wizard
+├── dock                    # Configure project
+│   ├── config              # Create buoy.config.mjs
+│   ├── skills              # Create AI agent skills
+│   ├── agents              # Set up AI agents
+│   ├── context             # Generate CLAUDE.md context
+│   └── hooks               # Set up git hooks
+├── check                   # Pre-commit drift check
+├── baseline                # Accept existing drift
+├── fix                     # Suggest/apply fixes
+├── plugins                 # Show available scanners
+└── ship                    # Cloud features
+    ├── login               # Authenticate
+    ├── logout              # Sign out
+    ├── status              # Account + bot + sync status
+    ├── github              # Set up GitHub PR bot
+    ├── gitlab              # Set up GitLab PR bot (soon)
+    ├── billing             # Manage subscription
+    └── plans               # Compare pricing
+```
+
+### For AI Agents (primary interface)
+
 | Command | Purpose |
 |---------|---------|
-| `buoy begin` | Interactive wizard to get started with Buoy |
-| `buoy sweep` | Visual coverage grid (works without config - zero-config mode) |
-| `buoy sweep` | Scan components and tokens (works without config) |
-| `buoy tokens` | Generate design tokens from hardcoded values (works without config) |
-| `buoy drift check` | Detailed drift signals with filtering |
-| `buoy lighthouse` | CI-optimized output with exit codes, GitHub PR integration |
-| `buoy init` | Save auto-detected config to buoy.config.mjs |
+| `buoy show components` | List components found in codebase |
+| `buoy show tokens` | List design tokens |
+| `buoy show drift` | List design system violations |
+| `buoy show health` | Health score (0-100) |
+| `buoy show all` | Everything in one call |
+| `buoy show history` | Past scan results |
+
+All `show` subcommands output JSON by default.
+
+### Setup & CI
+
+| Command | Purpose |
+|---------|---------|
+| `buoy begin` | Interactive wizard to get started |
+| `buoy dock` | Configure project (config, agents, hooks) |
+| `buoy dock config` | Create buoy.config.mjs |
+| `buoy dock agents` | Set up AI agents with design system |
+| `buoy dock hooks` | Set up git hooks |
+| `buoy check` | Fast pre-commit hook drift check |
 | `buoy baseline` | Accept existing drift, track only new issues |
-| `buoy check` | Pre-commit hook friendly drift check |
-| `buoy explain` | AI-powered investigation (experimental) |
+| `buoy fix` | Suggest and apply fixes for drift issues |
 
 ### Zero-Config Mode
 
-`buoy sweep`, `buoy sweep`, and `buoy tokens` work without any configuration:
+`buoy show` works without any configuration:
 - Auto-detects frameworks from package.json
 - Scans standard paths (src/, components/, etc.)
-- Shows hint to run `buoy init` to save config
+- Shows hint to run `buoy dock` to save config
 
 ## Configuration
 
@@ -123,7 +166,7 @@ Config lives in `buoy.config.mjs` (ESM). Schema defined in `apps/cli/src/config/
 pnpm test
 
 # Use test-fixture/ directory for manual CLI testing
-node apps/cli/dist/bin.js status
+node apps/cli/dist/bin.js show all
 ```
 
 ## Output Modes
@@ -138,10 +181,10 @@ Buoy provides comprehensive AI guardrails for design system compliance:
 
 | Command | Purpose |
 |---------|---------|
-| `buoy skill spill` | Generate AI skill with design system context |
-| `buoy context` | Generate CLAUDE.md section for design system |
-| `buoy check --format ai-feedback` | AI-optimized validation output |
-| `buoy tokens --format ai-context` | Export tokens with intent metadata |
+| `buoy show all --json` | Complete design system context |
+| `buoy show drift --json` | Current violations |
+| `buoy dock agents` | Set up AI skills and context |
+| `buoy dock context` | Generate CLAUDE.md section |
 | `buoy fix --dry-run` | Preview fix suggestions |
 
 ### MCP Server
@@ -173,7 +216,7 @@ See `docs/ai-agents/` for specialized agent definitions:
 ### AI Development Workflow
 
 1. Load design system skill before generating UI
-2. Validate with `buoy check --format ai-feedback`
-3. Fix issues with token suggestions
+2. Validate with `buoy check`
+3. Fix issues with `buoy fix`
 4. Verify with `buoy check` again
 5. Commit (pre-commit hook runs validation)

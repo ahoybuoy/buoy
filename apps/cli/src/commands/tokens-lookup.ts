@@ -261,7 +261,7 @@ export function createTokensLookupCommand(): Command {
         if (tokens.length === 0) {
           spin.stop();
           error('No tokens found');
-          info('Run `buoy sweep` to scan your codebase first');
+          info('Run `buoy show all` to scan your codebase first');
           process.exit(1);
         }
 

@@ -73,7 +73,7 @@ export function createLearnCommand(): Command {
             spin.stop();
             info(
               "No scan history found. Run " +
-                chalk.cyan("buoy sweep") +
+                chalk.cyan("buoy show all") +
                 " a few times to build up data."
             );
             store.close();
@@ -227,7 +227,7 @@ export function createLearnCommand(): Command {
           error(`Failed to analyze: ${msg}`);
 
           info(
-            "Run " + chalk.cyan("buoy sweep") + " first to build scan history."
+            "Run " + chalk.cyan("buoy show all") + " first to build scan history."
           );
           process.exit(1);
         }

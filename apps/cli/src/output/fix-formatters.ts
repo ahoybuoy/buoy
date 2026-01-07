@@ -203,7 +203,7 @@ export function formatFixResult(result: ApplyFixesResult): string {
 
   // Next steps
   if (result.applied > 0) {
-    lines.push(chalk.dim('Run `buoy sweep` to verify changes'));
+    lines.push(chalk.dim('Run `buoy show all` to verify changes'));
   }
 
   return lines.join('\n');

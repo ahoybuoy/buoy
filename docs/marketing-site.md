@@ -204,7 +204,7 @@ keywords: "design drift, design drift detection, AI code consistency, design sys
 │                                                             │
 │  [Get your first scan in 2 minutes]  [View on GitHub]       │
 │                                                             │
-│  npx @buoy/cli scan                                         │
+│  npx @buoy-design/cli show all                              │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -272,17 +272,17 @@ keywords: "design drift, design drift detection, AI code consistency, design sys
 │                                                             │
 │  Three commands. Full visibility.                           │
 │                                                             │
-│  1. Scan                                                    │
-│     $ buoy sweep                                             │
-│     → Discovers all components and tokens                   │
+│  1. Show                                                    │
+│     $ buoy show all                                          │
+│     → Shows components, tokens, and drift                   │
 │                                                             │
 │  2. Check                                                   │
-│     $ buoy drift check                                      │
-│     → Analyzes for drift signals                            │
+│     $ buoy check                                            │
+│     → Fast pre-commit drift check                           │
 │                                                             │
-│  3. Status                                                  │
-│     $ buoy sweep                                           │
-│     → Shows adoption coverage                               │
+│  3. Fix                                                     │
+│     $ buoy fix                                              │
+│     → Suggests and applies fixes                            │
 │                                                             │
 │  [See full documentation →]                                 │
 │                                                             │
@@ -294,7 +294,7 @@ keywords: "design drift, design drift detection, AI code consistency, design sys
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  $ buoy drift check                                         │
+│  $ buoy show drift                                          │
 │                                                             │
 │  ⚓ Scanning for design drift...                            │
 │                                                             │
@@ -340,7 +340,7 @@ keywords: "design drift, design drift detection, AI code consistency, design sys
 │  Free. Open source. No signup required.                     │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ npx @buoy/cli scan                                   │   │
+│  │ npx @buoy-design/cli show all                        │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  [Copy command]  [View on GitHub]  [Read the docs]          │
@@ -457,7 +457,7 @@ keywords: "hardcoded colors react, detect hardcoded values, design tokens enforc
 **Terminal Output:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  $ buoy drift check --type hardcoded-value                  │
+│  $ buoy show drift --type hardcoded-value                   │
 │                                                             │
 │  Found 47 hardcoded values                                  │
 │                                                             │
@@ -651,7 +651,7 @@ keywords: "design system adoption metrics, component usage tracking, design syst
 **Status Grid Example:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  $ buoy sweep                                              │
+│  $ buoy show health                                         │
 │                                                             │
 │  Design System Coverage                                     │
 │  ═══════════════════════════════════════                   │
@@ -760,7 +760,7 @@ keywords: "extract design tokens, create design tokens cli, hardcoded to design 
 │  You have colors and spacing scattered everywhere.          │
 │  Buoy extracts them into a token file in seconds.           │
 │                                                             │
-│  $ buoy bootstrap                                           │
+│  $ buoy fix                                                 │
 │                                                             │
 │  [Get started free]                                         │
 │                                                             │

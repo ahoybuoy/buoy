@@ -211,7 +211,7 @@ Run \`buoy check\` before committing to validate compliance.
 
 \`\`\`bash
 buoy check           # Quick validation
-buoy drift check     # Detailed drift analysis
+buoy show drift     # Detailed drift analysis
 \`\`\`
 `;
   }
@@ -225,7 +225,7 @@ buoy drift check     # Detailed drift analysis
 
 No tokens detected in this project.
 
-Run \`buoy sweep\` to detect tokens from your codebase.
+Run \`buoy show all\` to detect tokens from your codebase.
 `;
     }
 
@@ -442,7 +442,7 @@ style={{ ...tokens.textBody }}
 
 No components detected in this project.
 
-Run \`buoy sweep\` to detect components from your codebase.
+Run \`buoy show all\` to detect components from your codebase.
 `;
     }
 
@@ -875,7 +875,7 @@ Run \`buoy check\` to see current violations with fix suggestions.
       // No data yet - provide helpful guidance
       lines.push('## Getting Started');
       lines.push('No components or tokens detected yet.');
-      lines.push('Run `buoy sweep` to scan your codebase.');
+      lines.push('Run `buoy show all` to scan your codebase.');
       lines.push('');
     }
 
