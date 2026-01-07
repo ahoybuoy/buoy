@@ -25,14 +25,14 @@ No config needed. Buoy auto-detects your framework and starts working immediatel
 
 ## What It Catches
 
-| Issue | Example |
-|-------|---------|
-| **Hardcoded colors** | `#ff0000` instead of `var(--color-primary)` |
-| **Arbitrary spacing** | `padding: 17px` instead of design scale |
-| **Tailwind escape hatches** | `p-[13px]` instead of `p-4` |
-| **Naming inconsistencies** | `ButtonNew`, `ButtonV2`, `ButtonOld` |
-| **Framework sprawl** | React + Vue + jQuery in same codebase |
-| **Detached components** | Instances without main component |
+| Issue                       | Example                                     |
+| --------------------------- | ------------------------------------------- |
+| **Hardcoded colors**        | `#ff0000` instead of `var(--color-primary)` |
+| **Arbitrary spacing**       | `padding: 17px` instead of design scale     |
+| **Tailwind escape hatches** | `p-[13px]` instead of `p-4`                 |
+| **Naming inconsistencies**  | `ButtonNew`, `ButtonV2`, `ButtonOld`        |
+| **Framework sprawl**        | React + Vue + jQuery in same codebase       |
+| **Detached components**     | Instances without main component            |
 
 ## Commands
 
@@ -45,6 +45,11 @@ buoy
 │   ├── health              # Health score
 │   ├── history             # Scan history
 │   └── all                 # Everything combined
+├── drift                   # Table/markdown/HTML/agent drift output
+├── tokens                  # Generate/export design tokens (css/json/tailwind)
+├── components              # Component discovery helpers
+├── sweep (alias: scan)     # Sweep codebase for components/tokens
+├── commands                # Install/list Claude slash commands
 ├── begin                   # Interactive wizard
 ├── dock                    # Configure project
 │   ├── config              # Create buoy.config.mjs
@@ -82,6 +87,7 @@ buoy show components --json
 ```
 
 Example output:
+
 ```json
 {
   "components": [...],
@@ -103,6 +109,7 @@ buoy begin
 ```
 
 Walks you through:
+
 - **Framework detection** — Confirms what Buoy found
 - **Token discovery** — Shows your design tokens
 - **Quick scan** — Immediate drift report
@@ -116,6 +123,7 @@ buoy dock
 ```
 
 Smart walkthrough that sets up:
+
 1. `buoy.config.mjs` — Project configuration
 2. AI agent skills — For Claude Code, Copilot, etc.
 3. CLAUDE.md context — Design system documentation
@@ -184,7 +192,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
       - run: npx @buoy-design/cli check
 ```
 
@@ -208,6 +216,7 @@ buoy dock agents
 ```
 
 Creates:
+
 - **AI Skills** — Design system knowledge for Claude Code
 - **Claude Hooks** — Auto-inject context at session start
 - **CLAUDE.md** — Project-specific AI instructions
@@ -243,16 +252,16 @@ Creates `buoy.config.mjs`:
 
 ```js
 export default {
-  project: { name: 'my-app' },
+  project: { name: "my-app" },
   sources: {
     react: {
       enabled: true,
-      include: ['src/**/*.tsx'],
-      exclude: ['**/*.test.*'],
+      include: ["src/**/*.tsx"],
+      exclude: ["**/*.test.*"],
     },
     tokens: {
       enabled: true,
-      files: ['design-tokens.css'],
+      files: ["design-tokens.css"],
     },
   },
 };
@@ -270,6 +279,7 @@ buoy ship billing           # Manage subscription
 ```
 
 Features:
+
 - **PR Bot** — Automatic comments on pull requests
 - **Dashboard** — View drift trends over time
 - **Team sync** — Share results across team members
@@ -314,13 +324,13 @@ node apps/cli/dist/bin.js show all
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
-| `@buoy-design/cli` | Command-line interface |
-| `@buoy-design/core` | Domain models and drift detection engine |
-| `@buoy-design/scanners` | Framework-specific code scanners |
-| `@buoy-design/mcp` | MCP server for AI agent integration |
-| `@buoy-design/db` | SQLite persistence |
+| Package                 | Description                              |
+| ----------------------- | ---------------------------------------- |
+| `@buoy-design/cli`      | Command-line interface                   |
+| `@buoy-design/core`     | Domain models and drift detection engine |
+| `@buoy-design/scanners` | Framework-specific code scanners         |
+| `@buoy-design/mcp`      | MCP server for AI agent integration      |
+| `@buoy-design/db`       | SQLite persistence                       |
 
 ## License
 
