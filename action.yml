@@ -50,28 +50,24 @@ runs:
       shell: bash
       run: npm install -g @buoy-design/cli
 
-    - name: Run Buoy CI
+    - name: Run Buoy Check
       if: inputs.mode == 'ci'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
       run: |
-        ARGS="--github"
+        ARGS=""
 
         if [ "${{ inputs.fail-on-drift }}" = "true" ]; then
-          ARGS="$ARGS --fail-on-drift"
-        fi
-
-        if [ -n "${{ inputs.baseline }}" ]; then
-          ARGS="$ARGS --baseline ${{ inputs.baseline }}"
+          ARGS="$ARGS --fail-on critical"
         fi
 
         if [ -n "${{ inputs.config }}" ]; then
           ARGS="$ARGS --config ${{ inputs.config }}"
         fi
 
-        buoy ci $ARGS
+        buoy check $ARGS
 
     - name: Run Buoy Architect
       if: inputs.mode == 'architect'
