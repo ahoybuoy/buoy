@@ -199,7 +199,7 @@ describe("scan command", () => {
     it("creates scan command with correct options", () => {
       const cmd = createScanCommand();
 
-      expect(cmd.name()).toBe("sweep");
+      expect(cmd.name()).toBe("scan");
       expect(cmd.description()).toBe(
         "Sweep your codebase for components and tokens",
       );

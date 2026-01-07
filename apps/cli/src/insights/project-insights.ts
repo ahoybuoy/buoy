@@ -124,7 +124,7 @@ function buildSuggestions(project: DetectedProject, summary: InsightSummary): Su
 
   if (hasUnscannable && !hasScannable) {
     suggestions.push({
-      command: 'buoy audit',
+      command: 'buoy scan',
       description: 'Analyze CSS values in your codebase',
       reason: 'Component scanning not available for your framework, but CSS analysis works everywhere',
     });

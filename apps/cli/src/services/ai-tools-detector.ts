@@ -252,15 +252,15 @@ export function getIntegrationInstructions(tool: DetectedTool): string {
   switch (tool.name) {
     case 'coderabbit':
       return `To add Buoy's design system rules to CodeRabbit:
-  1. Run: buoy lighthouse --export-coderabbit
-  2. Merge the output into your .coderabbit.yaml
-  3. CodeRabbit will now enforce your design system!`;
+  1. Run: buoy dock context to generate design system context
+  2. Add the context to your .coderabbit.yaml
+  3. CodeRabbit will now see your design system!`;
 
     case 'greptile':
       return `To add Buoy's design system context to Greptile:
-  1. Run: buoy lighthouse --export-greptile
-  2. Add the output to your greptile.json customContext
-  3. Or: Greptile auto-reads CLAUDE.md - run 'buoy context' to update it`;
+  1. Run: buoy dock context to generate CLAUDE.md
+  2. Greptile auto-reads CLAUDE.md for project context
+  3. Your design system rules are now visible to Greptile!`;
 
     case 'sourcery':
       return `Sourcery focuses on code quality, not design systems.

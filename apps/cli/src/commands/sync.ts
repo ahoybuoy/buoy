@@ -113,7 +113,7 @@ export function createSyncCommand(): Command {
         return;
       }
 
-      const spin = spinner(`Syncing ${queueCount} queued scan(s)...`).start();
+      const spin = spinner(`Syncing ${queueCount} queued scan(s)...`);
 
       try {
         const result = await syncQueue(cwd);

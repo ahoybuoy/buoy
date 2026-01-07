@@ -196,7 +196,7 @@ export function createComponentsQueryCommand(): Command {
         process.exit(1);
       }
 
-      const spin = spinner('Scanning components...').start();
+      const spin = spinner('Scanning components...');
 
       try {
         // Load config

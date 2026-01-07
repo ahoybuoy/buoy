@@ -156,7 +156,7 @@ export function createLoginCommand(): Command {
       }
 
       // Validate token
-      const spin = spinner('Validating token...').start();
+      const spin = spinner('Validating token...');
 
       const validation = await validateToken(token);
 

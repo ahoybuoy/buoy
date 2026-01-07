@@ -32,7 +32,7 @@ export function createWhoamiCommand(): Command {
       const config = readCloudConfig();
 
       // Verify token is still valid
-      const spin = spinner('Verifying credentials...').start();
+      const spin = spinner('Verifying credentials...');
       const result = await getMe();
 
       if (!result.ok || !result.data) {

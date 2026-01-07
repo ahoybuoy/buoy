@@ -41,6 +41,7 @@ export function createTokensCommand(): Command {
     .option('--format <format>', 'Output format: css, json, tailwind, ai-context (auto-detected if not specified)')
     .option('--dry-run', 'Preview without writing files')
     .option('--prefix <prefix>', 'Prefix for CSS custom properties (e.g., "ds-")')
+    .option('-v, --verbose', 'Show source file locations for each token')
     .action(async (options) => {
       const spin = spinner('Analyzing codebase...');
 
@@ -158,6 +159,11 @@ export function createTokensCommand(): Command {
 
             for (const style of styles) {
               const { values } = parseCssValues(style.css);
+              // Add file path to each extracted value
+              for (const v of values) {
+                v.file = relative(cwd, filePath);
+                if (style.line) v.line = style.line;
+              }
               allValues.push(...values);
             }
           } catch {
@@ -194,11 +200,22 @@ export function createTokensCommand(): Command {
         keyValue('Values found', String(result.stats.total));
         keyValue('Tokens generated', String(result.tokens.length));
 
+        // Count orphan vs primary tokens
+        const primaryTokens = result.tokens.filter(t => !t.isOrphan);
+        const orphanTokens = result.tokens.filter(t => t.isOrphan);
+
         const { coverage } = result.stats;
         const coverageColor = coverage.percentage >= 80 ? chalk.green :
                               coverage.percentage >= 60 ? chalk.yellow :
                               chalk.red;
-        keyValue('Coverage', `${coverageColor(coverage.percentage + '%')}`);
+        
+        // Better coverage explanation
+        console.log('');
+        console.log(`  ${chalk.bold('Coverage:')} ${coverageColor(coverage.percentage + '%')} ${chalk.dim(`(${coverage.covered} of ${coverage.total} values → ${primaryTokens.length} tokens)`)}`);
+        if (orphanTokens.length > 0) {
+          console.log(chalk.dim(`    • ${coverage.covered} values consolidated into ${primaryTokens.length} design tokens`));
+          console.log(chalk.dim(`    • ${coverage.total - coverage.covered} orphan values (used only 1-2 times)`));
+        }
         newline();
 
         // Show tokens by category
@@ -210,10 +227,39 @@ export function createTokensCommand(): Command {
           byCategory[token.category]!.push(token);
         }
 
-        for (const [category, tokens] of Object.entries(byCategory)) {
-          console.log(`  ${chalk.bold(category)}: ${tokens.length} tokens`);
+        for (const [category, catTokens] of Object.entries(byCategory)) {
+          const nonOrphan = catTokens.filter(t => !t.isOrphan).length;
+          console.log(`  ${chalk.bold(category)}: ${nonOrphan} tokens`);
         }
         newline();
+
+        // Verbose mode - show source locations
+        if (options.verbose) {
+          header('Token Sources');
+          newline();
+          
+          for (const [category, catTokens] of Object.entries(byCategory)) {
+            console.log(chalk.bold(`  ${category}:`));
+            for (const token of catTokens.filter(t => !t.isOrphan).slice(0, 5)) {
+              console.log(`    ${chalk.cyan('--' + token.name)}: ${token.value}`);
+              const locations = token.fileLocations || [];
+              const uniqueFiles = [...new Set(locations.map(l => l.file))];
+              for (const file of uniqueFiles.slice(0, 3)) {
+                const fileLocs = locations.filter(l => l.file === file);
+                const lineInfo = fileLocs[0]?.line ? `:${fileLocs[0].line}` : '';
+                console.log(chalk.dim(`      ↳ ${file}${lineInfo} (${fileLocs.length}x)`));
+              }
+              if (uniqueFiles.length > 3) {
+                console.log(chalk.dim(`      ↳ ...and ${uniqueFiles.length - 3} more files`));
+              }
+            }
+            const remaining = catTokens.filter(t => !t.isOrphan).length - 5;
+            if (remaining > 0) {
+              console.log(chalk.dim(`    ...and ${remaining} more ${category} tokens`));
+            }
+            console.log('');
+          }
+        }
 
         // Write or preview
         if (options.dryRun) {

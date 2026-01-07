@@ -10,6 +10,12 @@ import { hexToRgb, normalizeHexColor, spacingToPx } from '../extraction/css-pars
 const MAX_SPACING_TOKENS = 10;
 const MAX_SIZING_TOKENS = 12;
 
+export interface GeneratedTokenSource {
+  file: string;
+  line?: number;
+  value: string; // The original value (e.g., "#333")
+}
+
 export interface GeneratedToken {
   name: string;
   value: string;
@@ -17,6 +23,7 @@ export interface GeneratedToken {
   context: string; // The purpose: 'spacing', 'sizing', 'position', 'breakpoint', etc.
   occurrences: number;
   sources: string[]; // Original values that map to this token
+  fileLocations?: GeneratedTokenSource[]; // Where in code these values were found
   isOrphan?: boolean; // True if this token needs user adoption into the system
 }
 
@@ -84,6 +91,22 @@ export function generateTokens(
     coverage: { total: 0, covered: 0, percentage: 0 },
     byCategory: {},
   };
+
+  // Build a map of normalized value -> file locations for later lookup
+  const valueLocations = new Map<string, GeneratedTokenSource[]>();
+  for (const v of values) {
+    const normalizedValue = v.category === 'color' ? normalizeColor(v.value) : v.value;
+    if (!valueLocations.has(normalizedValue)) {
+      valueLocations.set(normalizedValue, []);
+    }
+    if (v.file) {
+      valueLocations.get(normalizedValue)!.push({
+        file: v.file,
+        line: v.line,
+        value: v.value,
+      });
+    }
+  }
 
   // Group values by category
   const byCategory: Record<string, ExtractedValue[]> = {};
@@ -186,6 +209,19 @@ export function generateTokens(
     covered: totalCovered,
     percentage: values.length > 0 ? Math.round((totalCovered / values.length) * 100) : 0,
   };
+
+  // Enrich tokens with file locations
+  for (const token of tokens) {
+    const locations: GeneratedTokenSource[] = [];
+    for (const sourceValue of token.sources) {
+      const normalized = token.category === 'color' ? normalizeColor(sourceValue) : sourceValue;
+      const valueLocs = valueLocations.get(normalized) || valueLocations.get(sourceValue);
+      if (valueLocs) {
+        locations.push(...valueLocs);
+      }
+    }
+    token.fileLocations = locations;
+  }
 
   // Generate CSS output
   const css = generateCss(tokens, prefix);

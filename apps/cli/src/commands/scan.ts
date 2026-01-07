@@ -32,9 +32,8 @@ import { createStore, getProjectName, wouldUseCloud, type ScanStore } from "../s
 import { ScanCache } from "@buoy-design/scanners";
 
 export function createScanCommand(): Command {
-  const cmd = new Command("sweep")
-    .alias("scan")
-    .description("Sweep your codebase for components and tokens")
+  const cmd = new Command("scan")
+    .description("Scan your codebase for components and tokens")
     .option(
       "-s, --source <sources...>",
       "Specific sources to scan (react, vue, svelte, angular, tokens, etc.)",
@@ -285,7 +284,7 @@ export function createScanCommand(): Command {
         // Cloud sync if linked
         const cloudProjectId = (config as BuoyConfig & { cloudProjectId?: string }).cloudProjectId;
         if (cloudProjectId && isLoggedIn()) {
-          const syncSpin = spinner("Syncing to Buoy Cloud...").start();
+          const syncSpin = spinner("Syncing to Buoy Cloud...");
 
           try {
             const cwd = process.cwd();

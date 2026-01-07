@@ -58,6 +58,7 @@ import {
   getPluginInstallCommand,
 } from "../detect/frameworks.js";
 import type { BuoyConfig } from "../config/schema.js";
+import { showMenu } from "../wizard/menu.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -125,11 +126,12 @@ export function createDockCommand(): Command {
       await runContextDock(options);
     });
 
-  // dock hooks - Set up git hooks
+  // dock hooks - Set up hooks (interactive by default)
   cmd
     .command("hooks")
-    .description("Set up git hooks for drift checking")
-    .option("--claude", "Also set up Claude Code hooks")
+    .description("Set up hooks for drift checking")
+    .option("--commit", "Set up git pre-commit hooks")
+    .option("--claude", "Set up Claude Code hooks (design system in every session)")
     .action(async (options) => {
       await runHooksDock(options);
     });
@@ -633,37 +635,79 @@ async function runContextDock(options: {
 }
 
 /**
- * Hooks dock - sets up git hooks
+ * Hooks dock - sets up hooks (interactive by default)
  */
-async function runHooksDock(options: { claude?: boolean }) {
+async function runHooksDock(options: { commit?: boolean; claude?: boolean }) {
   const cwd = process.cwd();
   console.log("");
 
-  const hookSystem = detectHookSystem(cwd);
+  // If no flags provided, ask interactively
+  let setupCommit = options.commit;
+  let setupClaude = options.claude;
 
-  if (hookSystem) {
-    info(`Detected: ${hookSystem}`);
-    const hookResult = setupHooks(cwd);
-    if (hookResult.success) {
-      success(hookResult.message);
-    } else {
-      warning(hookResult.message);
+  if (!setupCommit && !setupClaude) {
+    const choice = await showMenu<"commit" | "claude" | "both">(
+      "Which hooks would you like to set up?",
+      [
+        {
+          label: "🔗 Claude Code hooks",
+          value: "claude",
+          description: "Inject design system context into every Claude session",
+        },
+        {
+          label: "📝 Git pre-commit hooks",
+          value: "commit",
+          description: "Check for drift before each commit",
+        },
+        {
+          label: "✨ Both",
+          value: "both",
+          description: "Set up Claude hooks and git pre-commit hooks",
+        },
+      ]
+    );
+
+    if (choice === "commit" || choice === "both") {
+      setupCommit = true;
     }
-  } else {
-    const standaloneResult = generateStandaloneHook(cwd);
-    if (standaloneResult.success) {
-      success(standaloneResult.message);
-      info("Copy to .git/hooks/pre-commit to activate");
-    } else {
-      warning(standaloneResult.message);
+    if (choice === "claude" || choice === "both") {
+      setupClaude = true;
     }
   }
 
-  if (options.claude) {
-    console.log("");
+  // Set up git pre-commit hooks
+  if (setupCommit) {
+    const hookSystem = detectHookSystem(cwd);
+
+    if (hookSystem) {
+      info(`Detected: ${hookSystem}`);
+      const hookResult = setupHooks(cwd);
+      if (hookResult.success) {
+        success(hookResult.message);
+      } else {
+        warning(hookResult.message);
+      }
+    } else {
+      const standaloneResult = generateStandaloneHook(cwd);
+      if (standaloneResult.success) {
+        success(standaloneResult.message);
+        info("Copy to .git/hooks/pre-commit to activate");
+      } else {
+        warning(standaloneResult.message);
+      }
+    }
+  }
+
+  // Set up Claude Code hooks
+  if (setupClaude) {
+    if (setupCommit) console.log(""); // Add spacing if both
+
     const { config, projectName } = await loadOrBuildConfig(cwd);
     const orchestrator = new ScanOrchestrator(config, cwd);
+    
+    const spin = spinner("Scanning design system for Claude context...");
     const scanResult = await orchestrator.scan();
+    spin.stop();
 
     const { SemanticDiffEngine } = await import("@buoy-design/core/analysis");
     const engine = new SemanticDiffEngine();
@@ -684,6 +728,7 @@ async function runHooksDock(options: { claude?: boolean }) {
     const claudeResult = setupClaudeHooks(cwd);
     if (claudeResult.success) {
       success("Created Claude hooks");
+      info("Your design system will be loaded at the start of each Claude session");
     } else {
       warning(`Claude hooks failed: ${claudeResult.message}`);
     }

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import chalk from "chalk";
 import { loadConfig, getConfigPath } from "../config/loader.js";
 import { buildAutoConfig } from "../config/auto-detect.js";
 import {
@@ -141,7 +142,7 @@ export function createShowCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (options, command) => {
       const parentOpts = command.parent?.opts() || {};
-      const json = options.json || parentOpts.json !== false;
+      const json = options.json ?? parentOpts.json;
       if (json) setJsonMode(true);
 
       const spin = spinner("Auditing codebase...");
@@ -151,23 +152,72 @@ export function createShowCommand(): Command {
         spin.stop();
 
         if (extractedValues.length === 0) {
-          console.log(JSON.stringify({
-            score: 100,
-            message: "No hardcoded design values found",
-            categories: {},
-            worstFiles: [],
-          }, null, 2));
+          if (json) {
+            console.log(JSON.stringify({
+              score: 100,
+              message: "No hardcoded design values found",
+              categories: {},
+              worstFiles: [],
+            }, null, 2));
+          } else {
+            console.log('');
+            console.log(chalk.green.bold('  ✓ Health Score: 100/100'));
+            console.log('');
+            console.log(chalk.dim('  No hardcoded design values found.'));
+            console.log(chalk.dim('  Your codebase is using design tokens correctly!'));
+            console.log('');
+          }
           return;
         }
 
         const report = generateAuditReport(extractedValues);
 
-        console.log(JSON.stringify({
-          score: report.score,
-          categories: report.categories,
-          worstFiles: report.worstFiles,
-          totals: report.totals,
-        }, null, 2));
+        if (json) {
+          console.log(JSON.stringify({
+            score: report.score,
+            categories: report.categories,
+            worstFiles: report.worstFiles,
+            totals: report.totals,
+          }, null, 2));
+        } else {
+          // Human-readable output
+          console.log('');
+          const scoreColor = report.score >= 80 ? chalk.green : 
+                            report.score >= 50 ? chalk.yellow : 
+                            chalk.red;
+          console.log(`  ${chalk.bold('Health Score:')} ${scoreColor.bold(report.score + '/100')}`);
+          console.log('');
+          
+          // Categories
+          console.log(chalk.bold('  By Category:'));
+          for (const [category, data] of Object.entries(report.categories)) {
+            const catData = data as { uniqueCount: number; totalUsages: number };
+            console.log(`    ${category}: ${catData.uniqueCount} unique values, ${catData.totalUsages} usages`);
+          }
+          console.log('');
+          
+          // Worst files
+          if (report.worstFiles.length > 0) {
+            console.log(chalk.bold('  Files with most hardcoded values:'));
+            for (const file of report.worstFiles.slice(0, 5)) {
+              console.log(`    ${chalk.dim('•')} ${file.file}: ${file.issueCount} values`);
+            }
+            if (report.worstFiles.length > 5) {
+              console.log(chalk.dim(`    ...and ${report.worstFiles.length - 5} more files`));
+            }
+            console.log('');
+          }
+          
+          // Totals
+          console.log(chalk.dim(`  Total: ${report.totals.uniqueValues} unique values across ${report.totals.filesAffected} files`));
+          console.log('');
+          
+          // Suggestion
+          if (report.score < 80) {
+            console.log(chalk.dim('  Run `buoy tokens` to generate tokens from these values'));
+            console.log('');
+          }
+        }
       } catch (err) {
         spin.stop();
         error(err instanceof Error ? err.message : String(err));

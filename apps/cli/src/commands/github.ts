@@ -56,7 +56,7 @@ function createStatusCommand(): Command {
         process.exit(1);
       }
 
-      const spin = spinner('Checking GitHub integration...').start();
+      const spin = spinner('Checking GitHub integration...');
 
       try {
         const result = await listGitHubInstallations();
@@ -170,7 +170,7 @@ function createDisconnectCommand(): Command {
         process.exit(1);
       }
 
-      const spin = spinner('Getting GitHub installations...').start();
+      const spin = spinner('Getting GitHub installations...');
 
       try {
         const result = await listGitHubInstallations();

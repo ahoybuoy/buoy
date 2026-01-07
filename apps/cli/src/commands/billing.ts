@@ -57,7 +57,7 @@ async function showBillingStatus(options: { json?: boolean }): Promise<void> {
     process.exit(1);
   }
 
-  const spin = spinner('Loading billing info...').start();
+  const spin = spinner('Loading billing info...');
 
   try {
     const result = await getBillingStatus();
@@ -168,7 +168,7 @@ function createUpgradeCommand(): Command {
         process.exit(1);
       }
 
-      const spin = spinner('Creating checkout session...').start();
+      const spin = spinner('Creating checkout session...');
 
       try {
         // Check current plan first
@@ -229,7 +229,7 @@ function createPortalCommand(): Command {
         process.exit(1);
       }
 
-      const spin = spinner('Opening billing portal...').start();
+      const spin = spinner('Opening billing portal...');
 
       try {
         const result = await createPortalSession();
@@ -284,7 +284,7 @@ function createInvoicesCommand(): Command {
         process.exit(1);
       }
 
-      const spin = spinner('Loading invoices...').start();
+      const spin = spinner('Loading invoices...');
 
       try {
         const result = await getInvoices();

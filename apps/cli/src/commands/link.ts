@@ -213,7 +213,7 @@ export function createLinkCommand(): Command {
         cloudProject = { id: options.projectId } as Project;
       } else if (options.create) {
         // Create new cloud project
-        const spin = spinner('Creating cloud project...').start();
+        const spin = spinner('Creating cloud project...');
 
         const result = await createProject({
           name: localName,
@@ -230,7 +230,7 @@ export function createLinkCommand(): Command {
         cloudProject = result.data;
       } else {
         // Interactive: list existing projects or create new
-        const spin = spinner('Fetching cloud projects...').start();
+        const spin = spinner('Fetching cloud projects...');
         const result = await listProjects();
 
         if (!result.ok) {
@@ -266,7 +266,7 @@ export function createLinkCommand(): Command {
             const name = await prompt(`Project name [${localName}]: `);
             const projectName = name || localName;
 
-            const createSpin = spinner('Creating cloud project...').start();
+            const createSpin = spinner('Creating cloud project...');
             const createResult = await createProject({
               name: projectName,
               repoUrl: repoUrl || undefined,
@@ -288,7 +288,7 @@ export function createLinkCommand(): Command {
           }
         } else {
           // No projects, create new
-          const spin2 = spinner('Creating cloud project...').start();
+          const spin2 = spinner('Creating cloud project...');
           const result2 = await createProject({
             name: localName,
             repoUrl: repoUrl || undefined,

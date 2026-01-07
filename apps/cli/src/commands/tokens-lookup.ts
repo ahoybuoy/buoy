@@ -239,7 +239,7 @@ export function createTokensLookupCommand(): Command {
         process.exit(1);
       }
 
-      const spin = spinner('Loading tokens...').start();
+      const spin = spinner('Loading tokens...');
 
       try {
         // Load config

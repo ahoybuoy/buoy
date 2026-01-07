@@ -30,8 +30,8 @@ import {
 } from '../hooks/index.js';
 
 type MenuAction =
-  | 'anchor'
-  | 'onboard'
+  | 'scan'
+  | 'dock-agents'
   | 'review-issues'
   | 'check-drift'
   | 'setup-hooks'
@@ -576,35 +576,32 @@ async function menuLoop(
     const action = await showMainMenu(state);
 
     switch (action) {
-      case 'anchor': {
-        // Run anchor to establish design tokens
+      case 'scan': {
+        // Run scan to discover components and tokens
         console.log('');
-        console.log(chalk.cyan('  Running: buoy anchor'));
-        console.log(chalk.dim('  This will analyze your code and create design tokens.'));
+        console.log(chalk.cyan('  Scanning your codebase...'));
         console.log('');
-        const { spawn } = await import('child_process');
-        await new Promise<void>((resolve) => {
-          const child = spawn('npx', ['@buoy-design/cli', 'anchor'], {
-            cwd,
-            stdio: 'inherit',
-          });
-          child.on('close', () => {
-            // Re-detect tokens after anchor completes
-            detectTokens(cwd).then(result => {
-              state.hasTokens = result.hasTokens;
-              state.tokenFiles = result.files;
-              resolve();
-            });
-          });
-        });
+        
+        try {
+          const scanResult = await runScan(cwd);
+          state.hasScanned = true;
+          state.components = scanResult.components;
+          state.drifts = scanResult.drifts;
+          config = scanResult.config;
+          console.log('');
+          console.log(chalk.green('  ✓ Scan complete!'));
+          console.log('');
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          errorLog(`Scan failed: ${message}`);
+        }
         break;
       }
 
-      case 'onboard': {
-        // Run onboard to set up AI guardrails (this will be the new command)
-        // For now, use the existing skill + context commands
+      case 'dock-agents': {
+        // Run dock agents to set up AI integration
         console.log('');
-        console.log(chalk.cyan('  Setting up AI guardrails...'));
+        console.log(chalk.cyan('  Setting up AI integration...'));
         console.log('');
 
         // Load config if needed
@@ -687,11 +684,11 @@ async function showMainMenu(state: WizardState): Promise<MenuAction> {
 
   // Smart recommendations based on state
   if (!state.hasTokens) {
-    // No tokens - primary action is anchor
+    // No tokens - primary action is scan
     options.push({
-      label: '⚓ Create design tokens',
-      value: 'anchor',
-      description: 'Analyze your code and establish a token system',
+      label: '🔍 Scan your codebase',
+      value: 'scan',
+      description: 'Find components and design values in your code',
     });
     options.push({
       label: 'Check for drift anyway',
@@ -699,10 +696,10 @@ async function showMainMenu(state: WizardState): Promise<MenuAction> {
       description: 'Find hardcoded values without a token file',
     });
   } else if (!state.hasAISetup) {
-    // Has tokens but no AI setup - primary action is onboard
+    // Has tokens but no AI setup - primary action is dock agents
     options.push({
-      label: '🛟 Onboard AI to your design system',
-      value: 'onboard',
+      label: '🛟 Set up AI integration',
+      value: 'dock-agents',
       description: 'Help AI tools follow your tokens and patterns',
     });
     options.push({
@@ -901,22 +898,22 @@ Analyzing your project...
     console.log('');
 
     if (!tokenResult.hasTokens) {
-      // No tokens - recommend anchor
+      // No tokens - recommend scanning to find values
       console.log('This project has no design tokens.');
       console.log('');
-      console.log('PRIMARY: Create design tokens');
-      console.log('  → Run: buoy anchor');
-      console.log('  This analyzes your code and creates a token file.');
+      console.log('PRIMARY: Scan your codebase');
+      console.log('  → Run: buoy scan');
+      console.log('  This finds components and design values in your code.');
       console.log('');
       console.log('ALTERNATIVE: Check for drift without tokens');
       console.log('  → Run: buoy drift');
       console.log('  Find hardcoded values that should be tokens.');
     } else if (!hasAISetup) {
-      // Has tokens but no AI setup - recommend onboard
+      // Has tokens but no AI setup - recommend dock agents
       console.log('This project has tokens but AI tools aren\'t configured to use them.');
       console.log('');
-      console.log('PRIMARY: Onboard AI to your design system');
-      console.log('  → Run: buoy onboard');
+      console.log('PRIMARY: Set up AI integration');
+      console.log('  → Run: buoy dock agents');
       console.log('  This creates skill files and updates CLAUDE.md so AI follows your tokens.');
       console.log('');
       console.log('ALTERNATIVE: Check for drift');
@@ -929,13 +926,12 @@ Analyzing your project...
       console.log('PRIMARY: Check for drift');
       console.log('  → Run: buoy drift');
       console.log('  Find code that diverges from your design system.');
-
-      if (!hasCISetup) {
-        console.log('');
-        console.log('ALSO CONSIDER: Add CI/CD integration');
-        console.log('  → Run: buoy lighthouse');
-        console.log('  Block PRs that introduce drift.');
-      }
+      console.log('');
+      console.log('OTHER OPTIONS:');
+      console.log('  • buoy dock hooks             Interactive setup for Claude or git hooks');
+      console.log('  • buoy dock hooks --claude    Claude hooks (design system in every session)');
+      console.log('  • buoy dock hooks --commit    Git pre-commit hooks (catch drift before commit)');
+      console.log('  • buoy ship github            GitHub PR bot (comments on drift)');
     }
 
     console.log('');

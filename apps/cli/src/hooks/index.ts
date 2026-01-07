@@ -374,7 +374,7 @@ export interface ClaudeHooksConfig {
  */
 export function generateClaudeHooksConfig(): ClaudeHooksConfig {
   // Cross-platform command that works on Windows, macOS, and Linux
-  const crossPlatformRead = `node -e "const fs=require('fs');const p='.claude/buoy-context.md';fs.existsSync(p)?console.log(fs.readFileSync(p,'utf8')):console.log('🛟 Design system active. Run buoy onboard to set up context.')"`;
+  const crossPlatformRead = `node -e "const fs=require('fs');const p='.claude/buoy-context.md';fs.existsSync(p)?console.log(fs.readFileSync(p,'utf8')):console.log('🛟 Design system active. Run buoy dock agents to set up context.')"`;
 
   // Real-time check command - runs after file edits, silent when clean
   // Uses --format ai-feedback for structured output the AI can act on

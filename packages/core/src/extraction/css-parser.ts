@@ -26,6 +26,7 @@ export interface ExtractedValue {
   context: ValueContext;
   line?: number;
   column?: number;
+  file?: string; // Source file path
 }
 
 export interface ParseResult {

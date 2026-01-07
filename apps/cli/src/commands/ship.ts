@@ -82,7 +82,7 @@ function createStatusCommand(): Command {
         return;
       }
 
-      const spin = spinner('Checking cloud status...').start();
+      const spin = spinner('Checking cloud status...');
 
       try {
         // Fetch user info
@@ -245,7 +245,7 @@ function createGitHubCommand(): Command {
       }
 
       // Show current status first
-      const spin = spinner('Checking GitHub status...').start();
+      const spin = spinner('Checking GitHub status...');
       const result = await listGitHubInstallations();
       spin.stop();
 
@@ -306,7 +306,7 @@ function createGitHubCommand(): Command {
 }
 
 async function handleGitHubDisconnect(account: string | true, json: boolean): Promise<void> {
-  const spin = spinner('Getting installations...').start();
+  const spin = spinner('Getting installations...');
 
   const result = await listGitHubInstallations();
   if (!result.ok) {
