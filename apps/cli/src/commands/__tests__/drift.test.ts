@@ -67,6 +67,7 @@ vi.mock("../../output/reporters.js", () => ({
 vi.mock("../../output/formatters.js", () => ({
   formatDriftTable: vi.fn(() => "Drift Table"),
   formatDriftList: vi.fn(() => "Drift List"),
+  formatDriftTree: vi.fn(() => "Drift Tree"),
   formatJson: vi.fn((data) => JSON.stringify(data, null, 2)),
   formatMarkdown: vi.fn(() => "# Drift Report\n\nMarkdown content"),
 }));
@@ -190,7 +191,7 @@ describe("drift command", () => {
       expect(optionNames).toContain("type");
       expect(optionNames).toContain("json");
       expect(optionNames).toContain("markdown");
-      expect(optionNames).toContain("compact");
+      expect(optionNames).toContain("table");
       expect(optionNames).toContain("verbose");
     });
   });
@@ -237,12 +238,13 @@ describe("drift command", () => {
       expect(mockLoadConfig).toHaveBeenCalled();
       expect(scanners.ReactComponentScanner).toHaveBeenCalled();
       expect(analysis.SemanticDiffEngine).toHaveBeenCalled();
-      expect(reporters.header).toHaveBeenCalledWith("Drift Analysis");
+      // Tree format is default, doesn't show header
+      expect(formatters.formatDriftTree).toHaveBeenCalled();
     });
 
-    it("displays summary statistics", async () => {
+    it("displays summary statistics in verbose mode", async () => {
       const program = createTestProgram();
-      await program.parseAsync(["node", "test", "drift", "check"]);
+      await program.parseAsync(["node", "test", "drift", "check", "--verbose"]);
 
       expect(reporters.keyValue).toHaveBeenCalledWith(
         "Components scanned",
@@ -257,13 +259,13 @@ describe("drift command", () => {
       const program = createTestProgram();
       await program.parseAsync(["node", "test", "drift", "check"]);
 
-      expect(formatters.formatDriftList).toHaveBeenCalled();
+      expect(formatters.formatDriftTree).toHaveBeenCalled();
       expect(formatters.formatDriftTable).not.toHaveBeenCalled();
+      expect(formatters.formatDriftList).not.toHaveBeenCalled();
     });
 
-    it("shows success message when no drift detected", async () => {
+    it("shows tree format when no drift detected", async () => {
       // Override the config to include a token reference source
-      // (success message only shows when a reference source is configured)
       mockLoadConfig.mockResolvedValue({
         config: createMockConfig({
           sources: {
@@ -283,11 +285,10 @@ describe("drift command", () => {
       ).mockImplementation(() => mockEngine);
 
       const program = createTestProgram();
-      await program.parseAsync(["node", "test", "drift", "check"]);
+      await program.parseAsync(["node", "test", "drift"]);
 
-      expect(reporters.success).toHaveBeenCalledWith(
-        "No drift detected. Your design system is aligned!",
-      );
+      // Tree format is used by default (shows "Found 0 issues")
+      expect(formatters.formatDriftTree).toHaveBeenCalled();
     });
 
     it("shows warning when critical issues exist", async () => {
@@ -304,9 +305,8 @@ describe("drift command", () => {
       const program = createTestProgram();
       await program.parseAsync(["node", "test", "drift", "check"]);
 
-      expect(reporters.warning).toHaveBeenCalledWith(
-        "1 critical issues require attention.",
-      );
+      // Tree format shows critical issues in the tree output
+      expect(formatters.formatDriftTree).toHaveBeenCalled();
     });
   });
 
@@ -377,11 +377,12 @@ describe("drift command", () => {
       expect(formatters.formatMarkdown).toHaveBeenCalled();
     });
 
-    it("uses compact table format when --compact flag is provided", async () => {
+    it("uses table format when --table flag is provided", async () => {
       const program = createTestProgram();
-      await program.parseAsync(["node", "test", "drift", "check", "--compact"]);
+      await program.parseAsync(["node", "test", "drift", "check", "--table"]);
 
       expect(formatters.formatDriftTable).toHaveBeenCalled();
+      expect(formatters.formatDriftTree).not.toHaveBeenCalled();
       expect(formatters.formatDriftList).not.toHaveBeenCalled();
     });
 
@@ -451,6 +452,7 @@ describe("drift command", () => {
         "check",
         "--severity",
         "critical",
+        "--verbose",
       ]);
 
       // Only critical should be counted
@@ -483,6 +485,7 @@ describe("drift command", () => {
         "check",
         "--severity",
         "warning",
+        "--verbose",
       ]);
 
       // Critical and warning should be counted
@@ -515,6 +518,7 @@ describe("drift command", () => {
         "check",
         "--severity",
         "info",
+        "--verbose",
       ]);
 
       expect(reporters.keyValue).toHaveBeenCalledWith("Critical", "1");
@@ -570,6 +574,7 @@ describe("drift command", () => {
         "check",
         "--type",
         "hardcoded-value",
+        "--verbose",
       ]);
 
       // Only hardcoded-value drifts should remain (2 warnings)
@@ -602,6 +607,7 @@ describe("drift command", () => {
         "hardcoded-value",
         "--severity",
         "warning",
+        "--verbose",
       ]);
 
       // Only critical and warning hardcoded-value drifts
@@ -653,7 +659,7 @@ describe("drift command", () => {
       ).mockImplementation(() => mockEngine);
 
       const program = createTestProgram();
-      await program.parseAsync(["node", "test", "drift", "check"]);
+      await program.parseAsync(["node", "test", "drift", "check", "--verbose"]);
 
       // LegacyButton hardcoded-value should be ignored, but LegacyCard naming issue should remain
       expect(reporters.keyValue).toHaveBeenCalledWith("Warning", "2");
@@ -702,7 +708,7 @@ describe("drift command", () => {
       ).mockImplementation(() => mockEngine);
 
       const program = createTestProgram();
-      await program.parseAsync(["node", "test", "drift", "check"]);
+      await program.parseAsync(["node", "test", "drift", "check", "--verbose"]);
 
       // All hardcoded-value drifts should be ignored
       expect(reporters.keyValue).toHaveBeenCalledWith("Warning", "0");
@@ -991,7 +997,7 @@ describe("drift command", () => {
       ).mockImplementation(() => mockEngine);
 
       const program = createTestProgram();
-      await program.parseAsync(["node", "test", "drift", "check"]);
+      await program.parseAsync(["node", "test", "drift", "check", "--verbose"]);
 
       expect(reporters.keyValue).toHaveBeenCalledWith("Critical", "2");
       expect(reporters.keyValue).toHaveBeenCalledWith("Warning", "3");

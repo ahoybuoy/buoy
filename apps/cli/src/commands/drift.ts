@@ -7,7 +7,6 @@ import {
   success,
   error,
   info,
-  warning,
   header,
   keyValue,
   newline,
@@ -16,6 +15,7 @@ import {
 import {
   formatDriftTable,
   formatDriftList,
+  formatDriftTree,
   formatJson,
   formatMarkdown,
   formatHtml,
@@ -39,8 +39,8 @@ export function createDriftCommand(): Command {
     .option("--markdown", "Output as Markdown")
     .option("--html [file]", "Output as HTML report (optionally specify filename)")
     .option("--agent", "Output optimized for AI agents (concise, actionable)")
-    .option("--compact", "Compact table output (less detail)")
-    .option("-v, --verbose", "Verbose output")
+    .option("--table", "Show as table instead of tree view")
+    .option("-v, --verbose", "Verbose output with full details")
     .option("--include-baseline", "Include baselined drifts (show all)")
     .option("--no-cache", "Disable incremental scanning cache")
     .option("--clear-cache", "Clear cache before scanning")
@@ -49,7 +49,7 @@ export function createDriftCommand(): Command {
       if (options.json || options.agent) {
         setJsonMode(true);
       }
-      const spin = spinner("Loading configuration...");
+      const spin = spinner("🛟 Scanning for design drift...");
 
       try {
         const { config } = await loadConfig();
@@ -113,40 +113,45 @@ export function createDriftCommand(): Command {
           return;
         }
 
-        header("Drift Analysis");
-        newline();
+        // Get unique file count for summary
+        const uniqueFiles = new Set(
+          drifts.map(d => d.source.location?.split(':')[0] || d.source.entityName)
+        );
 
-        const summary = getSummary(drifts);
-        keyValue("Components scanned", String(sourceComponents.length));
-        keyValue("Critical", String(summary.critical));
-        keyValue("Warning", String(summary.warning));
-        keyValue("Info", String(summary.info));
-        if (baselinedCount > 0) {
-          keyValue("Baselined (hidden)", String(baselinedCount));
-        }
-        newline();
-
-        // Use compact table or detailed list
-        if (options.compact) {
+        // Choose output format based on flags
+        if (options.verbose) {
+          // Verbose: full details with actions
+          header("Drift Analysis");
+          newline();
+          const summary = getSummary(drifts);
+          keyValue("Components scanned", String(sourceComponents.length));
+          keyValue("Critical", String(summary.critical));
+          keyValue("Warning", String(summary.warning));
+          keyValue("Info", String(summary.info));
+          if (baselinedCount > 0) {
+            keyValue("Baselined (hidden)", String(baselinedCount));
+          }
+          newline();
+          console.log(formatDriftList(drifts));
+        } else if (options.table) {
+          // Table: compact tabular format
+          header("Drift Analysis");
+          newline();
           console.log(formatDriftTable(drifts));
         } else {
-          console.log(formatDriftList(drifts));
+          // Default: tree view like buoy.design homepage
+          newline();
+          console.log(formatDriftTree(drifts, uniqueFiles.size));
         }
-        newline();
 
-        if (summary.critical > 0) {
-          warning(`${summary.critical} critical issues require attention.`);
-        } else if (drifts.length === 0) {
-          // Check if we scanned any components
+        // Handle empty results
+        if (drifts.length === 0) {
           if (sourceComponents.length === 0) {
-            info("No components found to analyze.");
             newline();
-            info("The drift command analyzes component props.");
+            info("No components found to analyze.");
             info("To find hardcoded inline styles:");
             info("  " + chalk.cyan("buoy show health") + "  # See all hardcoded values");
-            info("  " + chalk.cyan("buoy tokens") + "       # Extract values as tokens");
           } else {
-            // Check if we have any reference sources to compare against
             const hasTokens = config.sources.tokens?.enabled &&
               (config.sources.tokens.files?.length ?? 0) > 0;
             const hasFigma = config.sources.figma?.enabled;
@@ -155,28 +160,11 @@ export function createDriftCommand(): Command {
               existsSync('design-tokens.json');
 
             if (!hasTokens && !hasFigma && !hasStorybook && !hasDesignTokensFile) {
-              info("No drift detected, but no reference source is configured.");
               newline();
-              info("To detect hardcoded values vs design tokens:");
-              info("  1. Run " + chalk.cyan("buoy tokens") + " to extract design tokens");
-              info("  2. Configure tokens in buoy.config.mjs:");
-              console.log(chalk.gray(`
-       sources: {
-         tokens: {
-           enabled: true,
-           files: ['design-tokens.css'],
-         },
-       },
-  `));
-              info("Or connect a design source: Figma, Storybook, or token files");
-            } else {
-              success("No drift detected. Your design system is aligned!");
+              info("No reference source configured.");
+              info("Run " + chalk.cyan("buoy tokens") + " to extract design tokens.");
             }
           }
-        } else {
-          info(
-            `Found ${drifts.length} drift signals. Run with --compact for summary view.`,
-          );
         }
 
         // Show upgrade hint when drifts found

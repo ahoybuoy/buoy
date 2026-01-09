@@ -663,6 +663,138 @@ export function formatHtml(drifts: DriftSignal[], options?: { designerFriendly?:
 </html>`;
 }
 
+// Format like the buoy.design homepage - compact tree view
+export function formatDriftTree(drifts: DriftSignal[], fileCount: number = 0): string {
+  if (drifts.length === 0) {
+    return chalk.green('✓ No drift detected. Your design system is aligned.');
+  }
+
+  const lines: string[] = [];
+
+  // Summary line
+  const fileText = fileCount > 0 ? ` in ${fileCount} files` : '';
+  lines.push(chalk.white.bold(`Found ${drifts.length} issues${fileText}`));
+  lines.push('');
+
+  // Group by drift type for cleaner display
+  const grouped = new Map<string, DriftSignal[]>();
+  for (const drift of drifts) {
+    const key = drift.type;
+    if (!grouped.has(key)) {
+      grouped.set(key, []);
+    }
+    grouped.get(key)!.push(drift);
+  }
+
+  // Category display names and colors
+  const categoryConfig: Record<string, { label: string; color: ChalkInstance }> = {
+    'hardcoded-value': { label: 'HARDCODED VALUES', color: chalk.yellow },
+    'naming-inconsistency': { label: 'NAMING', color: chalk.yellow },
+    'semantic-mismatch': { label: 'TYPE MISMATCHES', color: chalk.yellow },
+    'deprecated-pattern': { label: 'DEPRECATED', color: chalk.red },
+    'orphaned-component': { label: 'ORPHANED', color: chalk.yellow },
+    'orphaned-token': { label: 'ORPHANED TOKENS', color: chalk.yellow },
+    'value-divergence': { label: 'VALUE DRIFT', color: chalk.yellow },
+    'accessibility-conflict': { label: 'ACCESSIBILITY', color: chalk.red },
+    'framework-sprawl': { label: 'FRAMEWORK SPRAWL', color: chalk.yellow },
+    'missing-documentation': { label: 'MISSING DOCS', color: chalk.blue },
+  };
+
+  // Sort groups: critical severity types first
+  const criticalTypes = ['accessibility-conflict', 'deprecated-pattern'];
+  const sortedGroups = [...grouped.entries()].sort((a, b) => {
+    const aIsCritical = criticalTypes.includes(a[0]);
+    const bIsCritical = criticalTypes.includes(b[0]);
+    if (aIsCritical && !bIsCritical) return -1;
+    if (!aIsCritical && bIsCritical) return 1;
+    return b[1].length - a[1].length; // Then by count
+  });
+
+  for (const [type, typeDrifts] of sortedGroups) {
+    const config = categoryConfig[type] || { label: type.toUpperCase().replace(/-/g, ' '), color: chalk.yellow };
+
+    lines.push(config.color.bold(`${config.label} (${typeDrifts.length})`));
+
+    // Show up to 5 items per category
+    const shown = typeDrifts.slice(0, 5);
+    const remaining = typeDrifts.length - shown.length;
+
+    shown.forEach((drift, i) => {
+      const isLast = i === shown.length - 1 && remaining === 0;
+      const prefix = isLast ? '└─' : '├─';
+
+      // Extract file:line from location or use entity name
+      const location = drift.source.location || drift.source.entityName;
+      const parts = location.split(':');
+      const file = parts[0] || drift.source.entityName;
+      const lineNum = parts[1];
+      const shortFile = file.length > 30 ? '...' + file.slice(-27) : file;
+      const fileLoc = lineNum ? `${shortFile}:${lineNum}` : shortFile;
+
+      // Build the issue description
+      let issueText = '';
+
+      if (drift.type === 'hardcoded-value') {
+        // Extract the actual values and show concise suggestion
+        const colorMatch = drift.message.match(/#[0-9a-fA-F]{3,8}/g);
+        const sizeMatches = drift.message.match(/\d+px/g);
+
+        if (colorMatch && colorMatch.length > 0) {
+          // Show color value with token suggestion
+          const colorVal = colorMatch[0];
+          issueText = `${chalk.hex(colorVal)(colorVal)} → ${chalk.cyan('use var(--color-*)')}`;
+        } else if (sizeMatches && sizeMatches.length > 0) {
+          // Show size value with token suggestion
+          const sizeVal = sizeMatches[0];
+          issueText = `${chalk.dim(sizeVal)} → ${chalk.cyan('use var(--spacing-*)')}`;
+        } else {
+          // Generic hardcoded value
+          issueText = chalk.dim('hardcoded value detected');
+        }
+      } else if (drift.type === 'accessibility-conflict') {
+        // Extract key issue
+        if (drift.message.includes('aria-label')) {
+          issueText = 'Missing aria-label';
+        } else if (drift.message.includes('focus')) {
+          issueText = 'Focus trap not implemented';
+        } else {
+          issueText = drift.message.slice(0, 35);
+        }
+      } else if (drift.type === 'naming-inconsistency') {
+        const suggestions = drift.details?.suggestions as string[] | undefined;
+        if (suggestions?.[0]) {
+          issueText = `→ rename to ${chalk.cyan(suggestions[0])}`;
+        } else {
+          issueText = 'Inconsistent naming';
+        }
+      } else if (drift.type === 'deprecated-pattern') {
+        issueText = chalk.red('deprecated') + ' - migrate to new API';
+      } else {
+        // For other types, show a brief message
+        const suggestions = drift.details?.suggestions as string[] | undefined;
+        if (suggestions?.[0]) {
+          issueText = `→ ${suggestions[0].slice(0, 30)}`;
+        } else {
+          issueText = drift.message.slice(0, 35);
+        }
+      }
+
+      lines.push(chalk.dim(prefix) + ' ' + chalk.white(fileLoc) + ' ' + issueText);
+    });
+
+    if (remaining > 0) {
+      lines.push(chalk.dim('└─ ... and ' + remaining + ' more'));
+    }
+
+    lines.push('');
+  }
+
+  // Footer
+  lines.push(chalk.dim('Add to CI to catch drift on every PR'));
+
+  return lines.join('\n');
+}
+
 // Format as markdown
 export function formatMarkdown(drifts: DriftSignal[]): string {
   if (drifts.length === 0) {
