@@ -41,3 +41,15 @@ export {
   type FileIssue,
   type CloseMatch,
 } from "./audit.js";
+
+// Drift aggregation
+export {
+  DriftAggregator,
+  createStrategy,
+  builtInStrategies,
+  type DriftGroup,
+  type AggregationResult,
+  type GroupingStrategy,
+  type AggregatorOptions,
+  type BuiltInStrategyType,
+} from "./drift-aggregator.js";

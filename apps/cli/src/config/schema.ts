@@ -115,10 +115,21 @@ export const DriftIgnoreSchema = z.object({
   reason: z.string().optional(),
 });
 
+// Aggregation config for grouping drift signals
+export const AggregationConfigSchema = z.object({
+  /** Strategy order: value, suggestion, path, entity */
+  strategies: z.array(z.enum(['value', 'suggestion', 'path', 'entity'])).default(['value', 'suggestion', 'path', 'entity']),
+  /** Minimum signals to form a group */
+  minGroupSize: z.number().min(1).default(2),
+  /** Path patterns for path-based grouping (e.g., "src/legacy/**") */
+  pathPatterns: z.array(z.string()).default([]),
+});
+
 // Drift config
 export const DriftConfigSchema = z.object({
   ignore: z.array(DriftIgnoreSchema).default([]),
   severity: z.record(z.enum(['info', 'warning', 'critical'])).default({}),
+  aggregation: AggregationConfigSchema.default({}),
 });
 
 // Claude config
@@ -168,6 +179,7 @@ export type TokenConfig = z.infer<typeof TokenConfigSchema>;
 export type TailwindConfig = z.infer<typeof TailwindConfigSchema>;
 export type SourcesConfig = z.infer<typeof SourcesConfigSchema>;
 export type DriftIgnore = z.infer<typeof DriftIgnoreSchema>;
+export type AggregationConfig = z.infer<typeof AggregationConfigSchema>;
 export type DriftConfig = z.infer<typeof DriftConfigSchema>;
 export type ClaudeConfig = z.infer<typeof ClaudeConfigSchema>;
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;

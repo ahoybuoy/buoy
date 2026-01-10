@@ -1,7 +1,7 @@
 {
-  "name": "@buoy-design/core",
-  "version": "0.1.10",
-  "description": "Core domain models and analysis for Buoy design drift detection",
+  "name": "@buoy-design/db",
+  "version": "0.1.4",
+  "description": "Database layer for Buoy drift detection",
   "type": "module",
   "license": "MIT",
   "author": "Buoy <hello@buoy.design>",
@@ -9,16 +9,16 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/buoy-design/buoy.git",
-    "directory": "packages/core"
+    "directory": "packages/db"
   },
   "bugs": {
     "url": "https://github.com/buoy-design/buoy/issues"
   },
   "keywords": [
     "buoy",
-    "design-system",
-    "drift-detection",
-    "design-tokens"
+    "database",
+    "sqlite",
+    "drizzle"
   ],
   "files": [
     "dist",
@@ -30,14 +30,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./models": {
-      "types": "./dist/models/index.d.ts",
-      "import": "./dist/models/index.js"
-    },
-    "./analysis": {
-      "types": "./dist/analysis/index.d.ts",
-      "import": "./dist/analysis/index.js"
     }
   },
   "scripts": {
@@ -45,17 +37,18 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "glob": "^11.0.0",
-    "graphology": "^0.26.0",
-    "graphology-types": "^0.24.8",
-    "simple-git": "^3.30.0",
-    "zod": "^3.24.1"
+    "@buoy-design/core": "workspace:*",
+    "better-sqlite3": "^11.7.0",
+    "drizzle-orm": "^0.38.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "drizzle-kit": "^0.30.1",
     "typescript": "^5.7.2"
   }
 }

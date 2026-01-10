@@ -12,7 +12,7 @@ import { DriftAnalysisService } from "../services/drift-analysis.js";
 import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
 import type { DriftSignal } from "@buoy-design/core";
 import { formatUpgradeHint } from "../utils/upgrade-hints.js";
-import { generateAuditReport, type AuditValue } from "@buoy-design/core";
+import { generateAuditReport, type AuditValue, DriftAggregator } from "@buoy-design/core";
 import { extractStyles, extractCssFileStyles } from "@buoy-design/scanners";
 import { parseCssValues } from "@buoy-design/core";
 import { glob } from "glob";
@@ -100,6 +100,7 @@ export function createShowCommand(): Command {
     .command("drift")
     .description("Show drift signals (design system violations)")
     .option("--json", "Output as JSON")
+    .option("--raw", "Output raw signals without grouping")
     .option("-S, --severity <level>", "Filter by minimum severity (info, warning, critical)")
     .option("-t, --type <type>", "Filter by drift type")
     .action(async (options, command) => {
@@ -129,13 +130,62 @@ export function createShowCommand(): Command {
 
         spin.stop();
 
+        // Raw mode: output signals without grouping (existing behavior)
+        if (options.raw) {
+          const output = {
+            drifts: result.drifts,
+            summary: {
+              total: result.drifts.length,
+              critical: result.drifts.filter((d: DriftSignal) => d.severity === "critical").length,
+              warning: result.drifts.filter((d: DriftSignal) => d.severity === "warning").length,
+              info: result.drifts.filter((d: DriftSignal) => d.severity === "info").length,
+            },
+          };
+          console.log(JSON.stringify(output, null, 2));
+          return;
+        }
+
+        // Grouped mode (default): aggregate signals for actionability
+        const aggregationConfig = config.drift?.aggregation ?? {};
+        const aggregator = new DriftAggregator({
+          strategies: aggregationConfig.strategies,
+          minGroupSize: aggregationConfig.minGroupSize,
+          pathPatterns: aggregationConfig.pathPatterns,
+        });
+
+        const aggregated = aggregator.aggregate(result.drifts);
+
         const output = {
-          drifts: result.drifts,
+          groups: aggregated.groups.map(g => ({
+            id: g.id,
+            strategy: g.groupingKey.strategy,
+            key: g.groupingKey.value,
+            summary: g.summary,
+            count: g.totalCount,
+            severity: g.bySeverity,
+            representative: {
+              type: g.representative.type,
+              message: g.representative.message,
+              location: g.representative.source.location,
+            },
+          })),
+          ungrouped: aggregated.ungrouped.map(d => ({
+            id: d.id,
+            type: d.type,
+            severity: d.severity,
+            message: d.message,
+            location: d.source.location,
+          })),
           summary: {
-            total: result.drifts.length,
-            critical: result.drifts.filter((d: DriftSignal) => d.severity === "critical").length,
-            warning: result.drifts.filter((d: DriftSignal) => d.severity === "warning").length,
-            info: result.drifts.filter((d: DriftSignal) => d.severity === "info").length,
+            totalSignals: aggregated.totalSignals,
+            totalGroups: aggregated.totalGroups,
+            ungroupedCount: aggregated.ungrouped.length,
+            reductionRatio: Math.round(aggregated.reductionRatio * 10) / 10,
+            bySeverity: {
+              critical: result.drifts.filter((d: DriftSignal) => d.severity === "critical").length,
+              warning: result.drifts.filter((d: DriftSignal) => d.severity === "warning").length,
+              info: result.drifts.filter((d: DriftSignal) => d.severity === "info").length,
+            },
           },
         };
 
@@ -333,16 +383,37 @@ export function createShowCommand(): Command {
         const { scanResult, driftResult } = allResults;
         spin.stop();
 
+        // Aggregate drift signals
+        const aggregationConfig = config.drift?.aggregation ?? {};
+        const aggregator = new DriftAggregator({
+          strategies: aggregationConfig.strategies,
+          minGroupSize: aggregationConfig.minGroupSize,
+          pathPatterns: aggregationConfig.pathPatterns,
+        });
+        const aggregated = aggregator.aggregate(driftResult.drifts);
+
         const output = {
           components: scanResult.components,
           tokens: scanResult.tokens,
           drift: {
-            signals: driftResult.drifts,
+            groups: aggregated.groups.map(g => ({
+              id: g.id,
+              strategy: g.groupingKey.strategy,
+              key: g.groupingKey.value,
+              summary: g.summary,
+              count: g.totalCount,
+              severity: g.bySeverity,
+            })),
+            ungrouped: aggregated.ungrouped.length,
             summary: {
-              total: driftResult.drifts.length,
-              critical: driftResult.drifts.filter((d: DriftSignal) => d.severity === "critical").length,
-              warning: driftResult.drifts.filter((d: DriftSignal) => d.severity === "warning").length,
-              info: driftResult.drifts.filter((d: DriftSignal) => d.severity === "info").length,
+              totalSignals: aggregated.totalSignals,
+              totalGroups: aggregated.totalGroups,
+              reductionRatio: Math.round(aggregated.reductionRatio * 10) / 10,
+              bySeverity: {
+                critical: driftResult.drifts.filter((d: DriftSignal) => d.severity === "critical").length,
+                warning: driftResult.drifts.filter((d: DriftSignal) => d.severity === "warning").length,
+                info: driftResult.drifts.filter((d: DriftSignal) => d.severity === "info").length,
+              },
             },
           },
           health: {
