@@ -59,6 +59,10 @@ buoy
 │   └── hooks               # Set up git hooks
 ├── check                   # Pre-commit drift check
 ├── baseline                # Accept existing drift
+│   ├── create              # Create baseline (requires --reason)
+│   ├── show                # View current baseline
+│   ├── update              # Add new drift (requires --reason)
+│   └── clear               # Remove baseline
 ├── fix                     # Suggest/apply fixes
 ├── plugins                 # Show available scanners
 └── ship                    # Cloud features
@@ -188,9 +192,13 @@ buoy fix --auto             # Auto-apply safe fixes
 For brownfield projects, baseline existing issues and only flag new ones:
 
 ```bash
-buoy baseline               # Accept current drift
-buoy check                  # Only fails on new drift
+buoy baseline create -r "Legacy code before design system"  # Accept current drift with reason
+buoy baseline update -r "Third-party components"            # Add new drift to baseline
+buoy baseline show                                          # View baseline with reasons
+buoy check                                                  # Only fails on new drift
 ```
+
+A reason is required when creating or updating baselines to maintain accountability.
 
 ## CI Integration
 
@@ -345,7 +353,8 @@ node apps/cli/dist/bin.js show all
 | `@buoy-design/core`     | Domain models and drift detection engine |
 | `@buoy-design/scanners` | Framework-specific code scanners         |
 | `@buoy-design/mcp`      | MCP server for AI agent integration      |
-| `@buoy-design/db`       | SQLite persistence                       |
+| `@buoy-design/agents`   | Sub-agent definitions for AI assistants  |
+| `@buoy-design/db`       | SQLite persistence for local scans       |
 
 ## License
 

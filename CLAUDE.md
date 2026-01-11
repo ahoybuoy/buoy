@@ -42,6 +42,8 @@ This is a TypeScript monorepo using pnpm workspaces and Turbo.
 apps/cli/          # @buoy-design/cli - CLI application (entry point: bin.js)
 packages/core/     # @buoy-design/core - Domain models, drift detection engine
 packages/scanners/ # @buoy-design/scanners - Framework-specific code scanners (React, Vue, Svelte, Angular, Tailwind, etc.)
+packages/mcp/      # @buoy-design/mcp - MCP server for AI agent integration
+packages/agents/   # @buoy-design/agents - Sub-agent definitions for AI assistants
 packages/db/       # @buoy-design/db - SQLite persistence via Drizzle
 ```
 
@@ -93,6 +95,10 @@ buoy
 │   └── hooks               # Set up git hooks
 ├── check                   # Pre-commit drift check
 ├── baseline                # Accept existing drift
+│   ├── create              # Create baseline (requires --reason)
+│   ├── show                # View current baseline
+│   ├── update              # Add new drift (requires --reason)
+│   └── clear               # Remove baseline
 ├── fix                     # Suggest/apply fixes
 ├── plugins                 # Show available scanners
 └── ship                    # Cloud features
@@ -128,7 +134,8 @@ All `show` subcommands output JSON by default.
 | `buoy dock agents` | Set up AI agents with design system |
 | `buoy dock hooks` | Set up git hooks |
 | `buoy check` | Fast pre-commit hook drift check |
-| `buoy baseline` | Accept existing drift, track only new issues |
+| `buoy baseline create -r "reason"` | Accept existing drift (reason required) |
+| `buoy baseline update -r "reason"` | Add new drift to baseline (reason required) |
 | `buoy fix` | Suggest and apply fixes for drift issues |
 
 ### Zero-Config Mode

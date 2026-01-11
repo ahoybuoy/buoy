@@ -20,11 +20,20 @@ import type { DriftSignal } from "@buoy-design/core";
 const BASELINE_DIR = ".buoy";
 const BASELINE_FILE = "baseline.json";
 
+export interface BaselineEntry {
+  reason: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
 export interface Baseline {
   version: 1;
   createdAt: string;
   updatedAt: string;
+  reason: string;
   driftIds: string[];
+  /** Per-drift reasons (drift ID -> entry) */
+  entries?: Record<string, BaselineEntry>;
   summary: {
     critical: number;
     warning: number;
@@ -82,14 +91,25 @@ export async function saveBaseline(
 /**
  * Create baseline from current drift signals
  */
-export function createBaseline(drifts: DriftSignal[]): Baseline {
+export function createBaseline(drifts: DriftSignal[], reason: string): Baseline {
   const now = new Date().toISOString();
+
+  // Create per-drift entries with the reason
+  const entries: Record<string, BaselineEntry> = {};
+  for (const drift of drifts) {
+    entries[drift.id] = {
+      reason,
+      createdAt: now,
+    };
+  }
 
   return {
     version: 1,
     createdAt: now,
     updatedAt: now,
+    reason,
     driftIds: drifts.map((d) => d.id),
+    entries,
     summary: {
       critical: drifts.filter((d) => d.severity === "critical").length,
       warning: drifts.filter((d) => d.severity === "warning").length,
@@ -133,6 +153,10 @@ export function createBaselineCommand(): Command {
     )
     .option("--json", "Output as JSON")
     .option("-f, --force", "Overwrite existing baseline without prompting")
+    .requiredOption(
+      "-r, --reason <reason>",
+      "Reason for baselining these drift signals (required)",
+    )
     .action(async (options) => {
       if (options.json) {
         setJsonMode(true);
@@ -194,7 +218,7 @@ export function createBaselineCommand(): Command {
         const drifts = diffResult.drifts;
 
         // Create and save baseline
-        const baseline = createBaseline(drifts);
+        const baseline = createBaseline(drifts, options.reason);
         await saveBaseline(baseline);
 
         spin.stop();
@@ -211,6 +235,7 @@ export function createBaselineCommand(): Command {
 
         header("Baseline Created");
         newline();
+        keyValue("Reason", options.reason);
         keyValue("Total drifts baselined", String(baseline.summary.total));
         keyValue("Critical", String(baseline.summary.critical));
         keyValue("Warning", String(baseline.summary.warning));
@@ -257,6 +282,9 @@ export function createBaselineCommand(): Command {
 
         header("Current Baseline");
         newline();
+        if (baseline.reason) {
+          keyValue("Reason", baseline.reason);
+        }
         keyValue("Created", baseline.createdAt);
         keyValue("Updated", baseline.updatedAt);
         keyValue("Total drifts", String(baseline.summary.total));
@@ -277,6 +305,10 @@ export function createBaselineCommand(): Command {
     .command("update")
     .description("Update baseline to include current drift signals")
     .option("--json", "Output as JSON")
+    .requiredOption(
+      "-r, --reason <reason>",
+      "Reason for adding these drift signals to baseline (required)",
+    )
     .action(async (options) => {
       if (options.json) {
         setJsonMode(true);
@@ -325,10 +357,21 @@ export function createBaselineCommand(): Command {
 
         const drifts = diffResult.drifts;
 
-        // Create updated baseline
-        const baseline = createBaseline(drifts);
+        // Create updated baseline, preserving existing entries
+        const baseline = createBaseline(drifts, options.reason);
         if (existingBaseline) {
           baseline.createdAt = existingBaseline.createdAt;
+          // Preserve existing per-drift entries, only add new ones with the new reason
+          if (existingBaseline.entries) {
+            for (const [id, entry] of Object.entries(existingBaseline.entries)) {
+              if (baseline.entries && !baseline.entries[id]) {
+                // This drift was removed, don't preserve
+              } else if (baseline.entries && existingBaseline.driftIds.includes(id)) {
+                // Preserve original entry for existing drifts
+                baseline.entries[id] = entry;
+              }
+            }
+          }
         }
         await saveBaseline(baseline);
 
@@ -351,6 +394,7 @@ export function createBaselineCommand(): Command {
 
         header("Baseline Updated");
         newline();
+        keyValue("Reason for new entries", options.reason);
         keyValue("Total drifts", String(baseline.summary.total));
         if (existingBaseline) {
           keyValue("Added to baseline", String(Math.max(0, added)));
