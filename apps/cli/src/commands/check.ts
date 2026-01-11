@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { loadConfig, getConfigPath } from "../config/loader.js";
 import { buildAutoConfig } from "../config/auto-detect.js";
 import type { BuoyConfig } from "../config/schema.js";
-import type { DriftSignal, Severity } from "@buoy-design/core";
+import type { DriftSignal, Severity, DesignToken, Component } from "@buoy-design/core";
 import { execSync } from "node:child_process";
 import {
   DriftAnalysisService,
@@ -12,6 +12,13 @@ import {
 } from "../services/drift-analysis.js";
 import { formatUpgradeHint } from "../utils/upgrade-hints.js";
 import { generatePRCommentPreview } from "../output/pr-comment-preview.js";
+import {
+  isLoggedIn,
+  submitScanReport,
+  getGitMetadata,
+  type ScanReportInput,
+} from "../cloud/index.js";
+import { ScanOrchestrator } from "../scan/orchestrator.js";
 
 export type OutputFormat = "text" | "json" | "ai-feedback";
 
@@ -178,6 +185,20 @@ export function isFromStagedFile(
   );
 }
 
+/**
+ * Calculate a simple maturity score based on tokens and drift
+ */
+function calculateMaturityScore(tokenCount: number, driftCount: number): number {
+  // Base score from having tokens
+  let score = Math.min(50, tokenCount * 5); // Up to 50 points for tokens
+
+  // Penalty for drift
+  const driftPenalty = Math.min(50, driftCount * 2);
+  score += 50 - driftPenalty; // 50 points base minus drift penalty
+
+  return Math.max(0, Math.min(100, score));
+}
+
 export function createCheckCommand(): Command {
   const cmd = new Command("check")
     .description("Fast drift check for pre-commit hooks")
@@ -195,6 +216,9 @@ export function createCheckCommand(): Command {
       "text",
     )
     .option("--preview-comment", "Preview what a PR comment would look like")
+    .option("--report", "Report results to Buoy Cloud (requires login)")
+    .option("--repo <repo>", "Repository name (owner/repo) for cloud reporting")
+    .option("--pr <number>", "PR number for cloud reporting", parseInt)
     .action(async (options) => {
       const log = options.quiet
         ? () => {}
@@ -255,6 +279,97 @@ export function createCheckCommand(): Command {
 
         // Summary counts using shared utility
         const summary = calculateDriftSummary(drifts);
+
+        // Cloud reporting if --report flag is used
+        if (options.report) {
+          if (!isLoggedIn()) {
+            if (!options.quiet) {
+              console.error("Error: Not logged in. Run `buoy ship login` first.");
+            }
+          } else if (!options.repo) {
+            if (!options.quiet) {
+              console.error("Error: --repo is required for cloud reporting.");
+            }
+          } else {
+            log("Reporting to Buoy Cloud...");
+
+            // Get git metadata
+            const gitMeta = getGitMetadata(process.cwd());
+
+            // Scan for tokens and components to include in report
+            const orchestrator = new ScanOrchestrator(config, process.cwd());
+            const scanStart = Date.now();
+            const scanResults = await orchestrator.scan({
+              onProgress: log,
+            });
+            const scanDuration = Date.now() - scanStart;
+
+            // Convert drift signals to report format
+            const driftSignals = drifts.map((d) => {
+              const location = d.source.location || "";
+              const [file, lineStr, colStr] = location.split(":");
+              const suggestions = d.details?.suggestions as string[] | undefined;
+              const firstSuggestion = suggestions?.[0];
+              const actual = d.details?.actual as string | undefined;
+
+              return {
+                type: d.type,
+                severity: d.severity as 'error' | 'warning' | 'info',
+                file: file || d.source.entityName,
+                line: lineStr ? parseInt(lineStr, 10) : 1,
+                column: colStr ? parseInt(colStr, 10) : undefined,
+                value: actual || '',
+                message: d.message,
+                suggestion: firstSuggestion ? {
+                  token: firstSuggestion,
+                  value: firstSuggestion,
+                  confidence: 0.8,
+                  replacement: firstSuggestion,
+                } : undefined,
+              };
+            });
+
+            // Build report input
+            const reportInput: ScanReportInput = {
+              repo: options.repo,
+              commitSha: gitMeta.commitSha || 'unknown',
+              branch: gitMeta.branch,
+              prNumber: options.pr,
+              scanDuration,
+              tokens: scanResults.tokens.map((t: DesignToken) => ({
+                name: t.name,
+                value: typeof t.value === 'object' ? JSON.stringify(t.value) : String(t.value),
+                source: t.source.type,
+              })),
+              components: scanResults.components.map((c: Component) => ({
+                name: c.name,
+                path: 'path' in c.source ? c.source.path : c.id,
+                source: c.source.type,
+              })),
+              sources: [], // TODO: detect intent sources
+              driftSignals,
+              maturityScore: calculateMaturityScore(scanResults.tokens.length, drifts.length),
+            };
+
+            const reportResult = await submitScanReport(reportInput);
+
+            if (reportResult.success) {
+              log(`Reported to Buoy Cloud (${reportResult.scanId})`);
+
+              // Output PR comment if available
+              if (reportResult.prComment?.shouldComment && !options.quiet) {
+                console.log("");
+                console.log("--- PR Comment ---");
+                console.log(reportResult.prComment.body);
+                console.log("--- End PR Comment ---");
+              }
+            } else {
+              if (!options.quiet) {
+                console.error(`Cloud report failed: ${reportResult.error}`);
+              }
+            }
+          }
+        }
 
         // Handle --preview-comment flag
         if (options.previewComment) {

@@ -434,3 +434,122 @@ export async function requestCancellation(
     body: JSON.stringify({ reason, feedback }),
   });
 }
+
+// ============================================================================
+// Scan Report API (v1 - Design Intent Discovery)
+// ============================================================================
+
+export type TokenCategory = 'color' | 'spacing' | 'typography' | 'radius' | 'shadow' | 'other';
+export type ConfidenceLevel = 'certain' | 'high' | 'medium' | 'low';
+export type DriftType =
+  | 'hardcoded-color'
+  | 'hardcoded-spacing'
+  | 'hardcoded-typography'
+  | 'arbitrary-tailwind'
+  | 'inline-style'
+  | 'missing-component'
+  | 'deprecated-token'
+  | 'accessibility';
+
+export interface DiscoveredToken {
+  name: string;
+  value: string;
+  category: TokenCategory;
+  confidence: ConfidenceLevel;
+  source: string;
+  usageCount?: number;
+}
+
+export interface DiscoveredComponent {
+  name: string;
+  path: string;
+  props: string[];
+  variants: string[];
+  confidence: 'certain' | 'high' | 'medium';
+  source: string;
+}
+
+export interface IntentSource {
+  type: ConfidenceLevel;
+  file: string;
+  description: string;
+}
+
+export interface DriftSignalReport {
+  id: string;
+  type: DriftType;
+  severity: 'error' | 'warning' | 'info';
+  file: string;
+  line: number;
+  column?: number;
+  value: string;
+  message: string;
+  suggestion?: {
+    token: string;
+    value: string;
+    confidence: number;
+    replacement: string;
+  };
+  author?: string;
+  introducedIn?: string;
+}
+
+export interface ScanReportRequest {
+  repo: string;
+  commitSha: string;
+  branch?: string;
+  prNumber?: number;
+
+  designIntent: {
+    tokens: DiscoveredToken[];
+    components: DiscoveredComponent[];
+    sources: IntentSource[];
+    maturityScore: number;
+  };
+
+  drift: {
+    signals: DriftSignalReport[];
+    summary: {
+      total: number;
+      bySeverity: { error: number; warning: number; info: number };
+      byType: Record<string, number>;
+      byFile: Array<{ file: string; count: number }>;
+    };
+  };
+
+  scanDuration: number;
+  isFirstScan?: boolean;
+}
+
+export interface ScanReportResponse {
+  id: string;
+
+  analysis: {
+    intentChanged: boolean;
+    newTokensDiscovered: number;
+    driftDelta: number;
+    aiSummary?: string;
+    aiSuggestions?: string[];
+  };
+
+  prComment?: {
+    shouldComment: boolean;
+    commentType: 'drift-report' | 'first-scan-report';
+    body: string;
+  };
+
+  intentStored: boolean;
+}
+
+/**
+ * Report scan results to the new v1 API
+ * Used by PR bot and CI integrations for design intent discovery
+ */
+export async function reportScan(
+  data: ScanReportRequest
+): Promise<ApiResponse<ScanReportResponse>> {
+  return apiRequest<ScanReportResponse>('/api/v1/scan', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
