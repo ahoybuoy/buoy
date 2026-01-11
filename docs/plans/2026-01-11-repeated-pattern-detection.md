@@ -1,6 +1,6 @@
 # Repeated Pattern Detection
 
-**Status:** Design approved
+**Status:** Implemented (exact matching mode)
 **Feature flag:** Experimental
 
 ## Overview
