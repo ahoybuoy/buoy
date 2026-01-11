@@ -78,3 +78,47 @@ describe("detectRepeatedPatterns", () => {
     expect(suggestions.some(s => s.toLowerCase().includes("component"))).toBe(true);
   });
 });
+
+describe("tight matching mode", () => {
+  it("should group patterns with shadow variants together", () => {
+    const occurrences: ClassOccurrence[] = [
+      { classes: "flex items-center shadow-sm", file: "a.tsx", line: 1 },
+      { classes: "flex items-center shadow-lg", file: "b.tsx", line: 5 },
+      { classes: "flex items-center shadow-xl", file: "c.tsx", line: 10 },
+    ];
+    const groups = groupPatterns(occurrences, "tight");
+    expect(groups.size).toBe(1);
+  });
+
+  it("should group patterns with gap variants together", () => {
+    const occurrences: ClassOccurrence[] = [
+      { classes: "flex gap-2", file: "a.tsx", line: 1 },
+      { classes: "flex gap-4", file: "b.tsx", line: 5 },
+      { classes: "flex gap-6", file: "c.tsx", line: 10 },
+    ];
+    const groups = groupPatterns(occurrences, "tight");
+    expect(groups.size).toBe(1);
+  });
+
+  it("should group patterns with rounded variants together", () => {
+    const occurrences: ClassOccurrence[] = [
+      { classes: "bg-white rounded-sm", file: "a.tsx", line: 1 },
+      { classes: "bg-white rounded-lg", file: "b.tsx", line: 5 },
+      { classes: "bg-white rounded-full", file: "c.tsx", line: 10 },
+    ];
+    const groups = groupPatterns(occurrences, "tight");
+    expect(groups.size).toBe(1);
+  });
+
+  it("should identify variants in drift details", () => {
+    const occurrences: ClassOccurrence[] = [
+      { classes: "flex gap-2", file: "a.tsx", line: 1 },
+      { classes: "flex gap-4", file: "b.tsx", line: 5 },
+      { classes: "flex gap-6", file: "c.tsx", line: 10 },
+    ];
+    const drifts = detectRepeatedPatterns(occurrences, { minOccurrences: 3, matching: "tight" });
+    expect(drifts.length).toBe(1);
+    // The details should include variants info
+    expect(drifts[0]!.details.suggestions).toBeDefined();
+  });
+});
