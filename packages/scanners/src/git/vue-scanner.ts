@@ -234,17 +234,11 @@ export class VueComponentScanner extends SignalAwareScanner<Component, VueScanne
 
     // Use defineOptions name if available (Element Plus pattern), otherwise use filename
     // Also check for Options API name: { name: 'ComponentName' }
-    const componentName = metadata.defineOptionsName ||
+    // Convert to PascalCase to handle lowercase filenames (e.g., rate.vue -> Rate)
+    const rawName = metadata.defineOptionsName ||
       this.extractOptionsApiName(scriptContent) ||
       fileBaseName;
-
-    // Only process PascalCase component names
-    // Either the filename starts with uppercase OR defineOptions/Options API provides a PascalCase name
-    if (!/^[A-Z]/.test(componentName)) {
-      // Still add signals even if we don't return the component
-      this.addSignals(relativePath, signalCollector.getEmitter());
-      return [];
-    }
+    const componentName = this.toPascalCase(rawName);
 
     const source: VueSource = {
       type: "vue",
@@ -435,6 +429,18 @@ export class VueComponentScanner extends SignalAwareScanner<Component, VueScanne
       /(?:export\s+default|defineComponent)\s*\(\s*\{[^}]*name:\s*['"]([^'"]+)['"]/,
     );
     return nameMatch?.[1];
+  }
+
+  /**
+   * Convert a filename to PascalCase component name.
+   * Handles: button -> Button, my-button -> MyButton, rate -> Rate
+   */
+  private toPascalCase(name: string): string {
+    // Handle kebab-case and snake_case
+    return name
+      .split(/[-_]/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("");
   }
 
   /** Known style-related prop names that map to theme tokens */

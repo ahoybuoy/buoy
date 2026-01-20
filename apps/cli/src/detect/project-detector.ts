@@ -841,24 +841,29 @@ export class ProjectDetector {
     for (const dir of COMPONENT_DIRS) {
       const fullPath = resolve(this.root, dir);
       if (existsSync(fullPath) && statSync(fullPath).isDirectory()) {
-        // Count component files
+        // Count component files per extension
+        const extensionCounts: Record<string, number> = {};
         const extensions = ['tsx', 'jsx', 'vue', 'svelte'];
-        let fileCount = 0;
 
         for (const ext of extensions) {
           const files = await glob(`**/*.${ext}`, {
             cwd: fullPath,
             ignore: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*', '**/node_modules/**'],
           });
-          fileCount += files.length;
+          if (files.length > 0) {
+            extensionCounts[ext] = files.length;
+          }
         }
 
-        if (fileCount > 0) {
+        // Add a location entry for each extension type found
+        for (const [ext, count] of Object.entries(extensionCounts)) {
+          // Map extension to type
+          const type = ext === 'tsx' || ext === 'jsx' ? ext : ext;
           locations.push({
             path: dir,
-            fileCount,
-            pattern: `${dir}/**/*.{tsx,jsx,vue,svelte}`,
-            type: 'jsx',
+            fileCount: count,
+            pattern: `${dir}/**/*.${ext}`,
+            type: type as ComponentLocation['type'],
           });
         }
       }
@@ -868,17 +873,27 @@ export class ProjectDetector {
     if (locations.length === 0) {
       const srcPath = resolve(this.root, 'src');
       if (existsSync(srcPath)) {
-        const files = await glob('**/*.{tsx,jsx,vue,svelte}', {
-          cwd: srcPath,
-          ignore: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*', '**/node_modules/**'],
-        });
+        const extensions = ['tsx', 'jsx', 'vue', 'svelte'];
+        const extensionCounts: Record<string, number> = {};
 
-        if (files.length > 0) {
+        for (const ext of extensions) {
+          const files = await glob(`**/*.${ext}`, {
+            cwd: srcPath,
+            ignore: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*', '**/node_modules/**'],
+          });
+          if (files.length > 0) {
+            extensionCounts[ext] = files.length;
+          }
+        }
+
+        // Add a location entry for each extension type found
+        for (const [ext, count] of Object.entries(extensionCounts)) {
+          const type = ext === 'tsx' || ext === 'jsx' ? ext : ext;
           locations.push({
             path: 'src',
-            fileCount: files.length,
-            pattern: 'src/**/*.{tsx,jsx,vue,svelte}',
-            type: 'jsx',
+            fileCount: count,
+            pattern: `src/**/*.${ext}`,
+            type: type as ComponentLocation['type'],
           });
         }
       }
