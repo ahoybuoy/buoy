@@ -6,6 +6,10 @@ export * from './extractors/index.js';
 
 // Git/local scanners
 export { ReactComponentScanner, type ReactScannerConfig } from './git/index.js';
+export { VueComponentScanner, type VueScannerConfig } from './git/index.js';
+export { SvelteComponentScanner, type SvelteScannerConfig } from './git/index.js';
+export { AngularComponentScanner, type AngularScannerConfig } from './git/index.js';
+export { WebComponentScanner, type WebComponentScannerConfig } from './git/index.js';
 export { TokenScanner, type TokenScannerConfig } from './git/index.js';
 
 // Figma scanner

@@ -1422,4 +1422,243 @@ describe('AngularComponentScanner', () => {
       expect(onSelectionChangeProp!.description).toBe('Output event');
     });
   });
+
+  describe('compound component detection', () => {
+    // Test fixtures for compound components
+    const DROPDOWN_ROOT = `
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'p-dropdown',
+  template: '<div class="dropdown"></div>'
+})
+export class DropdownComponent {}
+`;
+
+    const DROPDOWN_ITEM = `
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'p-dropdown-item',
+  template: '<div class="item"></div>'
+})
+export class DropdownItemComponent {}
+`;
+
+    const DROPDOWN_PANEL = `
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'p-dropdown-panel',
+  template: '<div class="panel"></div>'
+})
+export class DropdownPanelComponent {}
+`;
+
+    const FORM_FIELD = `
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'mat-form-field',
+  template: '<div class="form-field"></div>'
+})
+export class MatFormFieldComponent {}
+`;
+
+    const FORM_LABEL = `
+import { Directive } from '@angular/core';
+
+@Directive({
+  selector: 'mat-label'
+})
+export class MatLabelDirective {}
+`;
+
+    const FORM_HINT = `
+import { Directive } from '@angular/core';
+
+@Directive({
+  selector: 'mat-hint'
+})
+export class MatHintDirective {}
+`;
+
+    it('detects compound components by shared selector prefix', async () => {
+      vol.fromJSON({
+        '/project/src/dropdown.component.ts': DROPDOWN_ROOT,
+        '/project/src/dropdown-item.component.ts': DROPDOWN_ITEM,
+        '/project/src/dropdown-panel.component.ts': DROPDOWN_PANEL,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(3);
+
+      // All should be in the "PDropdown" compound group (selector p-dropdown -> PDropdown)
+      for (const comp of result.items) {
+        expect(comp.metadata.compoundGroup).toBe('PDropdown');
+      }
+
+      // DropdownComponent should be marked as root
+      const dropdownRoot = result.items.find(c => c.name === 'DropdownComponent');
+      expect(dropdownRoot?.metadata.isCompoundRoot).toBe(true);
+
+      // Others should not be root
+      const dropdownItem = result.items.find(c => c.name === 'DropdownItemComponent');
+      expect(dropdownItem?.metadata.isCompoundRoot).toBeUndefined();
+    });
+
+    it('detects compound components with mat- prefix (Material pattern)', async () => {
+      // mat-form-field with mat-form-field-* sub-components
+      const FORM_FIELD_WITH_SUBS = `
+import { Component, Directive } from '@angular/core';
+
+@Component({
+  selector: 'mat-form-field',
+  template: '<div class="form-field"></div>'
+})
+export class MatFormFieldComponent {}
+
+@Directive({
+  selector: 'mat-form-field-label'
+})
+export class MatFormFieldLabelDirective {}
+
+@Directive({
+  selector: 'mat-form-field-hint'
+})
+export class MatFormFieldHintDirective {}
+`;
+
+      vol.fromJSON({
+        '/project/src/form-field.component.ts': FORM_FIELD_WITH_SUBS,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(3);
+
+      // All mat-form-field related components should be grouped under "MatFormField"
+      for (const comp of result.items) {
+        expect(comp.metadata.compoundGroup).toBe('MatFormField');
+      }
+
+      const formField = result.items.find(c => c.name === 'MatFormFieldComponent');
+      expect(formField?.metadata.isCompoundRoot).toBe(true);
+    });
+
+    it('does not group components with unrelated selector prefixes', async () => {
+      const UNRELATED_1 = `
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-button',
+  template: '<button></button>'
+})
+export class ButtonComponent {}
+`;
+
+      const UNRELATED_2 = `
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-card',
+  template: '<div class="card"></div>'
+})
+export class CardComponent {}
+`;
+
+      vol.fromJSON({
+        '/project/src/button.component.ts': UNRELATED_1,
+        '/project/src/card.component.ts': UNRELATED_2,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(2);
+
+      // Neither should have compound groups
+      for (const comp of result.items) {
+        expect(comp.metadata.compoundGroup).toBeUndefined();
+      }
+    });
+
+    it('groups components in same file by selector prefix when selectors match', async () => {
+      // Components with shared selector prefix in the same file
+      const SAME_FILE = `
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'tabs',
+  template: '<div></div>'
+})
+export class TabsComponent {}
+
+@Component({
+  selector: 'tabs-panel',
+  template: '<div></div>'
+})
+export class TabsPanelComponent {}
+
+@Component({
+  selector: 'tabs-trigger',
+  template: '<button></button>'
+})
+export class TabsTriggerComponent {}
+`;
+
+      vol.fromJSON({
+        '/project/src/tabs.component.ts': SAME_FILE,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(3);
+
+      // All should be in the "Tabs" compound group (by selector prefix)
+      for (const comp of result.items) {
+        expect(comp.metadata.compoundGroup).toBe('Tabs');
+      }
+
+      // TabsComponent should be marked as root
+      const tabsRoot = result.items.find(c => c.name === 'TabsComponent');
+      expect(tabsRoot?.metadata.isCompoundRoot).toBe(true);
+    });
+
+    it('requires at least 2 components for a compound group', async () => {
+      vol.fromJSON({
+        '/project/src/dropdown.component.ts': DROPDOWN_ROOT,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]?.metadata.compoundGroup).toBeUndefined();
+    });
+  });
 });

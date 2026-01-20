@@ -7,7 +7,7 @@ import type {
 } from "@buoy-design/core";
 import { createComponentId } from "@buoy-design/core";
 import { readFile } from "fs/promises";
-import { relative, basename } from "path";
+import { relative, basename, dirname } from "path";
 import {
   extractBalancedBraces,
   extractBalancedExpression,
@@ -33,18 +33,25 @@ export class SvelteComponentScanner extends SignalAwareScanner<
     // Clear signals from previous scan
     this.clearSignals();
 
+    let result: ScanResult<Component>;
+
     // Use cache if available
     if (this.config.cache) {
-      return this.runScanWithCache(
+      result = await this.runScanWithCache(
+        (file) => this.parseFile(file),
+        SvelteComponentScanner.DEFAULT_PATTERNS,
+      );
+    } else {
+      result = await this.runScan(
         (file) => this.parseFile(file),
         SvelteComponentScanner.DEFAULT_PATTERNS,
       );
     }
 
-    return this.runScan(
-      (file) => this.parseFile(file),
-      SvelteComponentScanner.DEFAULT_PATTERNS,
-    );
+    // Post-process: detect and mark compound component groups based on shared prefixes
+    result.items = this.detectCompoundGroups(result.items);
+
+    return result;
   }
 
   getSourceType(): string {
@@ -907,5 +914,93 @@ export class SvelteComponentScanner extends SignalAwareScanner<
       seen.add(key);
       return true;
     });
+  }
+
+  /**
+   * Detect compound component groups based on shared prefixes from the same directory.
+   * In Svelte, each file is one component, so we group by directory instead of file.
+   * e.g., Tabs.svelte, TabsList.svelte, TabsTrigger.svelte in same dir → group under "Tabs"
+   */
+  private detectCompoundGroups(components: Component[]): Component[] {
+    // Group components by directory
+    const byDirectory = new Map<string, Component[]>();
+    for (const comp of components) {
+      if (comp.source.type !== "svelte") continue;
+      const dirPath = dirname(comp.source.path);
+      if (!byDirectory.has(dirPath)) {
+        byDirectory.set(dirPath, []);
+      }
+      byDirectory.get(dirPath)!.push(comp);
+    }
+
+    // For each directory, detect shared prefix groups
+    for (const [_dirPath, dirComponents] of byDirectory) {
+      if (dirComponents.length < 2) continue;
+
+      // Skip if already has compound component tags
+      const hasExistingCompound = dirComponents.some(
+        (c) =>
+          c.metadata.tags?.includes("compound-component") ||
+          c.metadata.tags?.includes("compound-component-namespace"),
+      );
+      if (hasExistingCompound) continue;
+
+      // Find potential root components (shortest names that are prefixes of others)
+      const names = dirComponents.map((c) => c.name);
+      const potentialRoots = this.findCompoundRoots(names);
+
+      // Mark components with their compound group
+      for (const root of potentialRoots) {
+        const groupMembers = dirComponents.filter(
+          (c) => c.name === root || c.name.startsWith(root),
+        );
+
+        // Only create a group if there are at least 2 members (root + 1 sub-component)
+        if (groupMembers.length >= 2) {
+          for (const member of groupMembers) {
+            member.metadata.compoundGroup = root;
+            if (member.name === root) {
+              member.metadata.isCompoundRoot = true;
+            }
+          }
+        }
+      }
+    }
+
+    return components;
+  }
+
+  /**
+   * Find potential compound component roots from a list of names.
+   * A root is a name that is a prefix of at least one other name.
+   * e.g., ["Tabs", "TabsList", "TabsTrigger"] → ["Tabs"]
+   */
+  private findCompoundRoots(names: string[]): string[] {
+    const roots: string[] = [];
+    const sortedNames = [...names].sort((a, b) => a.length - b.length);
+
+    for (const name of sortedNames) {
+      // Check if this name is a prefix of any other name
+      const hasSubComponents = sortedNames.some(
+        (other) =>
+          other !== name &&
+          other.startsWith(name) &&
+          // Ensure it's a proper prefix (next char is uppercase = new word)
+          other.length > name.length &&
+          /^[A-Z]/.test(other[name.length]!),
+      );
+
+      if (hasSubComponents) {
+        // Don't add if it's already a sub-component of an existing root
+        const isSubOfExisting = roots.some(
+          (root) => name.startsWith(root) && name.length > root.length,
+        );
+        if (!isSubOfExisting) {
+          roots.push(name);
+        }
+      }
+    }
+
+    return roots;
   }
 }

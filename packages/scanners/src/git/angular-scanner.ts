@@ -3,7 +3,7 @@ import type { Component, PropDefinition, HardcodedValue } from "@buoy-design/cor
 import { createComponentId } from "@buoy-design/core";
 import * as ts from "typescript";
 import { readFileSync } from "fs";
-import { relative } from "path";
+import { relative, dirname } from "path";
 import {
   createScannerSignalCollector,
   type ScannerSignalCollector,
@@ -44,18 +44,25 @@ export class AngularComponentScanner extends SignalAwareScanner<
     // Clear signals from previous scan
     this.clearSignals();
 
+    let result: ScanResult<Component>;
+
     // Use cache if available
     if (this.config.cache) {
-      return this.runScanWithCache(
+      result = await this.runScanWithCache(
+        (file) => this.parseFile(file),
+        AngularComponentScanner.DEFAULT_PATTERNS,
+      );
+    } else {
+      result = await this.runScan(
         (file) => this.parseFile(file),
         AngularComponentScanner.DEFAULT_PATTERNS,
       );
     }
 
-    return this.runScan(
-      (file) => this.parseFile(file),
-      AngularComponentScanner.DEFAULT_PATTERNS,
-    );
+    // Post-process: detect and mark compound component groups based on shared selector prefixes
+    result.items = this.detectCompoundGroups(result.items);
+
+    return result;
   }
 
   getSourceType(): string {
@@ -1273,5 +1280,247 @@ export class AngularComponentScanner extends SignalAwareScanner<
       seen.add(key);
       return true;
     });
+  }
+
+  /**
+   * Detect compound component groups based on shared selector prefixes or same-file grouping.
+   * Angular compound patterns:
+   * 1. Shared selector prefix: mat-form-field, mat-label, mat-hint → group under "mat-form-field"
+   * 2. Components in same file with shared name prefix (like React)
+   * 3. Components in same directory with shared name prefix (like Svelte)
+   */
+  private detectCompoundGroups(components: Component[]): Component[] {
+    // First, try selector-based grouping (most common in Angular design systems)
+    this.detectCompoundGroupsBySelector(components);
+
+    // Then, try file-based grouping for components not yet grouped
+    this.detectCompoundGroupsByFile(components);
+
+    // Finally, try directory-based grouping for remaining ungrouped components
+    this.detectCompoundGroupsByDirectory(components);
+
+    return components;
+  }
+
+  /**
+   * Detect compound groups based on shared selector prefixes.
+   * e.g., mat-form-field, mat-label, mat-hint → group under "mat-form-field"
+   */
+  private detectCompoundGroupsBySelector(components: Component[]): void {
+    // Extract selectors from Angular components
+    const componentsBySelector = new Map<string, Component>();
+    const selectors: string[] = [];
+
+    for (const comp of components) {
+      // Check for Angular source by presence of 'selector' property
+      const angularSource = comp.source as { type?: string; selector?: string };
+      if (!angularSource.selector) continue;
+      if (angularSource.selector) {
+        // Handle multiple selectors (first one is primary)
+        const primarySelector = angularSource.selector.split(",")[0]?.trim();
+        if (primarySelector) {
+          componentsBySelector.set(primarySelector, comp);
+          selectors.push(primarySelector);
+        }
+      }
+    }
+
+    // Find selector prefix groups (e.g., mat-form-field, mat-label, mat-hint)
+    const selectorRoots = this.findSelectorRoots(selectors);
+
+    for (const root of selectorRoots) {
+      const groupMembers: Component[] = [];
+      let rootComponent: Component | undefined;
+
+      for (const [selector, comp] of componentsBySelector) {
+        if (selector === root || selector.startsWith(root + "-")) {
+          groupMembers.push(comp);
+          if (selector === root) {
+            rootComponent = comp;
+          }
+        }
+      }
+
+      // Only create a group if there are at least 2 members
+      if (groupMembers.length >= 2) {
+        // Convert selector root to component name format (e.g., mat-form-field → MatFormField)
+        const groupName = this.selectorToComponentName(root);
+
+        for (const member of groupMembers) {
+          member.metadata.compoundGroup = groupName;
+          if (member === rootComponent) {
+            member.metadata.isCompoundRoot = true;
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Find potential selector roots from a list of selectors.
+   * A root is a selector that is a prefix of at least one other selector.
+   * e.g., ["mat-form-field", "mat-label", "mat-hint"] → ["mat"]
+   * But we prefer longer prefixes: ["p-dropdown", "p-dropdown-item"] → ["p-dropdown"]
+   */
+  private findSelectorRoots(selectors: string[]): string[] {
+    const roots: string[] = [];
+    const sortedSelectors = [...selectors].sort((a, b) => a.length - b.length);
+
+    for (const selector of sortedSelectors) {
+      // Check if this selector is a prefix of any other selector (with dash separator)
+      const hasSubComponents = sortedSelectors.some(
+        (other) =>
+          other !== selector &&
+          other.startsWith(selector + "-"),
+      );
+
+      if (hasSubComponents) {
+        // Don't add if it's already a sub-component of an existing root
+        const isSubOfExisting = roots.some(
+          (root) => selector.startsWith(root + "-"),
+        );
+        if (!isSubOfExisting) {
+          roots.push(selector);
+        }
+      }
+    }
+
+    return roots;
+  }
+
+  /**
+   * Convert a selector to a component name (PascalCase).
+   * e.g., "mat-form-field" → "MatFormField"
+   */
+  private selectorToComponentName(selector: string): string {
+    return selector
+      .split("-")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("");
+  }
+
+  /**
+   * Detect compound groups for components in the same file (like React).
+   */
+  private detectCompoundGroupsByFile(components: Component[]): void {
+    // Group components by source file
+    const byFile = new Map<string, Component[]>();
+    for (const comp of components) {
+      // Check for Angular source by presence of 'selector' property
+      const angularSource = comp.source as { selector?: string; path?: string };
+      if (!angularSource.selector) continue;
+      // Skip if already grouped
+      if (comp.metadata.compoundGroup) continue;
+
+      const filePath = angularSource.path;
+      if (!filePath) continue;
+      if (!byFile.has(filePath)) {
+        byFile.set(filePath, []);
+      }
+      byFile.get(filePath)!.push(comp);
+    }
+
+    // For each file, detect shared prefix groups
+    for (const [_filePath, fileComponents] of byFile) {
+      if (fileComponents.length < 2) continue;
+
+      const names = fileComponents.map((c) => c.name);
+      const potentialRoots = this.findCompoundRoots(names);
+
+      for (const root of potentialRoots) {
+        const groupMembers = fileComponents.filter(
+          (c) => c.name === root || c.name.startsWith(root),
+        );
+
+        if (groupMembers.length >= 2) {
+          for (const member of groupMembers) {
+            member.metadata.compoundGroup = root;
+            if (member.name === root) {
+              member.metadata.isCompoundRoot = true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Detect compound groups for components in the same directory (like Svelte).
+   */
+  private detectCompoundGroupsByDirectory(components: Component[]): void {
+    // Group components by directory
+    const byDirectory = new Map<string, Component[]>();
+    for (const comp of components) {
+      // Check for Angular source by presence of 'selector' property
+      const angularSource = comp.source as { selector?: string; path?: string };
+      if (!angularSource.selector) continue;
+      // Skip if already grouped
+      if (comp.metadata.compoundGroup) continue;
+
+      const filePath = angularSource.path;
+      if (!filePath) continue;
+      const dirPath = dirname(filePath);
+      if (!byDirectory.has(dirPath)) {
+        byDirectory.set(dirPath, []);
+      }
+      byDirectory.get(dirPath)!.push(comp);
+    }
+
+    // For each directory, detect shared prefix groups
+    for (const [_dirPath, dirComponents] of byDirectory) {
+      if (dirComponents.length < 2) continue;
+
+      const names = dirComponents.map((c) => c.name);
+      const potentialRoots = this.findCompoundRoots(names);
+
+      for (const root of potentialRoots) {
+        const groupMembers = dirComponents.filter(
+          (c) => c.name === root || c.name.startsWith(root),
+        );
+
+        if (groupMembers.length >= 2) {
+          for (const member of groupMembers) {
+            member.metadata.compoundGroup = root;
+            if (member.name === root) {
+              member.metadata.isCompoundRoot = true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Find potential compound component roots from a list of names.
+   * A root is a name that is a prefix of at least one other name.
+   * e.g., ["Select", "SelectTrigger", "SelectContent"] → ["Select"]
+   */
+  private findCompoundRoots(names: string[]): string[] {
+    const roots: string[] = [];
+    const sortedNames = [...names].sort((a, b) => a.length - b.length);
+
+    for (const name of sortedNames) {
+      // Check if this name is a prefix of any other name
+      const hasSubComponents = sortedNames.some(
+        (other) =>
+          other !== name &&
+          other.startsWith(name) &&
+          // Ensure it's a proper prefix (next char is uppercase = new word)
+          other.length > name.length &&
+          /^[A-Z]/.test(other[name.length]!),
+      );
+
+      if (hasSubComponents) {
+        // Don't add if it's already a sub-component of an existing root
+        const isSubOfExisting = roots.some(
+          (root) => name.startsWith(root) && name.length > root.length,
+        );
+        if (!isSubOfExisting) {
+          roots.push(name);
+        }
+      }
+    }
+
+    return roots;
   }
 }

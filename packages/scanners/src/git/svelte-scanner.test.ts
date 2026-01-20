@@ -737,4 +737,119 @@ describe('SvelteComponentScanner', () => {
       expect(result.stats.duration).toBeGreaterThanOrEqual(0);
     });
   });
+
+  describe('compound component detection', () => {
+    it('detects compound components in the same directory by shared prefix', async () => {
+      vol.fromJSON({
+        '/project/src/tabs/Tabs.svelte': SIMPLE_BUTTON_SVELTE,
+        '/project/src/tabs/TabsList.svelte': SIMPLE_BUTTON_SVELTE,
+        '/project/src/tabs/TabsTrigger.svelte': SIMPLE_BUTTON_SVELTE,
+        '/project/src/tabs/TabsContent.svelte': SIMPLE_BUTTON_SVELTE,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(4);
+
+      // All should be in the "Tabs" compound group
+      for (const comp of result.items) {
+        expect(comp.metadata.compoundGroup).toBe('Tabs');
+      }
+
+      // Tabs should be marked as root
+      const tabsRoot = result.items.find(c => c.name === 'Tabs');
+      expect(tabsRoot?.metadata.isCompoundRoot).toBe(true);
+
+      // Others should not be root
+      const tabsList = result.items.find(c => c.name === 'TabsList');
+      expect(tabsList?.metadata.isCompoundRoot).toBeUndefined();
+    });
+
+    it('does not group components with different prefixes in same directory', async () => {
+      vol.fromJSON({
+        '/project/src/components/Button.svelte': SIMPLE_BUTTON_SVELTE,
+        '/project/src/components/Card.svelte': CARD_WITH_PROPS_SVELTE,
+        '/project/src/components/Input.svelte': SIMPLE_BUTTON_SVELTE,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(3);
+
+      // None should have compound groups since they don't share prefixes
+      for (const comp of result.items) {
+        expect(comp.metadata.compoundGroup).toBeUndefined();
+      }
+    });
+
+    it('does not group components across different directories', async () => {
+      vol.fromJSON({
+        '/project/src/tabs/Tabs.svelte': SIMPLE_BUTTON_SVELTE,
+        '/project/src/other/TabsList.svelte': SIMPLE_BUTTON_SVELTE,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(2);
+
+      // Should not be grouped since they're in different directories
+      for (const comp of result.items) {
+        expect(comp.metadata.compoundGroup).toBeUndefined();
+      }
+    });
+
+    it('handles nested compound groups (Select inside SelectGroup)', async () => {
+      vol.fromJSON({
+        '/project/src/select/Select.svelte': SIMPLE_BUTTON_SVELTE,
+        '/project/src/select/SelectTrigger.svelte': SIMPLE_BUTTON_SVELTE,
+        '/project/src/select/SelectContent.svelte': SIMPLE_BUTTON_SVELTE,
+        '/project/src/select/SelectItem.svelte': SIMPLE_BUTTON_SVELTE,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(4);
+
+      // All should be in the "Select" compound group
+      for (const comp of result.items) {
+        expect(comp.metadata.compoundGroup).toBe('Select');
+      }
+    });
+
+    it('requires at least 2 components for a compound group', async () => {
+      vol.fromJSON({
+        '/project/src/accordion/Accordion.svelte': SIMPLE_BUTTON_SVELTE,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]?.metadata.compoundGroup).toBeUndefined();
+    });
+  });
 });
