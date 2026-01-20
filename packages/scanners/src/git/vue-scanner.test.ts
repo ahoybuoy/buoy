@@ -65,7 +65,7 @@ describe('VueComponentScanner', () => {
       expect(result.items[0]!.source.type).toBe('vue');
     });
 
-    it('ignores lowercase named files', async () => {
+    it('detects lowercase named files and converts to PascalCase', async () => {
       vol.fromJSON({
         '/project/src/utils.vue': SIMPLE_BUTTON_VUE,
       });
@@ -77,7 +77,8 @@ describe('VueComponentScanner', () => {
 
       const result = await scanner.scan();
 
-      expect(result.items).toHaveLength(0);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('Utils');
     });
 
     it('detects multiple components', async () => {
