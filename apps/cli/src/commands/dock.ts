@@ -361,7 +361,7 @@ async function runAgentsDock(options: { dryRun?: boolean; json?: boolean }) {
     });
 
     spin.text = "Analyzing...";
-    const { SemanticDiffEngine } = await import("@buoy-design/core/analysis");
+    const { SemanticDiffEngine } = await import("@ahoybuoy/core/analysis");
     const engine = new SemanticDiffEngine();
     const diffResult = engine.analyzeComponents(scanResult.components, {
       checkDeprecated: true,
@@ -500,7 +500,7 @@ async function runSkillsDock(options: {
     });
 
     spin.text = "Analyzing...";
-    const { SemanticDiffEngine } = await import("@buoy-design/core/analysis");
+    const { SemanticDiffEngine } = await import("@ahoybuoy/core/analysis");
     const engine = new SemanticDiffEngine();
     const diffResult = engine.analyzeComponents(scanResult.components, {});
 
@@ -572,7 +572,7 @@ async function runContextDock(options: {
     const scanResult = await orchestrator.scan();
 
     spin.text = "Analyzing...";
-    const { SemanticDiffEngine } = await import("@buoy-design/core/analysis");
+    const { SemanticDiffEngine } = await import("@ahoybuoy/core/analysis");
     const engine = new SemanticDiffEngine();
     const diffResult = engine.analyzeComponents(scanResult.components, {
       availableTokens: scanResult.tokens,
@@ -735,7 +735,7 @@ async function runHooksDock(options: { commit?: boolean; claude?: boolean }) {
     const scanResult = await orchestrator.scan();
     spin.stop();
 
-    const { SemanticDiffEngine } = await import("@buoy-design/core/analysis");
+    const { SemanticDiffEngine } = await import("@ahoybuoy/core/analysis");
     const engine = new SemanticDiffEngine();
     const diffResult = engine.analyzeComponents(scanResult.components, {});
 

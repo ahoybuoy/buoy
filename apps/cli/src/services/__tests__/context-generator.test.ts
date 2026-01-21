@@ -11,7 +11,7 @@ import type {
   DriftSignal,
   ColorValue,
   SpacingValue,
-} from "@buoy-design/core";
+} from "@ahoybuoy/core";
 
 // Helper to create mock component
 function createMockComponent(

@@ -41,8 +41,8 @@ const { mockScanners, mockState } = vi.hoisted(() => {
   };
 });
 
-// Mock the @buoy-design/scanners/git module
-vi.mock("@buoy-design/scanners/git", () => mockScanners);
+// Mock the @ahoybuoy/scanners/git module
+vi.mock("@ahoybuoy/scanners/git", () => mockScanners);
 
 describe("ScanOrchestrator", () => {
   beforeEach(() => {

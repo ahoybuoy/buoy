@@ -3,7 +3,7 @@
  * Works with both local SQLite and cloud API.
  */
 
-import type { Component, DesignToken, DriftSignal } from '@buoy-design/core';
+import type { Component, DesignToken, DriftSignal } from '@ahoybuoy/core';
 
 // Project configuration stored with the project
 export interface ProjectConfig {

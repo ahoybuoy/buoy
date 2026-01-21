@@ -15,7 +15,7 @@ import {
   setJsonMode,
 } from "../output/reporters.js";
 import { formatJson } from "../output/formatters.js";
-import type { DriftSignal } from "@buoy-design/core";
+import type { DriftSignal } from "@ahoybuoy/core";
 
 const BASELINE_DIR = ".buoy";
 const BASELINE_FILE = "baseline.json";
@@ -183,9 +183,9 @@ export function createBaselineCommand(): Command {
 
         // Import required modules
         const { ReactComponentScanner } =
-          await import("@buoy-design/scanners/git");
+          await import("@ahoybuoy/scanners/git");
         const { SemanticDiffEngine } =
-          await import("@buoy-design/core/analysis");
+          await import("@ahoybuoy/core/analysis");
 
         // Scan components
         const components: Awaited<
@@ -323,9 +323,9 @@ export function createBaselineCommand(): Command {
 
         // Import required modules
         const { ReactComponentScanner } =
-          await import("@buoy-design/scanners/git");
+          await import("@ahoybuoy/scanners/git");
         const { SemanticDiffEngine } =
-          await import("@buoy-design/core/analysis");
+          await import("@ahoybuoy/core/analysis");
 
         // Scan components
         const components: Awaited<

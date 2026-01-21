@@ -22,9 +22,9 @@ import {
   formatAgent,
 } from "../output/formatters.js";
 import { writeFileSync } from "fs";
-import type { DriftSignal, Severity } from "@buoy-design/core";
+import type { DriftSignal, Severity } from "@ahoybuoy/core";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
-import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
+import { withOptionalCache, type ScanCache } from "@ahoybuoy/scanners";
 import { formatUpgradeHint } from "../utils/upgrade-hints.js";
 
 export function createDriftCommand(): Command {

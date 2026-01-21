@@ -6,7 +6,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { exec } from 'child_process';
 import chalk from 'chalk';
-import type { DriftSignal, Severity } from '@buoy-design/core';
+import type { DriftSignal, Severity } from '@ahoybuoy/core';
 import { showMenu, sectionHeader, info, codeBlock } from './menu.js';
 import { formatDriftTypeForDesigners } from '../output/formatters.js';
 

@@ -7,7 +7,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
-import type { Fix } from '@buoy-design/core';
+import type { Fix } from '@ahoybuoy/core';
 
 export interface SafetyCheckResult {
   safe: boolean;

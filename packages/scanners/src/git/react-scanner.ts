@@ -4,8 +4,8 @@ import type {
   PropDefinition,
   ReactSource,
   HardcodedValue,
-} from "@buoy-design/core";
-import { createComponentId } from "@buoy-design/core";
+} from "@ahoybuoy/core";
+import { createComponentId } from "@ahoybuoy/core";
 import * as ts from "typescript";
 import { readFile } from "fs/promises";
 import { relative } from "path";

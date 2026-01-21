@@ -38,7 +38,7 @@ export async function setupCI(_cwd: string): Promise<CISetupResult> {
   console.log('');
   info('Add this to your CI pipeline for basic drift checking:');
   console.log('');
-  console.log(chalk.cyan('    npx @buoy-design/cli check'));
+  console.log(chalk.cyan('    npx @ahoybuoy/cli check'));
   console.log('');
 
   info('Options:');

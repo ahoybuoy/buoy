@@ -1,8 +1,8 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve, relative } from 'path';
 import { glob } from 'glob';
-import type { DesignToken, TokenSource } from '@buoy-design/core';
-import { createTokenId } from '@buoy-design/core';
+import type { DesignToken, TokenSource } from '@ahoybuoy/core';
+import { createTokenId } from '@ahoybuoy/core';
 
 export interface ContainerConfig {
   center?: boolean;

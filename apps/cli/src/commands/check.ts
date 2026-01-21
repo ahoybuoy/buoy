@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { loadConfig, getConfigPath } from "../config/loader.js";
 import { buildAutoConfig } from "../config/auto-detect.js";
 import type { BuoyConfig } from "../config/schema.js";
-import type { DriftSignal, Severity, DesignToken, Component } from "@buoy-design/core";
+import type { DriftSignal, Severity, DesignToken, Component } from "@ahoybuoy/core";
 import { execSync } from "node:child_process";
 import {
   DriftAnalysisService,

@@ -14,7 +14,7 @@ import chalk from 'chalk';
 import { loadConfig, getConfigPath } from '../config/loader.js';
 import { buildAutoConfig } from '../config/auto-detect.js';
 import { ScanOrchestrator } from '../scan/orchestrator.js';
-import type { Component } from '@buoy-design/core';
+import type { Component } from '@ahoybuoy/core';
 import {
   spinner,
   error,

@@ -67,7 +67,7 @@ vi.mock('../../scan/orchestrator.js', () => ({
   })),
 }));
 
-vi.mock('@buoy-design/core/analysis', () => ({
+vi.mock('@ahoybuoy/core/analysis', () => ({
   SemanticDiffEngine: vi.fn().mockImplementation(() => ({
     analyzeComponents: vi.fn().mockReturnValue({
       drifts: [],

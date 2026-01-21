@@ -20,12 +20,12 @@ import {
   extractStyles,
   extractCssFileStyles,
   type TemplateType,
-} from '@buoy-design/scanners';
+} from '@ahoybuoy/scanners';
 import {
   parseCssValues,
   generateTokens,
   type ExtractedValue,
-} from '@buoy-design/core';
+} from '@ahoybuoy/core';
 import { createTokensLookupCommand } from './tokens-lookup.js';
 
 export function createTokensCommand(): Command {

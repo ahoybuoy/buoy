@@ -4,8 +4,8 @@ import type {
   PropDefinition,
   SvelteSource,
   HardcodedValue,
-} from "@buoy-design/core";
-import { createComponentId } from "@buoy-design/core";
+} from "@ahoybuoy/core";
+import { createComponentId } from "@ahoybuoy/core";
 import { readFile } from "fs/promises";
 import { relative, basename, dirname } from "path";
 import {

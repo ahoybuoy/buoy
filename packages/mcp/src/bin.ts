@@ -42,7 +42,7 @@ Claude Code integration:
     "mcpServers": {
       "buoy": {
         "command": "npx",
-        "args": ["@buoy-design/mcp", "serve"]
+        "args": ["@ahoybuoy/mcp", "serve"]
       }
     }
   }

@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { glob } from 'glob';
 import { relative } from 'path';
-import type { DriftSignal, DriftSource } from '@buoy-design/core';
+import type { DriftSignal, DriftSource } from '@ahoybuoy/core';
 
 export interface ArbitraryValue {
   type: 'color' | 'spacing' | 'size' | 'timing' | 'grid' | 'css-property' | 'border' | 'layout' | 'transform' | 'filter' | 'typography' | 'visual' | 'other';

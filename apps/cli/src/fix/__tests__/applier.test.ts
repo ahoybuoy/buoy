@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { applyFixes, generateFixDiff } from '../applier.js';
-import type { Fix } from '@buoy-design/core';
+import type { Fix } from '@ahoybuoy/core';
 import * as fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 

@@ -16,7 +16,7 @@ import { spinner, error as errorLog } from '../output/reporters.js';
 import { ScanOrchestrator } from '../scan/orchestrator.js';
 import { ProjectDetector } from '../detect/project-detector.js';
 import type { BuoyConfig } from '../config/schema.js';
-import type { DriftSignal, Component, DesignToken } from '@buoy-design/core';
+import type { DriftSignal, Component, DesignToken } from '@ahoybuoy/core';
 import {
   showMenu,
 } from '../wizard/menu.js';
@@ -193,7 +193,7 @@ async function runQuickOnboard(cwd: string): Promise<void> {
     console.log(chalk.cyan('  Creating design tokens...'));
     const { spawn } = await import('child_process');
     await new Promise<void>((resolve) => {
-      const child = spawn('npx', ['@buoy-design/cli', 'anchor', '-y'], {
+      const child = spawn('npx', ['@ahoybuoy/cli', 'anchor', '-y'], {
         cwd,
         stdio: 'inherit',
       });
@@ -222,7 +222,7 @@ async function runQuickOnboard(cwd: string): Promise<void> {
     const detector = new ProjectDetector(cwd);
     const projectInfo = await detector.detect();
 
-    const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
+    const { SemanticDiffEngine } = await import('@ahoybuoy/core/analysis');
     const engine = new SemanticDiffEngine();
     const diffResult = engine.analyzeComponents(components, {
       checkDeprecated: true,
@@ -437,7 +437,7 @@ async function runScan(cwd: string): Promise<{
 
     // Run drift analysis
     spin.text = 'Analyzing for drift...';
-    const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
+    const { SemanticDiffEngine } = await import('@ahoybuoy/core/analysis');
     const engine = new SemanticDiffEngine();
     const diffResult = engine.analyzeComponents(components, {
       checkDeprecated: true,
@@ -843,7 +843,7 @@ Analyzing your project...
     const projectInfo = await detector.detect();
 
     // Run drift analysis
-    const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
+    const { SemanticDiffEngine } = await import('@ahoybuoy/core/analysis');
     const engine = new SemanticDiffEngine();
     const diffResult = engine.analyzeComponents(components, {
       checkDeprecated: true,

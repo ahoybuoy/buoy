@@ -1,6 +1,6 @@
 // apps/cli/src/scan/orchestrator.ts
-import type { Component, DesignToken } from "@buoy-design/core";
-import type { ScanCache } from "@buoy-design/scanners";
+import type { Component, DesignToken } from "@ahoybuoy/core";
+import type { ScanCache } from "@ahoybuoy/scanners";
 import type { BuoyConfig, SourcesConfig } from "../config/schema.js";
 
 /**
@@ -341,10 +341,10 @@ export class ScanOrchestrator {
       WebComponentScanner,
       TemplateScanner,
       TokenScanner,
-    } = await import("@buoy-design/scanners/git");
+    } = await import("@ahoybuoy/scanners/git");
 
-    const { FigmaComponentScanner } = await import("@buoy-design/scanners/figma");
-    const { StorybookScanner } = await import("@buoy-design/scanners/storybook");
+    const { FigmaComponentScanner } = await import("@ahoybuoy/scanners/figma");
+    const { StorybookScanner } = await import("@ahoybuoy/scanners/storybook");
 
     return {
       ReactComponentScanner,

@@ -5,7 +5,7 @@
  * Helps AI agents understand and follow design system rules.
  */
 
-import type { Component, DesignToken, DriftSignal } from '@buoy-design/core';
+import type { Component, DesignToken, DriftSignal } from '@ahoybuoy/core';
 
 export type DetailLevel = 'minimal' | 'standard' | 'comprehensive';
 

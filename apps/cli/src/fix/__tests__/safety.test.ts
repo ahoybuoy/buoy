@@ -4,7 +4,7 @@ import {
   validateFixTargets,
   isGitRepository,
 } from '../safety.js';
-import type { Fix } from '@buoy-design/core';
+import type { Fix } from '@ahoybuoy/core';
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 

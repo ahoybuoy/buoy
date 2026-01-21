@@ -1,5 +1,5 @@
 // packages/agents/src/index.ts
-// Main entry point for @buoy-design/agents
+// Main entry point for @ahoybuoy/agents
 
 // Agents
 export { HistoryAgent } from './history.js';

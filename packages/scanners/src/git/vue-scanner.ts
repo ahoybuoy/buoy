@@ -1,6 +1,6 @@
 import { SignalAwareScanner, ScanResult, ScannerConfig } from "../base/index.js";
-import type { Component, PropDefinition, VueSource, HardcodedValue } from "@buoy-design/core";
-import { createComponentId } from "@buoy-design/core";
+import type { Component, PropDefinition, VueSource, HardcodedValue } from "@ahoybuoy/core";
+import { createComponentId } from "@ahoybuoy/core";
 import { readFile } from "fs/promises";
 import { relative, basename, dirname, resolve } from "path";
 import {

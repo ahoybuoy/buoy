@@ -2,7 +2,7 @@
 // Visual 1-page reports for design system health
 
 import chalk from 'chalk';
-import type { DriftSignal } from '@buoy-design/core';
+import type { DriftSignal } from '@ahoybuoy/core';
 
 // ============================================================================
 // Type Definitions

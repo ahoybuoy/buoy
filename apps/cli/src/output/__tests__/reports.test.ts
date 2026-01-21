@@ -1,6 +1,6 @@
 // apps/cli/src/output/__tests__/reports.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { DriftSignal, Component, DesignToken, Severity } from '@buoy-design/core';
+import type { DriftSignal, Component, DesignToken, Severity } from '@ahoybuoy/core';
 import {
   formatDeveloperBrief,
   formatTeamDashboard,

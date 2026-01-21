@@ -1,6 +1,6 @@
 /**
  * LocalScanStore - SQLite-based implementation of ScanStore.
- * Uses the @buoy-design/db package for persistence.
+ * Uses the @ahoybuoy/db package for persistence.
  */
 
 import {
@@ -12,10 +12,10 @@ import {
   tokens,
   driftSignals,
   snapshots,
-} from '@buoy-design/db';
+} from '@ahoybuoy/db';
 import { eq, desc } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
-import type { Component, DesignToken, DriftSignal } from '@buoy-design/core';
+import type { Component, DesignToken, DriftSignal } from '@ahoybuoy/core';
 import type {
   ScanStore,
   StoredProject,

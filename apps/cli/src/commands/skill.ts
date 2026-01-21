@@ -89,7 +89,7 @@ function createExportCommand(): Command {
 
         // Run drift analysis
         spin.text = 'Analyzing for anti-patterns...';
-        const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
+        const { SemanticDiffEngine } = await import('@ahoybuoy/core/analysis');
         const engine = new SemanticDiffEngine();
         const diffResult = engine.analyzeComponents(scanResult.components, {
           checkDeprecated: true,

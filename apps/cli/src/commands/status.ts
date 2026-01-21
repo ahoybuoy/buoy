@@ -15,10 +15,10 @@ import {
 import { ProjectDetector } from "../detect/project-detector.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import type { BuoyConfig } from "../config/schema.js";
-import type { DriftSignal, Component } from "@buoy-design/core";
+import type { DriftSignal, Component } from "@ahoybuoy/core";
 import { discoverProject, formatInsightsBlock, promptNextAction, isTTY } from '../insights/index.js';
 import { createStore, getProjectName, type ScanStore, type ScanSnapshot } from '../store/index.js';
-import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
+import { withOptionalCache, type ScanCache } from "@ahoybuoy/scanners";
 
 export function createStatusCommand(): Command {
   const cmd = new Command("status")
@@ -136,7 +136,7 @@ export function createStatusCommand(): Command {
         // Run drift analysis
         spin.text = "Analyzing drift...";
         const { SemanticDiffEngine } =
-          await import("@buoy-design/core/analysis");
+          await import("@ahoybuoy/core/analysis");
         const engine = new SemanticDiffEngine();
         const diffResult = engine.analyzeComponents(components, {
           checkDeprecated: true,

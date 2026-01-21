@@ -1,4 +1,4 @@
-import type { BuoyPlugin, ScanContext, ScanResult, Component } from '@buoy-design/core';
+import type { BuoyPlugin, ScanContext, ScanResult, Component } from '@ahoybuoy/core';
 import type { Scanner, ScannerConfig } from './base/scanner.js';
 
 type ScannerClass<T extends Scanner<Component>> = new (config: ScannerConfig) => T;

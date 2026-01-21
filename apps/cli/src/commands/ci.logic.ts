@@ -1,5 +1,5 @@
 // apps/cli/src/commands/ci.logic.ts
-import type { DriftSignal, Severity } from '@buoy-design/core';
+import type { DriftSignal, Severity } from '@ahoybuoy/core';
 
 export interface CIResult {
   version: string;

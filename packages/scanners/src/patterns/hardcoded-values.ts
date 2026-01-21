@@ -5,7 +5,7 @@
  * (colors, spacing, fonts) across all framework scanners.
  */
 
-import type { HardcodedValue } from "@buoy-design/core";
+import type { HardcodedValue } from "@ahoybuoy/core";
 
 /**
  * Patterns for detecting hardcoded color values

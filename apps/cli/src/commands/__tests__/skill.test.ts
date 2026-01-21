@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Command } from "commander";
-import type { Component, DesignToken, DriftSignal } from "@buoy-design/core";
+import type { Component, DesignToken, DriftSignal } from "@ahoybuoy/core";
 
 // Mock modules before imports
 vi.mock("../../config/loader.js", () => ({
@@ -16,7 +16,7 @@ vi.mock("../../scan/orchestrator.js", () => ({
   ScanOrchestrator: vi.fn(),
 }));
 
-vi.mock("@buoy-design/core/analysis", () => ({
+vi.mock("@ahoybuoy/core/analysis", () => ({
   SemanticDiffEngine: vi.fn(),
 }));
 
@@ -59,7 +59,7 @@ import { createSkillCommand } from "../skill.js";
 import * as config from "../../config/loader.js";
 import * as autoDetect from "../../config/auto-detect.js";
 import * as orchestrator from "../../scan/orchestrator.js";
-import * as analysis from "@buoy-design/core/analysis";
+import * as analysis from "@ahoybuoy/core/analysis";
 import * as reporters from "../../output/reporters.js";
 import * as fs from "fs";
 

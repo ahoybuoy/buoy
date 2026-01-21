@@ -1,5 +1,5 @@
 /**
- * @buoy-design/mcp
+ * @ahoybuoy/mcp
  *
  * MCP server for Buoy design system context.
  * Provides AI agents with design tokens, components, patterns, and tools.

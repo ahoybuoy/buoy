@@ -24,7 +24,7 @@ import {
   collectGitHistory,
   collectUsages,
   collectImports,
-} from "@buoy-design/core";
+} from "@ahoybuoy/core";
 
 export function createGraphCommand(): Command {
   const cmd = new Command("graph")

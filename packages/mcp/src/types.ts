@@ -2,7 +2,7 @@
  * Types for Buoy MCP server
  */
 
-import type { DriftSignal } from "@buoy-design/core";
+import type { DriftSignal } from "@ahoybuoy/core";
 
 /**
  * Token with AI-friendly intent metadata

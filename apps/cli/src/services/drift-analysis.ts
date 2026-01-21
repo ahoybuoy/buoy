@@ -9,12 +9,12 @@
  * 4. Filtering against baseline
  */
 
-import type { DriftSignal, Severity, Component } from "@buoy-design/core";
+import type { DriftSignal, Severity, Component } from "@ahoybuoy/core";
 import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
-import { getSeverityWeight } from "@buoy-design/core";
-import { TailwindScanner, ScanCache, extractStaticClassStrings } from "@buoy-design/scanners";
-import { detectRepeatedPatterns, type ClassOccurrence } from "@buoy-design/core";
+import { getSeverityWeight } from "@ahoybuoy/core";
+import { TailwindScanner, ScanCache, extractStaticClassStrings } from "@ahoybuoy/scanners";
+import { detectRepeatedPatterns, type ClassOccurrence } from "@ahoybuoy/core";
 import { glob } from "glob";
 import { readFile } from "fs/promises";
 
@@ -51,7 +51,7 @@ export interface DriftAnalysisResult {
 
 /**
  * Severity order for filtering and sorting (0 = lowest, 2 = highest)
- * Use getSeverityWeight from @buoy-design/core for consistent ordering
+ * Use getSeverityWeight from @ahoybuoy/core for consistent ordering
  */
 const SEVERITY_ORDER: Record<Severity, number> = {
   info: 0,
@@ -188,7 +188,7 @@ export class DriftAnalysisService {
 
     // Step 2: Run semantic diff analysis
     onProgress?.("Analyzing drift...");
-    const { SemanticDiffEngine } = await import("@buoy-design/core/analysis");
+    const { SemanticDiffEngine } = await import("@ahoybuoy/core/analysis");
     const engine = new SemanticDiffEngine();
     const diffResult = engine.analyzeComponents(components, {
       checkDeprecated: true,
