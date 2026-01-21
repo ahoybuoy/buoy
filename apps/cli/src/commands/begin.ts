@@ -931,7 +931,7 @@ Analyzing your project...
       console.log('  • buoy dock hooks             Interactive setup for Claude or git hooks');
       console.log('  • buoy dock hooks --claude    Claude hooks (design system in every session)');
       console.log('  • buoy dock hooks --commit    Git pre-commit hooks (catch drift before commit)');
-      console.log('  • buoy ship github            GitHub PR bot (comments on drift)');
+      console.log('  • buoy ahoy github            GitHub PR bot (comments on drift)');
     }
 
     console.log('');

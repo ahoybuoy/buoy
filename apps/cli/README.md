@@ -25,7 +25,7 @@ This scans your project and walks you through setup.
 | `buoy check` | Pre-commit drift validation |
 | `buoy fix` | Auto-fix drift issues |
 | `buoy dock` | Configure project (agents, hooks, etc.) |
-| `buoy ship` | Cloud features (login, GitHub bot, billing) |
+| `buoy ahoy` | Cloud features (login, GitHub bot, billing) |
 
 ## Fix Command
 

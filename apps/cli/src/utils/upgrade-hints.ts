@@ -20,35 +20,35 @@ const HINTS: Record<HintContext, UpgradeHint[]> = {
     {
       condition: () => !isLoggedIn(),
       message: 'Get PR comments that catch drift before it ships',
-      cta: 'buoy ship login',
+      cta: 'buoy ahoy login',
     },
   ],
   'after-health-score': [
     {
       condition: () => !isLoggedIn(),
       message: 'Track health score trends over time',
-      cta: 'buoy ship login',
+      cta: 'buoy ahoy login',
     },
   ],
   'after-check-fail': [
     {
       condition: () => !isLoggedIn(),
       message: 'Block PRs with drift automatically',
-      cta: 'buoy ship github',
+      cta: 'buoy ahoy github',
     },
   ],
   'after-scan': [
     {
       condition: () => !isLoggedIn(),
       message: 'Share scan results with your team',
-      cta: 'buoy ship login',
+      cta: 'buoy ahoy login',
     },
   ],
   'after-fix': [
     {
       condition: () => !isLoggedIn(),
       message: 'Auto-fix suggestions in PRs',
-      cta: 'buoy ship login',
+      cta: 'buoy ahoy login',
     },
   ],
 };

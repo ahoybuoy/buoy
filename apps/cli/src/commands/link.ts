@@ -188,7 +188,7 @@ export function createLinkCommand(): Command {
       // Check login
       if (!isLoggedIn()) {
         error('Not logged in');
-        info('Run `buoy ship login` first');
+        info('Run `buoy ahoy login` first');
         process.exit(1);
       }
 

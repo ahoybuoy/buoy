@@ -221,8 +221,8 @@ jobs:
 
 ```bash
 # Set up GitHub PR bot
-buoy ship login
-buoy ship github
+buoy ahoy login
+buoy ahoy github
 ```
 
 The GitHub bot automatically comments on PRs with drift analysis.
@@ -320,10 +320,10 @@ sources:
 Ship your drift detection to the cloud:
 
 ```bash
-buoy ship login             # Authenticate
-buoy ship status            # View account, bot, sync status
-buoy ship github            # Set up GitHub PR bot
-buoy ship billing           # Manage subscription
+buoy ahoy login             # Authenticate
+buoy ahoy status            # View account, bot, sync status
+buoy ahoy github            # Set up GitHub PR bot
+buoy ahoy billing           # Manage subscription
 ```
 
 Features:

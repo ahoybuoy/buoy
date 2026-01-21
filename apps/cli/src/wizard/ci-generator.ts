@@ -27,8 +27,8 @@ export async function setupCI(_cwd: string): Promise<CISetupResult> {
     'Works with GitHub and GitLab',
   ]);
   console.log('');
-  console.log(`  Run: ${chalk.cyan('buoy ship github')} to set up the GitHub bot`);
-  console.log(`  Run: ${chalk.cyan('buoy ship gitlab')} to set up the GitLab bot`);
+  console.log(`  Run: ${chalk.cyan('buoy ahoy github')} to set up the GitHub bot`);
+  console.log(`  Run: ${chalk.cyan('buoy ahoy gitlab')} to set up the GitLab bot`);
   console.log('');
 
   console.log(chalk.dim('─'.repeat(40)));

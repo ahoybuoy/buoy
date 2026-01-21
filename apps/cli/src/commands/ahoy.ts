@@ -1,13 +1,13 @@
 /**
- * buoy ship - Buoy Cloud management
+ * buoy ahoy - Buoy Cloud management
  *
- * buoy ship login    - Authenticate
- * buoy ship logout   - Sign out
- * buoy ship status   - Show account, project, and bot status
- * buoy ship github   - Set up GitHub PR bot
- * buoy ship gitlab   - Set up GitLab PR bot (coming soon)
- * buoy ship billing  - Manage subscription
- * buoy ship plans    - Compare pricing
+ * buoy ahoy login    - Authenticate
+ * buoy ahoy logout   - Sign out
+ * buoy ahoy status   - Show account, project, and bot status
+ * buoy ahoy github   - Set up GitHub PR bot
+ * buoy ahoy gitlab   - Set up GitLab PR bot (coming soon)
+ * buoy ahoy billing  - Manage subscription
+ * buoy ahoy plans    - Compare pricing
  */
 
 import { Command } from 'commander';
@@ -39,11 +39,11 @@ import { createLogoutCommand } from './logout.js';
 import { createBillingCommand } from './billing.js';
 import { createPlansCommand } from './plans.js';
 
-export function createShipCommand(): Command {
-  const cmd = new Command('ship');
+export function createAhoyCommand(): Command {
+  const cmd = new Command('ahoy');
 
   cmd
-    .description('Ship to Buoy Cloud - PR bot and team features')
+    .description('Ahoy! Buoy Cloud - PR bot and team features')
     .addCommand(createLoginCommand())
     .addCommand(createLogoutCommand())
     .addCommand(createStatusCommand())
@@ -77,7 +77,7 @@ function createStatusCommand(): Command {
           console.log(JSON.stringify({ loggedIn: false }));
         } else {
           warning('Not logged in');
-          info('Run `buoy ship login` to sign in');
+          info('Run `buoy ahoy login` to sign in');
         }
         return;
       }
@@ -89,7 +89,7 @@ function createStatusCommand(): Command {
         const meResult = await getMe();
         if (!meResult.ok || !meResult.data) {
           spin.fail('Session expired');
-          error('Please login again: buoy ship login');
+          error('Please login again: buoy ahoy login');
           process.exit(1);
         }
 
@@ -174,7 +174,7 @@ function createStatusCommand(): Command {
         console.log(chalk.bold('GitHub Bot'));
         if (installations.length === 0) {
           keyValue('  Status', chalk.dim('Not installed'));
-          info('  Run `buoy ship github` to set up PR comments');
+          info('  Run `buoy ahoy github` to set up PR comments');
         } else {
           for (const install of installations) {
             const statusIcon = install.suspended ? chalk.red('suspended') : chalk.green('active');
@@ -198,7 +198,7 @@ function createStatusCommand(): Command {
           newline();
           warning(`Payment ${billing.paymentAlert.status}`);
           info(`${billing.paymentAlert.daysRemaining} days until account restriction`);
-          info(`Run ${chalk.cyan('buoy ship billing')} to update payment`);
+          info(`Run ${chalk.cyan('buoy ahoy billing')} to update payment`);
         }
 
       } catch (err) {
@@ -227,7 +227,7 @@ function createGitHubCommand(): Command {
           console.log(JSON.stringify({ error: 'Not logged in' }));
         } else {
           error('Not logged in');
-          info('Run `buoy ship login` to sign in');
+          info('Run `buoy ahoy login` to sign in');
         }
         process.exit(1);
       }
@@ -272,7 +272,7 @@ function createGitHubCommand(): Command {
           success(`${installations.length} installation(s) connected`);
           newline();
           info('To add another org/account, run this command again');
-          info('To disconnect: buoy ship github --disconnect <account>');
+          info('To disconnect: buoy ahoy github --disconnect <account>');
 
           // Still offer to add more
           newline();
@@ -305,9 +305,9 @@ function createGitHubCommand(): Command {
         info('Choose which repositories Buoy should have access to.');
         newline();
         console.log(chalk.green.bold('Free for public repositories!'));
-        info('Private repos require a Team plan. See: buoy ship plans');
+        info('Private repos require a Team plan. See: buoy ahoy plans');
         newline();
-        info('After installation, run `buoy ship status` to verify.');
+        info('After installation, run `buoy ahoy status` to verify.');
       } catch {
         error('Failed to open browser');
         newline();
@@ -360,7 +360,7 @@ async function handleGitHubDisconnect(account: string | true, json: boolean): Pr
     spin.stop();
     error('Multiple installations found. Specify which to disconnect:');
     for (const i of installations) {
-      info(`  buoy ship github --disconnect ${i.accountLogin}`);
+      info(`  buoy ahoy github --disconnect ${i.accountLogin}`);
     }
     process.exit(1);
   }

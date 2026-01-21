@@ -13,7 +13,7 @@ import {
   createComponentsCommand,
   createScanCommand,
   createCommandsCommand,
-  createShipCommand,
+  createAhoyCommand,
 } from "./commands/index.js";
 
 export function createCli(): Command {
@@ -36,7 +36,7 @@ Command Groups:
   CI/Hooks           check, baseline
   Fixing             fix
   Plugins            plugins
-  Ship (Cloud)       ship (login, logout, status, github, gitlab, billing, plans)
+  Ahoy (Cloud)       ahoy (login, logout, status, github, gitlab, billing, plans)
 
 Quick Start:
   $ buoy                    # auto-launches wizard if no config
@@ -69,8 +69,8 @@ Quick Start:
   // === Plugins ===
   program.addCommand(createPluginsCommand());
 
-  // === Ship (Cloud) ===
-  program.addCommand(createShipCommand());
+  // === Ahoy (Cloud) ===
+  program.addCommand(createAhoyCommand());
 
   return program;
 }

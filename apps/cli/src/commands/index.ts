@@ -15,5 +15,5 @@ export { createComponentsCommand } from "./components.js";
 export { createScanCommand } from "./scan.js";
 export { createCommandsCommand } from "./commands.js";
 
-// Ship (cloud features)
-export { createShipCommand } from "./ship.js";
+// Ahoy (cloud features)
+export { createAhoyCommand } from "./ahoy.js";

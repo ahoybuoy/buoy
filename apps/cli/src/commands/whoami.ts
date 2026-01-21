@@ -23,7 +23,7 @@ export function createWhoamiCommand(): Command {
           console.log(JSON.stringify({ loggedIn: false }));
         } else {
           warning('Not logged in');
-          info('Run `buoy ship login` to sign in');
+          info('Run `buoy ahoy login` to sign in');
           info('Run `buoy login --signup` to create an account');
         }
         return;
@@ -41,7 +41,7 @@ export function createWhoamiCommand(): Command {
         if (result.status === 401) {
           clearCloudConfig();
           error('Your session has expired. Please login again.');
-          info('Run `buoy ship login` to authenticate');
+          info('Run `buoy ahoy login` to authenticate');
         } else {
           error(`Could not verify credentials: ${result.error}`);
         }

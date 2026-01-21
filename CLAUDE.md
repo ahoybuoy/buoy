@@ -101,7 +101,7 @@ buoy
 │   └── clear               # Remove baseline
 ├── fix                     # Suggest/apply fixes
 ├── plugins                 # Show available scanners
-└── ship                    # Cloud features
+└── ahoy                    # Cloud features
     ├── login               # Authenticate
     ├── logout              # Sign out
     ├── status              # Account + bot + sync status

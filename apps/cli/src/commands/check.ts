@@ -285,7 +285,7 @@ export function createCheckCommand(): Command {
         if (options.report) {
           if (!isLoggedIn()) {
             if (!options.quiet) {
-              console.error("Error: Not logged in. Run `buoy ship login` first.");
+              console.error("Error: Not logged in. Run `buoy ahoy login` first.");
             }
           } else if (!options.repo) {
             if (!options.quiet) {

@@ -57,7 +57,7 @@ export function generatePRCommentPreview(
   lines.push(chalk.dim('─'.repeat(40)));
   lines.push('');
   lines.push(chalk.dim('This is a preview. Install Buoy GitHub App to get real PR comments.'));
-  lines.push(chalk.cyan('→ buoy ship github'));
+  lines.push(chalk.cyan('→ buoy ahoy github'));
 
   return lines.join('\n');
 }
