@@ -23,8 +23,8 @@ import {
   keyValue,
   newline,
 } from '../output/reporters.js';
-import { parseTokenFile, detectFormat } from '@ahoybuoy/core';
-import type { DesignToken } from '@ahoybuoy/core';
+import { parseTokenFile, detectFormat } from '@buoy-design/core';
+import type { DesignToken } from '@buoy-design/core';
 
 interface ImportOptions {
   output?: string;

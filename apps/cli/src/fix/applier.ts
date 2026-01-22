@@ -6,7 +6,7 @@
 
 import { readFile, writeFile, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import type { Fix, FixResult, FixApplyOptions } from '@ahoybuoy/core';
+import type { Fix, FixResult, FixApplyOptions } from '@buoy-design/core';
 
 export interface ApplyFixesResult {
   results: FixResult[];

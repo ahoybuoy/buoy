@@ -29,8 +29,8 @@ import {
   getQueueCount,
 } from "../cloud/index.js";
 import { createStore, getProjectName, wouldUseCloud, type ScanStore } from "../store/index.js";
-import { withOptionalCache, type ScanCache } from "@ahoybuoy/scanners";
-import type { Component, DesignToken, PropDefinition } from "@ahoybuoy/core";
+import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
+import type { Component, DesignToken, PropDefinition } from "@buoy-design/core";
 import type { ScanError } from "../scan/orchestrator.js";
 
 export function createScanCommand(): Command {

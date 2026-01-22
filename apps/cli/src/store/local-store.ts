@@ -5,7 +5,7 @@
  * This stub exists for API compatibility - use `buoy ahoy login` for persistent history.
  */
 
-import type { Component, DesignToken, DriftSignal } from '@ahoybuoy/core';
+import type { Component, DesignToken, DriftSignal } from '@buoy-design/core';
 import type {
   ScanStore,
   StoredProject,

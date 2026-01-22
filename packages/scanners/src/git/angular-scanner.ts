@@ -1,6 +1,6 @@
 import { SignalAwareScanner, ScanResult, ScannerConfig } from "../base/index.js";
-import type { Component, PropDefinition, HardcodedValue } from "@ahoybuoy/core";
-import { createComponentId } from "@ahoybuoy/core";
+import type { Component, PropDefinition, HardcodedValue } from "@buoy-design/core";
+import { createComponentId } from "@buoy-design/core";
 import * as ts from "typescript";
 import { readFileSync } from "fs";
 import { relative, dirname } from "path";

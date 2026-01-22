@@ -5,7 +5,7 @@
  * optimized for progressive disclosure in AI agent workflows.
  */
 
-import type { Component, DesignToken, DriftSignal } from '@ahoybuoy/core';
+import type { Component, DesignToken, DriftSignal } from '@buoy-design/core';
 import { join } from 'path';
 
 export interface SkillExportOptions {

@@ -18,8 +18,8 @@ import {
   detectFormat,
   compareTokens,
   type DesignToken,
-} from '@ahoybuoy/core';
-import { TokenScanner } from '@ahoybuoy/scanners';
+} from '@buoy-design/core';
+import { TokenScanner } from '@buoy-design/scanners';
 
 export function createCompareCommand(): Command {
   const cmd = new Command('compare')

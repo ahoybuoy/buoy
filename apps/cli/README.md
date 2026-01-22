@@ -1,11 +1,11 @@
-# @ahoybuoy/cli
+# ahoybuoy
 
 Catch design drift before it ships. Buoy scans your codebase to find where AI-generated code diverges from your design system.
 
 ## Quick Start
 
 ```bash
-npx @ahoybuoy/cli begin
+npx ahoybuoy begin
 ```
 
 This scans your project and walks you through setup.

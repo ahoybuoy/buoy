@@ -1,5 +1,5 @@
-import type { DesignToken, DriftSignal, TokenSource } from '@ahoybuoy/core';
-import { createTokenId } from '@ahoybuoy/core';
+import type { DesignToken, DriftSignal, TokenSource } from '@buoy-design/core';
+import { createTokenId } from '@buoy-design/core';
 import { TailwindConfigParser } from './config-parser.js';
 import { ArbitraryValueDetector } from './arbitrary-detector.js';
 import { readFileSync, existsSync } from 'fs';

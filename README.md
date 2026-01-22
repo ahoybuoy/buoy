@@ -17,10 +17,10 @@ src/components/Button.tsx:24
 
 ```bash
 # Interactive setup wizard
-npx @ahoybuoy/cli begin
+npx ahoybuoy begin
 
 # Or see your design system immediately (zero config!)
-npx @ahoybuoy/cli show all
+npx ahoybuoy show all
 ```
 
 No config needed. Buoy auto-detects your framework and starts working immediately.
@@ -216,7 +216,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npx @ahoybuoy/cli check
+      - run: npx ahoybuoy check
 ```
 
 ### PR Comments with Buoy Cloud
@@ -357,9 +357,9 @@ node apps/cli/dist/bin.js show all
 
 | Package                 | Description                              |
 | ----------------------- | ---------------------------------------- |
-| `@ahoybuoy/cli`      | Command-line interface                   |
-| `@ahoybuoy/core`     | Domain models and drift detection engine |
-| `@ahoybuoy/scanners` | Framework-specific code scanners         |
+| `@buoy-design/cli`      | Command-line interface                   |
+| `@buoy-design/core`     | Domain models and drift detection engine |
+| `@buoy-design/scanners` | Framework-specific code scanners         |
 
 ## License
 

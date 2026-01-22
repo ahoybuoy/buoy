@@ -15,9 +15,9 @@ import {
   findCloseMatches,
   type AuditValue,
   type AuditReport,
-} from '@ahoybuoy/core';
-import { extractStyles, extractCssFileStyles } from '@ahoybuoy/scanners';
-import { parseCssValues } from '@ahoybuoy/core';
+} from '@buoy-design/core';
+import { extractStyles, extractCssFileStyles } from '@buoy-design/scanners';
+import { parseCssValues } from '@buoy-design/core';
 
 export function createAuditCommand(): Command {
   const cmd = new Command('audit')

@@ -69,7 +69,7 @@ export function createContextCommand(): Command {
 
         // Run drift analysis to get anti-patterns
         spin.text = 'Analyzing drift...';
-        const { SemanticDiffEngine } = await import('@ahoybuoy/core/analysis');
+        const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
         const engine = new SemanticDiffEngine();
         const diffResult = engine.analyzeComponents(scanResult.components, {
           availableTokens: scanResult.tokens,

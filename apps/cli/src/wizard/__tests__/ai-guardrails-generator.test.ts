@@ -61,7 +61,7 @@ vi.mock("../../scan/orchestrator.js", () => {
   };
 });
 
-vi.mock("@ahoybuoy/core/analysis", () => {
+vi.mock("@buoy-design/core/analysis", () => {
   return {
     SemanticDiffEngine: class MockSemanticDiffEngine {
       analyzeComponents() {

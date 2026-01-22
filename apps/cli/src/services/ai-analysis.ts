@@ -6,13 +6,13 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { DriftSignal } from '@ahoybuoy/core';
+import type { DriftSignal } from '@buoy-design/core';
 import {
   GraphBuilder,
   collectGitHistory,
   findRepeatOffenders,
   type DesignSystemGraph,
-} from '@ahoybuoy/core';
+} from '@buoy-design/core';
 
 export interface AnalysisContext {
   projectRoot: string;

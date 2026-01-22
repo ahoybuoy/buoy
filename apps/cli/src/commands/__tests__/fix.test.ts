@@ -56,7 +56,7 @@ vi.mock('../../scan/orchestrator.js', () => ({
   })),
 }));
 
-vi.mock('@ahoybuoy/core/analysis', () => ({
+vi.mock('@buoy-design/core/analysis', () => ({
   SemanticDiffEngine: vi.fn().mockImplementation(() => ({
     analyzeComponents: vi.fn().mockReturnValue({
       drifts: [],
@@ -90,8 +90,8 @@ vi.mock('../../output/fix-formatters.js', () => ({
   formatFixesJson: vi.fn().mockReturnValue('{}'),
 }));
 
-vi.mock('@ahoybuoy/core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@ahoybuoy/core')>();
+vi.mock('@buoy-design/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@buoy-design/core')>();
   return {
     ...actual,
     generateFixes: vi.fn().mockReturnValue([]),

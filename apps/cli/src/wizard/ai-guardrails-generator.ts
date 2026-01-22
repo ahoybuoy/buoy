@@ -249,7 +249,7 @@ async function generateClaudeMdContext(
   const claudeMdPath = join(cwd, 'CLAUDE.md');
 
   // Run drift analysis for anti-patterns
-  const { SemanticDiffEngine } = await import('@ahoybuoy/core/analysis');
+  const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
   const engine = new SemanticDiffEngine();
   const diffResult = engine.analyzeComponents(
     scanResult.components as ContextData['components'],

@@ -10,11 +10,11 @@ import type {
   DesignSystemDiagnosis,
   DesignSystemRecommendation,
   SuggestedToken
-} from '@ahoybuoy/core';
+} from '@buoy-design/core';
 import {
   collectGitHistory,
-} from '@ahoybuoy/core';
-import { CssScanner, type CssAnalysis } from '@ahoybuoy/scanners';
+} from '@buoy-design/core';
+import { CssScanner, type CssAnalysis } from '@buoy-design/scanners';
 import { detectFrameworks } from '../detect/frameworks.js';
 
 export interface ArchitectOptions {

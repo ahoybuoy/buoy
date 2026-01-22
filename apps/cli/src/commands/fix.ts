@@ -34,7 +34,7 @@ import {
   type ConfidenceLevel,
   type DesignToken,
   type DriftSignal,
-} from "@ahoybuoy/core";
+} from "@buoy-design/core";
 import type { BuoyConfig } from "../config/schema.js";
 
 export function createFixCommand(): Command {
@@ -127,7 +127,7 @@ export function createFixCommand(): Command {
         // Run drift analysis to get hardcoded value signals
         spin.text = "Analyzing for hardcoded values...";
         const { SemanticDiffEngine } =
-          await import("@ahoybuoy/core/analysis");
+          await import("@buoy-design/core/analysis");
         const engine = new SemanticDiffEngine();
         const components = scanResult.components || [];
 

@@ -57,7 +57,7 @@ vi.mock("../../detect/index.js", () => ({
 
 vi.mock("../../detect/frameworks.js", () => ({
   detectFrameworks: vi.fn(() => []),
-  getPluginInstallCommand: vi.fn(() => "npm install @ahoybuoy/plugin-test"),
+  getPluginInstallCommand: vi.fn(() => "npm install @buoy-design/plugin-test"),
   PLUGIN_INFO: {},
   BUILTIN_SCANNERS: {},
 }));
@@ -75,7 +75,7 @@ vi.mock("../../hooks/index.js", () => ({
   detectHookSystem: vi.fn(() => null),
 }));
 
-vi.mock("@ahoybuoy/core", () => ({
+vi.mock("@buoy-design/core", () => ({
   parseTokenFile: vi.fn(() => []),
   detectFormat: vi.fn(() => "dtcg"),
 }));

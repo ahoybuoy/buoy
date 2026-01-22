@@ -9,12 +9,12 @@ import {
 } from "../output/reporters.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
-import { withOptionalCache, type ScanCache } from "@ahoybuoy/scanners";
-import type { DriftSignal } from "@ahoybuoy/core";
+import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
+import type { DriftSignal } from "@buoy-design/core";
 import { formatUpgradeHint } from "../utils/upgrade-hints.js";
-import { generateAuditReport, type AuditValue, DriftAggregator } from "@ahoybuoy/core";
-import { extractStyles, extractCssFileStyles } from "@ahoybuoy/scanners";
-import { parseCssValues } from "@ahoybuoy/core";
+import { generateAuditReport, type AuditValue, DriftAggregator } from "@buoy-design/core";
+import { extractStyles, extractCssFileStyles } from "@buoy-design/scanners";
+import { parseCssValues } from "@buoy-design/core";
 import { glob } from "glob";
 import { readFile } from "fs/promises";
 import type { BuoyConfig } from "../config/schema.js";

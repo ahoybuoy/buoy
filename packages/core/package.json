@@ -1,5 +1,5 @@
 {
-  "name": "@ahoybuoy/core",
+  "name": "@buoy-design/core",
   "version": "0.2.0",
   "description": "Core domain models and analysis for Buoy design drift detection",
   "type": "module",

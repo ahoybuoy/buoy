@@ -7,7 +7,7 @@ import {
   isFromStagedFile,
   formatAiFeedback,
 } from "../check.js";
-import type { DriftSignal } from "@ahoybuoy/core";
+import type { DriftSignal } from "@buoy-design/core";
 
 // Mock execSync for git commands
 vi.mock("node:child_process", async (importOriginal) => {

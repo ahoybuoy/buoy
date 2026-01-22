@@ -1,6 +1,6 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
-import type { Component, PropDefinition, VariantDefinition, FigmaSource } from '@ahoybuoy/core';
-import { createComponentId } from '@ahoybuoy/core';
+import type { Component, PropDefinition, VariantDefinition, FigmaSource } from '@buoy-design/core';
+import { createComponentId } from '@buoy-design/core';
 import { FigmaClient, FigmaNode, FigmaFile, FigmaComponentMeta } from './client.js';
 
 export interface FigmaScannerConfig extends ScannerConfig {

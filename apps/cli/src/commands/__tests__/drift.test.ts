@@ -2,14 +2,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Command } from "commander";
 import type { BuoyConfig } from "../../config/schema.js";
-import type { DriftSignal, Component, Severity } from "@ahoybuoy/core";
+import type { DriftSignal, Component, Severity } from "@buoy-design/core";
 
 // Mock modules before importing the command
 vi.mock("../../config/loader.js", () => ({
   loadConfig: vi.fn(),
 }));
 
-vi.mock("@ahoybuoy/scanners/git", () => ({
+vi.mock("@buoy-design/scanners/git", () => ({
   ReactComponentScanner: vi.fn(),
   VueComponentScanner: vi.fn(),
   SvelteComponentScanner: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock("@ahoybuoy/scanners/git", () => ({
   TokenScanner: vi.fn(),
 }));
 
-vi.mock("@ahoybuoy/scanners", () => ({
+vi.mock("@buoy-design/scanners", () => ({
   ScanCache: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue(undefined),
     save: vi.fn().mockResolvedValue(undefined),
@@ -44,7 +44,7 @@ vi.mock("@ahoybuoy/scanners", () => ({
   }),
 }));
 
-vi.mock("@ahoybuoy/core/analysis", () => ({
+vi.mock("@buoy-design/core/analysis", () => ({
   SemanticDiffEngine: vi.fn(),
 }));
 
@@ -75,8 +75,8 @@ vi.mock("../../output/formatters.js", () => ({
 // Import after mocks are set up
 import { createDriftCommand } from "../drift.js";
 import { loadConfig } from "../../config/loader.js";
-import * as scanners from "@ahoybuoy/scanners/git";
-import * as analysis from "@ahoybuoy/core/analysis";
+import * as scanners from "@buoy-design/scanners/git";
+import * as analysis from "@buoy-design/core/analysis";
 import * as reporters from "../../output/reporters.js";
 import * as formatters from "../../output/formatters.js";
 

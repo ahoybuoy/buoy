@@ -1,5 +1,5 @@
 {
-  "name": "@ahoybuoy/scanners",
+  "name": "@buoy-design/scanners",
   "version": "0.2.0",
   "description": "Source scanners for Buoy (React, Vue, Svelte, Angular, Figma, Storybook)",
   "type": "module",
@@ -59,7 +59,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@ahoybuoy/core": "workspace:*",
+    "@buoy-design/core": "workspace:*",
     "glob": "^11.0.0",
     "typescript": "^5.7.2",
     "zod": "^3.24.1"

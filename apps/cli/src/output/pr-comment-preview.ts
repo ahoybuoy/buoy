@@ -1,5 +1,5 @@
 // apps/cli/src/output/pr-comment-preview.ts
-import type { DriftSignal } from '@ahoybuoy/core';
+import type { DriftSignal } from '@buoy-design/core';
 import chalk from 'chalk';
 
 /**

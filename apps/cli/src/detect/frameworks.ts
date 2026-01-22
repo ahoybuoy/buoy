@@ -34,13 +34,13 @@ export const BUILTIN_SCANNERS: Record<string, { description: string; detects: st
 // These require external configuration or APIs (future)
 export const PLUGIN_INFO: Record<string, PluginInfo> = {
   figma: {
-    name: '@ahoybuoy/plugin-figma',
+    name: '@buoy-design/plugin-figma',
     description: 'Connects to Figma to compare design tokens with your codebase.',
     detects: 'Figma configuration',
     examples: ['Token value drift between Figma and code', 'Missing component implementations'],
   },
   storybook: {
-    name: '@ahoybuoy/plugin-storybook',
+    name: '@buoy-design/plugin-storybook',
     description: 'Scans Storybook stories to verify component coverage.',
     detects: 'Storybook configuration',
     examples: ['Components without stories', 'Undocumented variants'],
@@ -208,7 +208,7 @@ export function detectPackageManager(projectRoot: string = process.cwd()): 'pnpm
 }
 
 export function getPluginInstallCommand(plugins: string[], projectRoot: string = process.cwd()): string {
-  const fullNames = plugins.map((p) => `@ahoybuoy/plugin-${p}`);
+  const fullNames = plugins.map((p) => `@buoy-design/plugin-${p}`);
   const pm = detectPackageManager(projectRoot);
 
   switch (pm) {

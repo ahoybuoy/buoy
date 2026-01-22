@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Component, DesignToken, DriftSignal } from '@ahoybuoy/core';
+import type { Component, DesignToken, DriftSignal } from '@buoy-design/core';
 import {
   SkillExportService,
   type SkillExportOptions,

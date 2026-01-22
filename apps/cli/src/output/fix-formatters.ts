@@ -5,7 +5,7 @@
  */
 
 import chalk from 'chalk';
-import type { Fix, ConfidenceLevel } from '@ahoybuoy/core';
+import type { Fix, ConfidenceLevel } from '@buoy-design/core';
 import type { ApplyFixesResult } from '../fix/applier.js';
 
 /**

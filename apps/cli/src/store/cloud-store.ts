@@ -5,7 +5,7 @@
  * This is a stub that will be implemented when Buoy Cloud API is ready.
  */
 
-import type { Component, DesignToken, DriftSignal } from '@ahoybuoy/core';
+import type { Component, DesignToken, DriftSignal } from '@buoy-design/core';
 import type {
   ScanStore,
   StoredProject,

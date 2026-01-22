@@ -1,6 +1,6 @@
 // GitHub PR comment formatter for Buoy CLI
 // Styled after CodeRabbit's rich review format
-import type { DriftResult, DriftSignal } from '@ahoybuoy/core';
+import type { DriftResult, DriftSignal } from '@buoy-design/core';
 import { COMMENT_MARKER, INLINE_MARKER_PREFIX, INLINE_MARKER_SUFFIX } from './github.js';
 
 export interface PRContext {

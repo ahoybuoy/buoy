@@ -13,8 +13,8 @@ Buoy is a design drift detection tool for AI-generated code. It scans codebases 
 pnpm build
 
 # Build specific package
-pnpm --filter @ahoybuoy/cli build
-pnpm --filter @ahoybuoy/core build
+pnpm --filter @buoy-design/cli build
+pnpm --filter @buoy-design/core build
 
 # Run CLI locally (after building)
 node apps/cli/dist/bin.js <command>
@@ -39,9 +39,9 @@ This is a TypeScript monorepo using pnpm workspaces and Turbo.
 ### Package Structure
 
 ```
-apps/cli/          # @ahoybuoy/cli - CLI application (entry point: bin.js)
-packages/core/     # @ahoybuoy/core - Domain models, drift detection engine
-packages/scanners/ # @ahoybuoy/scanners - Framework-specific code scanners (React, Vue, Svelte, Angular, Tailwind, etc.)
+apps/cli/          # @buoy-design/cli - CLI application (entry point: bin.js)
+packages/core/     # @buoy-design/core - Domain models, drift detection engine
+packages/scanners/ # @buoy-design/scanners - Framework-specific code scanners (React, Vue, Svelte, Angular, Tailwind, etc.)
 ```
 
 ### Key Data Flow

@@ -14,8 +14,8 @@ import type {
   JsonTokenSource,
   CssTokenSource,
   TypeScriptTokenSource,
-} from "@ahoybuoy/core";
-import { createTokenId } from "@ahoybuoy/core";
+} from "@buoy-design/core";
+import { createTokenId } from "@buoy-design/core";
 import { glob } from "glob";
 import { readFile } from "fs/promises";
 import { relative, extname } from "path";

@@ -1,19 +1,19 @@
-# @ahoybuoy/core
+# @buoy-design/core
 
 Core domain models and drift detection engine for Buoy.
 
 ## Installation
 
 ```bash
-npm install @ahoybuoy/core
+npm install @buoy-design/core
 ```
 
 ## Usage
 
 ```typescript
-import { SemanticDiffEngine } from '@ahoybuoy/core/analysis';
-import { generateFixes } from '@ahoybuoy/core';
-import type { Component, DriftSignal, Fix } from '@ahoybuoy/core';
+import { SemanticDiffEngine } from '@buoy-design/core/analysis';
+import { generateFixes } from '@buoy-design/core';
+import type { Component, DriftSignal, Fix } from '@buoy-design/core';
 
 // Analyze components for drift
 const engine = new SemanticDiffEngine();
@@ -49,5 +49,5 @@ Fix suggestions include a confidence level:
 
 ## Links
 
-- [Buoy CLI](https://www.npmjs.com/package/@ahoybuoy/cli)
+- [Buoy CLI](https://www.npmjs.com/package/@buoy-design/cli)
 - [Documentation](https://buoy.design/docs)

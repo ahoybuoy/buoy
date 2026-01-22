@@ -1,6 +1,6 @@
 import chalk, { type ChalkInstance } from 'chalk';
 import Table from 'cli-table3';
-import type { Component, DesignToken, DriftSignal, Severity } from '@ahoybuoy/core';
+import type { Component, DesignToken, DriftSignal, Severity } from '@buoy-design/core';
 import { sortDriftsBySeverity } from '../services/drift-analysis.js';
 
 // Severity colors

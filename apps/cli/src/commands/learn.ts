@@ -19,7 +19,7 @@ import {
 } from "../output/reporters.js";
 import type { BuoyConfig } from "../config/schema.js";
 import { createStore, getProjectName } from "../store/index.js";
-import type { DriftSignal } from "@ahoybuoy/core";
+import type { DriftSignal } from "@buoy-design/core";
 
 interface RepeatPattern {
   key: string;

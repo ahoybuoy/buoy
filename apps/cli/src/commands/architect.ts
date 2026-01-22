@@ -21,7 +21,7 @@ import {
 } from '../output/reporters.js';
 import { DesignSystemArchitect } from '../services/architect.js';
 import { GitHubArchitectClient, parseRepoString } from '../integrations/index.js';
-import type { SuggestedToken } from '@ahoybuoy/core';
+import type { SuggestedToken } from '@buoy-design/core';
 
 export function createArchitectCommand(): Command {
   const cmd = new Command('architect')
