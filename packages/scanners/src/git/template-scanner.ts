@@ -7,6 +7,7 @@ import {
   createScannerSignalCollector,
   type ScannerSignalCollector,
 } from '../signals/scanner-integration.js';
+import { extractAllHtmlStyles } from '../extractors/html-style.js';
 
 // Template types that should always be treated as components regardless of path
 // (based on file extension matching the framework)
@@ -514,6 +515,80 @@ const TEMPLATE_CONFIG: Record<string, { ext: string; patterns: RegExp[] }> = {
   },
 };
 
+// ============================================================================
+// Inline Style Detection Helpers
+// ============================================================================
+
+/**
+ * Template expression patterns for various server-side templating languages.
+ * Values matching these patterns are dynamic and should not be flagged as drift.
+ */
+const TEMPLATE_EXPRESSION_PATTERNS = [
+  // Razor (.cshtml) - @Variable, @Model.Property, @(expression)
+  /@[\w.]+/,
+  /@\([^)]+\)/,
+  // Blade (.blade.php) - {{ $variable }}, {!! $variable !!}
+  /\{\{\s*\$[\w.]+\s*\}\}/,
+  /\{!!\s*\$[\w.]+\s*!!\}/,
+  // ERB (.erb) - <%= variable %>
+  /<%=?\s*[^%]+\s*%>/,
+  // Twig/Jinja/Nunjucks - {{ variable }}, {{ variable|filter }}
+  /\{\{\s*[\w.|]+\s*\}\}/,
+  // PHP - <?php echo $var; ?>, <?= $var ?>
+  /<\?(?:php\s+echo\s+)?\$[\w.]+/,
+  /<\?=\s*\$[\w.]+/,
+  // Liquid - {{ variable }}, {{ variable | filter }}
+  /\{\{\s*[\w.|]+\s*\}\}/,
+  // Thymeleaf - th:style="${...}"
+  /\$\{[^}]+\}/,
+  // Handlebars/Mustache - {{variable}}, {{{variable}}}
+  /\{\{+\s*[\w.]+\s*\}+\}/,
+  // Go templates - {{ .Variable }}
+  /\{\{\s*\.[\w.]+\s*\}\}/,
+  // EJS - <%= variable %>
+  /<%[-_=]?\s*[\w.]+\s*%>/,
+  // General: any value that contains template delimiters
+  /[\{\[<@]\s*[\w$].*?[\}\]>]/,
+];
+
+/**
+ * Check if a CSS value contains template expressions (dynamic values)
+ */
+function isTemplateExpression(value: string): boolean {
+  return TEMPLATE_EXPRESSION_PATTERNS.some(pattern => pattern.test(value));
+}
+
+/**
+ * Parse CSS properties from an inline style string.
+ * e.g., "color: #fff; padding: 16px" → [{ property: 'color', value: '#fff' }, ...]
+ */
+function parseCssProperties(css: string): Array<{ property: string; value: string }> {
+  const results: Array<{ property: string; value: string }> = [];
+
+  // Split by semicolon, but be careful with values that might contain semicolons (rare)
+  const declarations = css.split(';');
+
+  for (const declaration of declarations) {
+    const trimmed = declaration.trim();
+    if (!trimmed) continue;
+
+    // Split by first colon only (values can contain colons, e.g., url(data:...))
+    const colonIndex = trimmed.indexOf(':');
+    if (colonIndex === -1) continue;
+
+    const property = trimmed.slice(0, colonIndex).trim();
+    const value = trimmed.slice(colonIndex + 1).trim();
+
+    if (property && value) {
+      // Convert CSS property to camelCase for consistency with JS property names
+      const camelProperty = property.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+      results.push({ property: camelProperty, value });
+    }
+  }
+
+  return results;
+}
+
 export class TemplateScanner extends SignalAwareScanner<Component, TemplateScannerConfig> {
   async scan(): Promise<ScanResult<Component>> {
     // Clear signals from previous scan
@@ -547,6 +622,10 @@ export class TemplateScanner extends SignalAwareScanner<Component, TemplateScann
 
     // Create signal collector for this file (use null for template frameworks not in the core Framework type)
     const signalCollector = createScannerSignalCollector(null, relativePath);
+
+    // Extract inline styles and emit signals for hardcoded values
+    // This runs for ALL template files (pages, layouts, components) to catch drift
+    this.extractInlineStyles(content, signalCollector);
 
     // Generate component name from file path
     // e.g., resources/views/components/button.blade.php -> Button
@@ -920,5 +999,35 @@ export class TemplateScanner extends SignalAwareScanner<Component, TemplateScann
       .split(/[-_]/)
       .map(s => s.charAt(0).toUpperCase() + s.slice(1))
       .join('');
+  }
+
+  /**
+   * Extract inline styles from HTML-like content and emit signals for hardcoded values.
+   * Filters out dynamic template expressions to avoid false positives.
+   */
+  private extractInlineStyles(
+    content: string,
+    signalCollector: ScannerSignalCollector,
+  ): void {
+    const styleMatches = extractAllHtmlStyles(content);
+
+    for (const match of styleMatches) {
+      const cssProperties = parseCssProperties(match.css);
+
+      for (const { property, value } of cssProperties) {
+        // Skip dynamic template expressions
+        if (isTemplateExpression(value)) {
+          continue;
+        }
+
+        // Skip CSS variables and other token references (already tokenized)
+        if (value.includes('var(--') || value.includes('theme.') || value.includes('$')) {
+          continue;
+        }
+
+        // Emit signal for this potentially hardcoded value
+        signalCollector.collectFromValue(value, property, match.line);
+      }
+    }
   }
 }

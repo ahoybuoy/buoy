@@ -945,3 +945,173 @@ describe('TemplateScanner - Qwik', () => {
     });
   });
 });
+
+describe('TemplateScanner - Inline Style Detection', () => {
+  beforeEach(() => {
+    vol.reset();
+  });
+
+  describe('Razor templates (.cshtml)', () => {
+    it('detects hardcoded colors in inline styles', async () => {
+      vol.fromJSON({
+        '/project/Views/Shared/_Header.cshtml': `
+<header style="background-color: #3b82f6; color: #ffffff;">
+  <h1>@Model.Title</h1>
+</header>`,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['**/*.cshtml'],
+        templateType: 'razor',
+      });
+
+      const result = await scanner.scanWithSignals();
+      const signals = result.signals;
+
+      // Should detect hardcoded color values
+      const colorSignals = signals.filter(s => s.type === 'color-value');
+      expect(colorSignals.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('skips dynamic Razor expressions in styles', async () => {
+      vol.fromJSON({
+        '/project/Views/Shared/_Theme.cshtml': `
+<div style="background-color: @Model.ThemeColor; color: @ViewBag.TextColor;">
+  Content
+</div>`,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['**/*.cshtml'],
+        templateType: 'razor',
+      });
+
+      const result = await scanner.scanWithSignals();
+      const signals = result.signals;
+
+      // Should NOT detect dynamic expressions as drift
+      const colorSignals = signals.filter(s => s.type === 'color-value');
+      expect(colorSignals.length).toBe(0);
+    });
+
+    it('detects hardcoded spacing values', async () => {
+      vol.fromJSON({
+        '/project/Views/Components/_Card.cshtml': `
+<div style="padding: 16px; margin: 24px;">
+  @RenderBody()
+</div>`,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['**/*.cshtml'],
+        templateType: 'razor',
+      });
+
+      const result = await scanner.scanWithSignals();
+      const signals = result.signals;
+
+      // Should detect hardcoded spacing values
+      const spacingSignals = signals.filter(s => s.type === 'spacing-value');
+      expect(spacingSignals.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('Blade templates (.blade.php)', () => {
+    it('detects hardcoded values and skips Blade expressions', async () => {
+      vol.fromJSON({
+        '/project/resources/views/components/button.blade.php': `
+<button style="background: #ff0000; padding: {{ $padding }}px;">
+  {{ $slot }}
+</button>`,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['**/*.blade.php'],
+        templateType: 'blade',
+      });
+
+      const result = await scanner.scanWithSignals();
+      const signals = result.signals;
+
+      // Should detect #ff0000 but not {{ $padding }}
+      const colorSignals = signals.filter(s => s.type === 'color-value');
+      expect(colorSignals.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('ERB templates (.html.erb)', () => {
+    it('detects hardcoded values and skips ERB expressions', async () => {
+      vol.fromJSON({
+        '/project/app/views/shared/_alert.html.erb': `
+<div style="border-color: #dc2626; background: <%= @alert_color %>;">
+  <%= yield %>
+</div>`,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['**/*.html.erb'],
+        templateType: 'erb',
+      });
+
+      const result = await scanner.scanWithSignals();
+      const signals = result.signals;
+
+      // Should detect #dc2626 but not <%= @alert_color %>
+      const colorSignals = signals.filter(s => s.type === 'color-value');
+      expect(colorSignals.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('Twig templates (.html.twig)', () => {
+    it('detects hardcoded values and skips Twig expressions', async () => {
+      vol.fromJSON({
+        '/project/templates/components/card.html.twig': `
+<div style="color: #1f2937; background: {{ theme.background }};">
+  {% block content %}{% endblock %}
+</div>`,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['**/*.html.twig'],
+        templateType: 'twig',
+      });
+
+      const result = await scanner.scanWithSignals();
+      const signals = result.signals;
+
+      // Should detect #1f2937 but not {{ theme.background }}
+      const colorSignals = signals.filter(s => s.type === 'color-value');
+      expect(colorSignals.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('skips CSS variables and tokens', () => {
+    it('does not flag CSS variables as drift', async () => {
+      vol.fromJSON({
+        '/project/Views/Shared/_Layout.cshtml': `
+<div style="color: var(--text-primary); background: var(--bg-surface);">
+  @RenderBody()
+</div>`,
+      });
+
+      const scanner = new TemplateScanner({
+        projectRoot: '/project',
+        include: ['**/*.cshtml'],
+        templateType: 'razor',
+      });
+
+      const result = await scanner.scanWithSignals();
+      const signals = result.signals;
+
+      // Should NOT flag CSS variables
+      const colorSignals = signals.filter(s => s.type === 'color-value');
+      expect(colorSignals.length).toBe(0);
+    });
+  });
+});
