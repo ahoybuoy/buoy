@@ -43,9 +43,10 @@ buoy/
 2. Create a branch (`git checkout -b feature/my-feature`)
 3. Make your changes
 4. Run the build (`pnpm build`)
-5. Commit with a descriptive message
-6. Push to your fork
-7. Open a Pull Request
+5. **Update CHANGELOG.md** with your changes under `[Unreleased]`
+6. Commit with a descriptive message
+7. Push to your fork
+8. Open a Pull Request
 
 ## Code Style
 
