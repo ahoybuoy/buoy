@@ -22,7 +22,7 @@ pnpm install
 pnpm build
 
 # Run the CLI locally
-node apps/cli/dist/bin.js status
+node apps/cli/dist/bin.js show all
 ```
 
 ## Project Structure
@@ -30,11 +30,11 @@ node apps/cli/dist/bin.js status
 ```
 buoy/
 ├── apps/
-│   └── cli/           # CLI application (@buoy-design/cli)
+│   ├── cli/           # CLI application (@buoy-design/cli)
+│   └── ahoybuoy/      # Wrapper package for npx ahoybuoy
 ├── packages/
 │   ├── core/          # Domain models & analysis (@buoy-design/core)
 │   └── scanners/      # Source scanners (@buoy-design/scanners)
-└── docs/              # Documentation
 ```
 
 ## Submitting Changes
@@ -60,8 +60,7 @@ To add a new framework scanner:
 1. Add scanner in `packages/scanners/src/git/`
 2. Export from `packages/scanners/src/git/index.ts`
 3. Add detection in `apps/cli/src/detect/project-detector.ts`
-4. Wire up in `apps/cli/src/commands/scan.ts` and `status.ts`
-5. Document in `docs/INTEGRATIONS.md`
+4. Wire up in CLI commands as needed
 
 ## Adding Drift Detection
 
@@ -69,7 +68,6 @@ To add a new drift type:
 
 1. Add to `DriftTypeSchema` in `packages/core/src/models/drift.ts`
 2. Add detection logic in `packages/core/src/analysis/semantic-diff.ts`
-3. Document in `FEATURES.md`
 
 ## Questions?
 
