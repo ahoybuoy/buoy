@@ -175,6 +175,11 @@ export { extractAllHtmlStyles, extractHtmlStyleAttributes, extractStyleBlocks } 
 export { extractJsxStyleObjects } from './jsx-style.js';
 export { extractDirectiveStyles, extractAngularStyleBindings, extractVueStyleBindings, extractNgStyleBindings } from './directive-style.js';
 export {
+  extractCssInJsStyles,
+  detectCssInJsLibrary,
+  type CssInJsLibrary,
+} from './css-in-js.js';
+export {
   extractClassPatterns,
   analyzePatternForTokens,
   extractCvaPatterns,

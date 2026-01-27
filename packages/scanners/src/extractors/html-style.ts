@@ -9,7 +9,7 @@ export interface StyleMatch {
   css: string;
   line: number;
   column: number;
-  context: 'inline' | 'style-block';
+  context: 'inline' | 'style-block' | 'css-in-js';
 }
 
 /**
