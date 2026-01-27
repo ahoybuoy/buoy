@@ -33,8 +33,8 @@ importers:
   apps/ahoybuoy:
     dependencies:
       '@buoy-design/cli':
-        specifier: ^0.2.0
-        version: 0.2.20(@cloudflare/workers-types@4.20260103.0)(@types/better-sqlite3@7.6.13)(@types/node@22.19.3)(@types/react@18.3.27)(better-sqlite3@11.10.0)(react@18.3.1)
+        specifier: workspace:^
+        version: link:../cli
 
   apps/cli:
     dependencies:
@@ -176,22 +176,6 @@ packages:
 
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
-
-  '@buoy-design/cli@0.2.20':
-    resolution: {integrity: sha512-Npjq8jo3nw6SWTEB1RVK6VPOM8fD5An8ko7werEqtbfCg6eAGlpJwyu4nWPTFoV0Z+GULOYBvGNRHLCsDm53ug==}
-    hasBin: true
-
-  '@buoy-design/core@0.1.10':
-    resolution: {integrity: sha512-JjTKZBNFAbLkoMKsJj9fVGwS/HEqpt2vtRwZrppQRQTRMidNQimgn7cgdcd8ZeHwiHjfwVwF0Ex7g09HbXTloQ==}
-
-  '@buoy-design/core@0.1.12':
-    resolution: {integrity: sha512-I4T5wlq7Qhv8ktS3laG3e1nIIHvptz6RKBJAO/m79jWJaGB4dzVTlOqWOGI7n/24AOQk/C5yKj+eiiVTwxuVUw==}
-
-  '@buoy-design/db@0.1.4':
-    resolution: {integrity: sha512-OabUf899nP7+jis/RKl1zKC6DIhPQcrMoOTKey8jza7X+OMYkr7YrNqxYeBzSYx//y84EQjxmQZdpurqx46Vsw==}
-
-  '@buoy-design/scanners@0.1.11':
-    resolution: {integrity: sha512-Hp5N+61kNZxwYs46gybPBrggEerPVZ0YfnYPC091MxKYDO0Trvqus1sczW0ShwvAELfKVQR0WxY09fLwTwMcow==}
 
   '@changesets/apply-release-plan@7.0.14':
     resolution: {integrity: sha512-ddBvf9PHdy2YY0OUiEl3TV78mH9sckndJR14QAt87KLEbIov81XO0q0QAmvooBxXlqRRP8I9B7XOzZwQG7JkWA==}
@@ -2221,122 +2205,6 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@buoy-design/cli@0.2.20(@cloudflare/workers-types@4.20260103.0)(@types/better-sqlite3@7.6.13)(@types/node@22.19.3)(@types/react@18.3.27)(better-sqlite3@11.10.0)(react@18.3.1)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.71.2(zod@3.25.76)
-      '@buoy-design/core': 0.1.12
-      '@buoy-design/db': 0.1.4(@cloudflare/workers-types@4.20260103.0)(@types/better-sqlite3@7.6.13)(@types/react@18.3.27)(react@18.3.1)
-      '@buoy-design/scanners': 0.1.11
-      '@inquirer/prompts': 8.1.0(@types/node@22.19.3)
-      '@octokit/rest': 21.1.1
-      chalk: 5.6.2
-      cli-table3: 0.6.5
-      commander: 12.1.0
-      drizzle-orm: 0.38.4(@cloudflare/workers-types@4.20260103.0)(@types/better-sqlite3@7.6.13)(@types/react@18.3.27)(better-sqlite3@11.10.0)(react@18.3.1)
-      glob: 11.1.0
-      open: 11.0.0
-      ora: 8.2.0
-      yaml: 2.8.2
-      zod: 3.25.76
-      zod-validation-error: 5.0.0(zod@3.25.76)
-    transitivePeerDependencies:
-      - '@aws-sdk/client-rds-data'
-      - '@cloudflare/workers-types'
-      - '@electric-sql/pglite'
-      - '@libsql/client'
-      - '@libsql/client-wasm'
-      - '@neondatabase/serverless'
-      - '@op-engineering/op-sqlite'
-      - '@opentelemetry/api'
-      - '@planetscale/database'
-      - '@prisma/client'
-      - '@tidbcloud/serverless'
-      - '@types/better-sqlite3'
-      - '@types/node'
-      - '@types/pg'
-      - '@types/react'
-      - '@types/sql.js'
-      - '@vercel/postgres'
-      - '@xata.io/client'
-      - better-sqlite3
-      - bun-types
-      - expo-sqlite
-      - knex
-      - kysely
-      - mysql2
-      - pg
-      - postgres
-      - prisma
-      - react
-      - sql.js
-      - sqlite3
-      - supports-color
-
-  '@buoy-design/core@0.1.10':
-    dependencies:
-      glob: 11.1.0
-      graphology: 0.26.0(graphology-types@0.24.8)
-      graphology-types: 0.24.8
-      simple-git: 3.30.0
-      zod: 3.25.76
-    transitivePeerDependencies:
-      - supports-color
-
-  '@buoy-design/core@0.1.12':
-    dependencies:
-      glob: 11.1.0
-      graphology: 0.26.0(graphology-types@0.24.8)
-      graphology-types: 0.24.8
-      simple-git: 3.30.0
-      zod: 3.25.76
-    transitivePeerDependencies:
-      - supports-color
-
-  '@buoy-design/db@0.1.4(@cloudflare/workers-types@4.20260103.0)(@types/better-sqlite3@7.6.13)(@types/react@18.3.27)(react@18.3.1)':
-    dependencies:
-      '@buoy-design/core': 0.1.10
-      better-sqlite3: 11.10.0
-      drizzle-orm: 0.38.4(@cloudflare/workers-types@4.20260103.0)(@types/better-sqlite3@7.6.13)(@types/react@18.3.27)(better-sqlite3@11.10.0)(react@18.3.1)
-    transitivePeerDependencies:
-      - '@aws-sdk/client-rds-data'
-      - '@cloudflare/workers-types'
-      - '@electric-sql/pglite'
-      - '@libsql/client'
-      - '@libsql/client-wasm'
-      - '@neondatabase/serverless'
-      - '@op-engineering/op-sqlite'
-      - '@opentelemetry/api'
-      - '@planetscale/database'
-      - '@prisma/client'
-      - '@tidbcloud/serverless'
-      - '@types/better-sqlite3'
-      - '@types/pg'
-      - '@types/react'
-      - '@types/sql.js'
-      - '@vercel/postgres'
-      - '@xata.io/client'
-      - bun-types
-      - expo-sqlite
-      - knex
-      - kysely
-      - mysql2
-      - pg
-      - postgres
-      - prisma
-      - react
-      - sql.js
-      - sqlite3
-      - supports-color
-
-  '@buoy-design/scanners@0.1.11':
-    dependencies:
-      '@buoy-design/core': 0.1.12
-      glob: 11.1.0
-      typescript: 5.9.3
-      zod: 3.25.76
-    transitivePeerDependencies:
-      - supports-color
-
   '@changesets/apply-release-plan@7.0.14':
     dependencies:
       '@changesets/config': 3.1.2
@@ -3057,7 +2925,8 @@ snapshots:
 
   balanced-match@1.0.2: {}
 
-  base64-js@1.5.1: {}
+  base64-js@1.5.1:
+    optional: true
 
   before-after-hook@3.0.2: {}
 
@@ -3069,16 +2938,19 @@ snapshots:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3
+    optional: true
 
   bindings@1.5.0:
     dependencies:
       file-uri-to-path: 1.0.0
+    optional: true
 
   bl@4.1.0:
     dependencies:
       buffer: 5.7.1
       inherits: 2.0.4
       readable-stream: 3.6.2
+    optional: true
 
   brace-expansion@2.0.2:
     dependencies:
@@ -3092,6 +2964,7 @@ snapshots:
     dependencies:
       base64-js: 1.5.1
       ieee754: 1.2.1
+    optional: true
 
   bundle-name@4.1.0:
     dependencies:
@@ -3119,7 +2992,8 @@ snapshots:
 
   check-error@2.1.1: {}
 
-  chownr@1.1.4: {}
+  chownr@1.1.4:
+    optional: true
 
   ci-info@3.9.0: {}
 
@@ -3181,10 +3055,12 @@ snapshots:
   decompress-response@6.0.0:
     dependencies:
       mimic-response: 3.1.0
+    optional: true
 
   deep-eql@5.0.2: {}
 
-  deep-extend@0.6.0: {}
+  deep-extend@0.6.0:
+    optional: true
 
   default-browser-id@5.0.1: {}
 
@@ -3200,7 +3076,8 @@ snapshots:
 
   detect-indent@6.1.0: {}
 
-  detect-libc@2.1.2: {}
+  detect-libc@2.1.2:
+    optional: true
 
   dir-glob@3.0.1:
     dependencies:
@@ -3232,6 +3109,7 @@ snapshots:
   end-of-stream@1.4.5:
     dependencies:
       once: 1.4.0
+    optional: true
 
   enquirer@2.4.1:
     dependencies:
@@ -3296,7 +3174,8 @@ snapshots:
 
   events@3.3.0: {}
 
-  expand-template@2.0.3: {}
+  expand-template@2.0.3:
+    optional: true
 
   expect-type@1.3.0: {}
 
@@ -3316,7 +3195,8 @@ snapshots:
     dependencies:
       reusify: 1.1.0
 
-  file-uri-to-path@1.0.0: {}
+  file-uri-to-path@1.0.0:
+    optional: true
 
   fill-range@7.1.1:
     dependencies:
@@ -3341,7 +3221,8 @@ snapshots:
       mime-types: 2.1.35
     optional: true
 
-  fs-constants@1.0.0: {}
+  fs-constants@1.0.0:
+    optional: true
 
   fs-extra@7.0.1:
     dependencies:
@@ -3383,7 +3264,8 @@ snapshots:
       es-object-atoms: 1.1.1
     optional: true
 
-  github-from-package@0.0.0: {}
+  github-from-package@0.0.0:
+    optional: true
 
   glob-parent@5.1.2:
     dependencies:
@@ -3483,13 +3365,16 @@ snapshots:
     dependencies:
       safer-buffer: 2.1.2
 
-  ieee754@1.2.1: {}
+  ieee754@1.2.1:
+    optional: true
 
   ignore@5.3.2: {}
 
-  inherits@2.0.4: {}
+  inherits@2.0.4:
+    optional: true
 
-  ini@1.3.8: {}
+  ini@1.3.8:
+    optional: true
 
   is-docker@3.0.0: {}
 
@@ -3676,7 +3561,8 @@ snapshots:
 
   mimic-function@5.0.1: {}
 
-  mimic-response@3.1.0: {}
+  mimic-response@3.1.0:
+    optional: true
 
   minimatch@10.1.1:
     dependencies:
@@ -3686,11 +3572,13 @@ snapshots:
     dependencies:
       brace-expansion: 2.0.2
 
-  minimist@1.2.8: {}
+  minimist@1.2.8:
+    optional: true
 
   minipass@7.1.2: {}
 
-  mkdirp-classic@0.5.3: {}
+  mkdirp-classic@0.5.3:
+    optional: true
 
   mri@1.2.0: {}
 
@@ -3700,11 +3588,13 @@ snapshots:
 
   nanoid@3.3.11: {}
 
-  napi-build-utils@2.0.0: {}
+  napi-build-utils@2.0.0:
+    optional: true
 
   node-abi@3.85.0:
     dependencies:
       semver: 7.7.3
+    optional: true
 
   nwsapi@2.2.23:
     optional: true
@@ -3712,6 +3602,7 @@ snapshots:
   once@1.4.0:
     dependencies:
       wrappy: 1.0.2
+    optional: true
 
   onetime@7.0.0:
     dependencies:
@@ -3815,6 +3706,7 @@ snapshots:
       simple-get: 4.0.1
       tar-fs: 2.1.4
       tunnel-agent: 0.6.0
+    optional: true
 
   prettier@2.8.8: {}
 
@@ -3829,6 +3721,7 @@ snapshots:
     dependencies:
       end-of-stream: 1.4.5
       once: 1.4.0
+    optional: true
 
   punycode@2.3.1:
     optional: true
@@ -3846,6 +3739,7 @@ snapshots:
       ini: 1.3.8
       minimist: 1.2.8
       strip-json-comments: 2.0.1
+    optional: true
 
   react@18.3.1:
     dependencies:
@@ -3864,6 +3758,7 @@ snapshots:
       inherits: 2.0.4
       string_decoder: 1.3.0
       util-deprecate: 1.0.2
+    optional: true
 
   requires-port@1.0.0:
     optional: true
@@ -3917,7 +3812,8 @@ snapshots:
     dependencies:
       queue-microtask: 1.2.3
 
-  safe-buffer@5.2.1: {}
+  safe-buffer@5.2.1:
+    optional: true
 
   safer-buffer@2.1.2: {}
 
@@ -3938,13 +3834,15 @@ snapshots:
 
   signal-exit@4.1.0: {}
 
-  simple-concat@1.0.1: {}
+  simple-concat@1.0.1:
+    optional: true
 
   simple-get@4.0.1:
     dependencies:
       decompress-response: 6.0.0
       once: 1.4.0
       simple-concat: 1.0.1
+    optional: true
 
   simple-git@3.30.0:
     dependencies:
@@ -3992,6 +3890,7 @@ snapshots:
   string_decoder@1.3.0:
     dependencies:
       safe-buffer: 5.2.1
+    optional: true
 
   strip-ansi@6.0.1:
     dependencies:
@@ -4003,7 +3902,8 @@ snapshots:
 
   strip-bom@3.0.0: {}
 
-  strip-json-comments@2.0.1: {}
+  strip-json-comments@2.0.1:
+    optional: true
 
   supports-color@7.2.0:
     dependencies:
@@ -4018,6 +3918,7 @@ snapshots:
       mkdirp-classic: 0.5.3
       pump: 3.0.3
       tar-stream: 2.2.0
+    optional: true
 
   tar-stream@2.2.0:
     dependencies:
@@ -4026,6 +3927,7 @@ snapshots:
       fs-constants: 1.0.0
       inherits: 2.0.4
       readable-stream: 3.6.2
+    optional: true
 
   term-size@2.2.1: {}
 
@@ -4077,6 +3979,7 @@ snapshots:
   tunnel-agent@0.6.0:
     dependencies:
       safe-buffer: 5.2.1
+    optional: true
 
   turbo-darwin-64@2.7.2:
     optional: true
@@ -4122,7 +4025,8 @@ snapshots:
       requires-port: 1.0.0
     optional: true
 
-  util-deprecate@1.0.2: {}
+  util-deprecate@1.0.2:
+    optional: true
 
   vite-node@2.1.9(@types/node@22.19.3):
     dependencies:
@@ -4236,7 +4140,8 @@ snapshots:
       string-width: 7.2.0
       strip-ansi: 7.1.2
 
-  wrappy@1.0.2: {}
+  wrappy@1.0.2:
+    optional: true
 
   ws@8.18.0:
     optional: true

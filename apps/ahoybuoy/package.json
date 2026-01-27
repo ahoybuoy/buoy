@@ -26,6 +26,6 @@
     "buoy": "./bin.js"
   },
   "dependencies": {
-    "@buoy-design/cli": "^0.2.25"
+    "@buoy-design/cli": "workspace:^"
   }
 }
