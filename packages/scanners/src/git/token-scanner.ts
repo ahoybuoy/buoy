@@ -108,6 +108,22 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         // Keyframes/animations files
         "**/keyframes.ts",
         "**/animations.ts",
+        // Tailwind config files (for theme.extend tokens)
+        "**/tailwind.config.ts",
+        "**/tailwind.config.js",
+        "**/tailwind.config.mjs",
+        "**/tailwind.config.cjs",
+        // Design system configuration files
+        "**/design-system.config.ts",
+        "**/design-tokens.ts",
+        "**/design-tokens.js",
+        // Common theme file patterns
+        "**/colors.ts",
+        "**/colors.js",
+        "**/spacing.ts",
+        "**/spacing.js",
+        "**/typography.ts",
+        "**/typography.js",
       ]);
       filesToScan = [...jsonFiles, ...cssFiles, ...tsFiles];
     }
@@ -729,11 +745,17 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     if (
       valueStr.startsWith("#") ||
       valueStr.startsWith("rgb") ||
-      valueStr.startsWith("hsl")
+      valueStr.startsWith("hsl") ||
+      valueStr.startsWith("oklch") ||
+      valueStr.startsWith("oklab") ||
+      valueStr.startsWith("lab") ||
+      valueStr.startsWith("lch") ||
+      valueStr.startsWith("color(") ||
+      valueStr.startsWith("hwb")
     ) {
       return "color";
     }
-    if (/^\d+(px|rem|em)$/.test(valueStr)) {
+    if (/^\d+(\.\d+)?(px|rem|em|pt)$/.test(valueStr)) {
       return "spacing";
     }
 

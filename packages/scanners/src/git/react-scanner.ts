@@ -310,6 +310,38 @@ export class ReactComponentScanner extends SignalAwareScanner<
   }
 
   /**
+   * Check if a name is a hook or factory function pattern that should NOT be counted as a component.
+   *
+   * Filters:
+   * - Hooks: useEffect, useMyCustomHook, UseMyHook (any use* pattern)
+   * - Factory functions: createContext, createButton, makeStyles, makeComponent
+   * - HOC factories: withAuth, withRouter (when they don't return JSX directly)
+   */
+  private isHookOrFactoryName(name: string): boolean {
+    // Hook patterns: use[A-Z]* (standard React hook convention)
+    // Also catch UseMyHook (capitalized) which violates convention but exists
+    if (/^use[A-Z]/i.test(name)) {
+      return true;
+    }
+
+    // Factory function patterns (case-insensitive for first letter)
+    // Catches: createButton, CreateButton, makeCard, MakeCard
+    if (/^create[A-Z]/i.test(name)) {
+      return true;
+    }
+    if (/^make[A-Z]/i.test(name)) {
+      return true;
+    }
+
+    // Common non-component exports that look like components
+    if (/^get[A-Z]/i.test(name) && !name.endsWith('Component')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Check if a node is at module scope (direct child of SourceFile)
    * This prevents detecting inner components defined inside factory functions
    */
@@ -840,6 +872,10 @@ export class ReactComponentScanner extends SignalAwareScanner<
     if (!node.name) return null;
 
     const name = node.name.getText(sourceFile);
+
+    // Filter out hooks and factory functions
+    if (this.isHookOrFactoryName(name)) return null;
+
     const props = this.extractProps(node.parameters, sourceFile);
     const line =
       sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line +
@@ -892,6 +928,9 @@ export class ReactComponentScanner extends SignalAwareScanner<
 
     // Check for uppercase first letter
     if (!/^[A-Z]/.test(name)) return null;
+
+    // Filter out hooks and factory functions (even with uppercase first letter)
+    if (this.isHookOrFactoryName(name)) return null;
 
     const line =
       sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line +

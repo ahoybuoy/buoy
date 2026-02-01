@@ -23,6 +23,22 @@ vi.mock('glob', async () => {
       const allFiles = Object.keys(vol.toJSON());
       const cwd = options?.cwd || '/';
 
+      // Expand brace patterns like {tsx,jsx,ts,js} into multiple patterns
+      const expandBraces = (p: string): string[] => {
+        const braceMatch = p.match(/\{([^}]+)\}/);
+        if (!braceMatch) return [p];
+
+        const alternatives = braceMatch[1]!.split(',');
+        const before = p.slice(0, braceMatch.index);
+        const after = p.slice(braceMatch.index! + braceMatch[0].length);
+
+        const expanded: string[] = [];
+        for (const alt of alternatives) {
+          expanded.push(...expandBraces(before + alt + after));
+        }
+        return expanded;
+      };
+
       // Convert glob pattern to regex
       const escapeRegex = (str: string) =>
         str.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
@@ -55,7 +71,9 @@ vi.mock('glob', async () => {
         return new RegExp(`^${regex}$`);
       };
 
-      const matchPattern = patternToRegex(pattern);
+      // Expand braces and create regexes for all patterns
+      const patterns = expandBraces(pattern);
+      const matchPatterns = patterns.map(p => patternToRegex(p));
 
       return allFiles.filter((file) => {
         // Check if file is under cwd
@@ -70,13 +88,16 @@ vi.mock('glob', async () => {
         // Check against ignore patterns
         if (options?.ignore) {
           for (const ignorePattern of options.ignore) {
-            const ignoreRegex = patternToRegex(ignorePattern);
-            if (ignoreRegex.test(relativePath)) return false;
+            const expandedIgnores = expandBraces(ignorePattern);
+            for (const ignoreP of expandedIgnores) {
+              const ignoreRegex = patternToRegex(ignoreP);
+              if (ignoreRegex.test(relativePath)) return false;
+            }
           }
         }
 
-        // Match against pattern
-        if (!matchPattern.test(relativePath)) return false;
+        // Match against any of the expanded patterns
+        if (!matchPatterns.some(regex => regex.test(relativePath))) return false;
 
         return true;
       }).map((file) => (options?.absolute ? file : file.slice(cwd.length + 1)));

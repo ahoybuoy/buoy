@@ -32,6 +32,14 @@ export { createPluginFromScanner } from './plugin-adapter.js';
 // Cache (Incremental Scanning)
 export { ScanCache, withCache, withOptionalCache, type ScanCacheData, type FileCacheEntry, type CacheCheckResult, type CacheOptions, type WithCacheOptions, type WithCacheResult, CACHE_VERSION } from './cache/index.js';
 
+// Design System Library Detection
+export {
+  detectDesignSystemLibraries,
+  DESIGN_SYSTEM_LIBRARIES,
+  type DesignSystemLibrary,
+  type LibraryDetectionResult,
+} from './design-systems/index.js';
+
 // Signals (Pattern Mining Engine)
 export {
   // Types

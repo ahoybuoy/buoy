@@ -2316,4 +2316,159 @@ type SizeType = 'sm' | 'lg';
       );
     });
   });
+
+  describe("modern color space detection", () => {
+    it("detects OKLCH colors as color category", async () => {
+      vol.fromJSON({
+        "/project/tokens/modern-colors.css": `
+          :root {
+            --color-primary: oklch(50% 0.2 240);
+            --color-secondary: oklch(70% 0.15 180);
+            --some-value: 16px;
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      const primaryToken = result.items.find((t) => t.name === "--color-primary");
+      const secondaryToken = result.items.find((t) => t.name === "--color-secondary");
+
+      expect(primaryToken?.category).toBe("color");
+      expect(secondaryToken?.category).toBe("color");
+    });
+
+    it("detects OKLAB colors as color category", async () => {
+      vol.fromJSON({
+        "/project/tokens/oklab.css": `
+          :root {
+            --accent-color: oklab(50% 0.1 -0.1);
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      const token = result.items.find((t) => t.name === "--accent-color");
+      expect(token?.category).toBe("color");
+    });
+
+    it("detects LAB colors as color category", async () => {
+      vol.fromJSON({
+        "/project/tokens/lab.css": `
+          :root {
+            --brand-color: lab(50% 25 -25);
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      const token = result.items.find((t) => t.name === "--brand-color");
+      expect(token?.category).toBe("color");
+    });
+
+    it("detects LCH colors as color category", async () => {
+      vol.fromJSON({
+        "/project/tokens/lch.css": `
+          :root {
+            --info-color: lch(50% 50 240);
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      const token = result.items.find((t) => t.name === "--info-color");
+      expect(token?.category).toBe("color");
+    });
+
+    it("detects color() function as color category", async () => {
+      vol.fromJSON({
+        "/project/tokens/color-func.css": `
+          :root {
+            --display-p3-color: color(display-p3 1 0.5 0);
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      const token = result.items.find((t) => t.name === "--display-p3-color");
+      expect(token?.category).toBe("color");
+    });
+
+    it("detects HWB colors as color category", async () => {
+      vol.fromJSON({
+        "/project/tokens/hwb.css": `
+          :root {
+            --hwb-color: hwb(240 10% 20%);
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      const token = result.items.find((t) => t.name === "--hwb-color");
+      expect(token?.category).toBe("color");
+    });
+  });
+
+  describe("pt unit detection for spacing", () => {
+    it("detects pt values as spacing category", async () => {
+      vol.fromJSON({
+        "/project/tokens/pdf-tokens.css": `
+          :root {
+            --pdf-margin: 12pt;
+            --pdf-spacing: 6pt;
+            --pdf-font: 10pt;
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      const marginToken = result.items.find((t) => t.name === "--pdf-margin");
+      const spacingToken = result.items.find((t) => t.name === "--pdf-spacing");
+
+      // pt values should be detected as spacing
+      expect(marginToken?.category).toBe("spacing");
+      expect(spacingToken?.category).toBe("spacing");
+    });
+  });
 });

@@ -1075,4 +1075,145 @@ export function StatelessCard({ title, children }) {
       expect(result.items[0]!.name).toBe('StatelessCard');
     });
   });
+
+  describe('hook and factory function filtering', () => {
+    it('filters out custom hooks (useXxx pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/hooks.tsx': `
+          export function useCustomHook() {
+            return { value: 1 };
+          }
+
+          export const UseMyState = () => {
+            return { state: null };
+          };
+
+          export function Button() {
+            return <button>Click</button>;
+          }
+        `,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      // Should detect the actual component
+      expect(componentNames).toContain('Button');
+
+      // Should NOT detect hooks (even capitalized ones that violate convention)
+      expect(componentNames).not.toContain('useCustomHook');
+      expect(componentNames).not.toContain('UseMyState');
+
+      expect(result.items).toHaveLength(1);
+    });
+
+    it('filters out factory functions (createXxx pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/factories.tsx': `
+          export function createButton(config: any) {
+            return function Button() {
+              return <button>Click</button>;
+            };
+          }
+
+          export const CreateInput = () => {
+            return () => <input />;
+          };
+
+          export function Modal() {
+            return <div>Modal</div>;
+          }
+        `,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      // Should detect the actual component
+      expect(componentNames).toContain('Modal');
+
+      // Should NOT detect factory functions
+      expect(componentNames).not.toContain('createButton');
+      expect(componentNames).not.toContain('CreateInput');
+
+      expect(result.items).toHaveLength(1);
+    });
+
+    it('filters out makeXxx factory functions', async () => {
+      vol.fromJSON({
+        '/project/src/make.tsx': `
+          export function makeStyles(styles: any) {
+            return styles;
+          }
+
+          export const MakeComponent = () => {
+            return (props: any) => <div {...props} />;
+          };
+
+          export function Card() {
+            return <div>Card</div>;
+          }
+        `,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      expect(componentNames).toContain('Card');
+      expect(componentNames).not.toContain('makeStyles');
+      expect(componentNames).not.toContain('MakeComponent');
+      expect(result.items).toHaveLength(1);
+    });
+
+    it('filters out getXxx utility functions', async () => {
+      vol.fromJSON({
+        '/project/src/getters.tsx': `
+          export function getDefaultProps() {
+            return { size: 'md' };
+          }
+
+          export const GetTheme = () => {
+            return { colors: {} };
+          };
+
+          // This should be detected - ends with Component
+          export function GetUserComponent() {
+            return <div>User</div>;
+          }
+
+          export function Panel() {
+            return <div>Panel</div>;
+          }
+        `,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      expect(componentNames).toContain('Panel');
+      expect(componentNames).toContain('GetUserComponent'); // Ends with Component - allowed
+      expect(componentNames).not.toContain('getDefaultProps');
+      expect(componentNames).not.toContain('GetTheme');
+    });
+  });
 });
