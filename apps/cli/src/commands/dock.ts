@@ -35,7 +35,7 @@ import {
   spinner,
 } from "../output/reporters.js";
 import { loadConfig, getConfigPath } from "../config/loader.js";
-import { buildAutoConfig } from "../config/auto-detect.js";
+import { buildAutoConfig, findTokenFiles } from "../config/auto-detect.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { SkillExportService } from "../services/skill-export.js";
 import { generateContext } from "../services/context-generator.js";
@@ -307,6 +307,25 @@ async function runConfigDock(options: {
     try {
       const detector = new ProjectDetector(cwd);
       project = await detector.detect();
+
+      // Also scan for token files using auto-detect patterns
+      // This catches files like theme.css, variables.css that ProjectDetector may miss
+      const tokenFiles = await findTokenFiles(cwd);
+      if (tokenFiles.length > 0) {
+        // Get existing token paths for deduplication
+        const existingPaths = new Set(project.tokens.map((t) => t.path));
+        // Add any new token files not already detected
+        for (const tokenPath of tokenFiles) {
+          if (!existingPaths.has(tokenPath)) {
+            project.tokens.push({
+              path: tokenPath,
+              type: tokenPath.endsWith(".json") ? "json" : "css",
+              name: `Token file: ${tokenPath}`,
+            });
+          }
+        }
+      }
+
       spin.stop();
       printDetectionResults(project);
     } catch (err) {

@@ -416,7 +416,7 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
 /**
  * Find common token file patterns
  */
-async function findTokenFiles(projectRoot: string): Promise<string[]> {
+export async function findTokenFiles(projectRoot: string): Promise<string[]> {
   const patterns = [
     // CSS custom properties
     '**/tokens.css',
