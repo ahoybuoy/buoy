@@ -418,7 +418,7 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
  */
 export async function findTokenFiles(projectRoot: string): Promise<string[]> {
   const patterns = [
-    // CSS custom properties
+    // CSS custom properties - explicit token files
     '**/tokens.css',
     '**/variables.css',
     '**/design-tokens.css',
@@ -438,6 +438,7 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
     'tailwind.config.js',
     'tailwind.config.ts',
     'tailwind.config.mjs',
+    'tailwind.config.cjs',
   ];
 
   const found: string[] = [];
@@ -449,6 +450,44 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
     });
     found.push(...matches);
+  }
+
+  // Scan common CSS files for @theme blocks (Tailwind v4)
+  const cssFilesToCheck = [
+    '**/app.css',
+    '**/globals.css',
+    '**/global.css',
+    '**/main.css',
+    '**/index.css',
+    '**/base.css',
+    '**/styles.css',
+    'src/styles/*.css',
+    'app/**/*.css',
+    'styles/**/*.css',
+  ];
+
+  for (const pattern of cssFilesToCheck) {
+    const matches = await glob(pattern, {
+      cwd: projectRoot,
+      nodir: true,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+    });
+
+    for (const file of matches) {
+      // Check if this file contains @theme blocks or CSS custom properties
+      try {
+        const { readFile } = await import('fs/promises');
+        const { resolve } = await import('path');
+        const content = await readFile(resolve(projectRoot, file), 'utf-8');
+
+        // Check for Tailwind v4 @theme blocks or CSS custom properties in :root
+        if (/@theme\s+(inline\s+)?{/.test(content) || /:root\s*{[^}]*--[a-zA-Z]/.test(content)) {
+          found.push(file);
+        }
+      } catch {
+        // Ignore read errors
+      }
+    }
   }
 
   // Deduplicate
