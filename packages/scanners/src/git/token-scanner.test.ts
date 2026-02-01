@@ -147,6 +147,79 @@ describe("TokenScanner", () => {
       expect(result.items.map((t) => t.name)).not.toContain("--commented-out");
       expect(result.items.map((t) => t.name)).not.toContain("--also-commented");
     });
+
+    it("extracts tokens from Tailwind v4 @theme blocks", async () => {
+      vol.fromJSON({
+        "/project/styles/app.css": `
+          @theme {
+            --font-sans: 'Inter Variable', ui-sans-serif, system-ui;
+            --color-neutral-50: oklch(0.985 0 0);
+            --color-neutral-100: oklch(0.967 0.001 286.375);
+            --spacing-safe-top: env(safe-area-inset-top);
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(4);
+      expect(result.items.map((t) => t.name)).toContain("--font-sans");
+      expect(result.items.map((t) => t.name)).toContain("--color-neutral-50");
+      expect(result.items.map((t) => t.name)).toContain("--color-neutral-100");
+      expect(result.items.map((t) => t.name)).toContain("--spacing-safe-top");
+    });
+
+    it("extracts tokens from @theme inline blocks", async () => {
+      vol.fromJSON({
+        "/project/styles/theme.css": `
+          @theme inline {
+            --color-background: var(--background);
+            --color-primary: var(--primary);
+            --color-foreground: var(--foreground);
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(3);
+      expect(result.items.map((t) => t.name)).toContain("--color-background");
+      expect(result.items.map((t) => t.name)).toContain("--color-primary");
+    });
+
+    it("extracts OKLCH color values from @theme blocks", async () => {
+      vol.fromJSON({
+        "/project/styles/colors.css": `
+          @theme {
+            --color-red-500: oklch(0.637 0.237 25.331);
+            --color-blue-500: oklch(0.546 0.245 262.881);
+            --color-green-500: oklch(0.723 0.191 142.499);
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(3);
+      const redToken = result.items.find((t) => t.name === "--color-red-500");
+      expect(redToken).toBeDefined();
+      expect(redToken?.category).toBe("color");
+    });
   });
 
   describe("JSON token parsing", () => {
