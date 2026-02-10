@@ -60,10 +60,18 @@ export {
   type SignalAggregator,
   type SignalStats,
   createSignalAggregator,
-  // Extractors
+  // Extractors (value-level)
   extractColorSignals,
   extractSpacingSignals,
   extractFontSizeSignals,
   extractFontFamilySignals,
   extractFontWeightSignals,
+  extractRadiusSignals,
+  extractShadowSignals,
+  extractZIndexSignals,
+  // Extractors (file-level)
+  extractBreakpointSignals,
+  extractSizingSignals,
+  extractInlineStyleSignals,
+  extractArbitraryValueSignals,
 } from './signals/index.js';
