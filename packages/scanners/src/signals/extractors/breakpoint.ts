@@ -14,12 +14,14 @@ export function extractBreakpointSignals(
   const lines = content.split('\n');
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     MEDIA_QUERY_PATTERN.lastIndex = 0;
 
     let match;
     while ((match = MEDIA_QUERY_PATTERN.exec(line)) !== null) {
-      const [, query, numStr, unit] = match;
+      const query = match[1]!;
+      const numStr = match[2]!;
+      const unit = match[3]!;
       const value = `${numStr}${unit}`;
 
       if (line.includes('var(--')) continue;
@@ -36,9 +38,9 @@ export function extractBreakpointSignals(
           isTokenized: false,
         },
         metadata: {
-          query: query!,
-          numericValue: parseFloat(numStr!),
-          unit: unit!,
+          query,
+          numericValue: parseFloat(numStr),
+          unit,
         },
       });
     }

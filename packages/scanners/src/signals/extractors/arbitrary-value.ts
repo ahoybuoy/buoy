@@ -29,12 +29,14 @@ export function extractArbitraryValueSignals(
   const fileType = getFileType(path);
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     ARBITRARY_VALUE_PATTERN.lastIndex = 0;
 
     let match;
     while ((match = ARBITRARY_VALUE_PATTERN.exec(line)) !== null) {
-      const [fullMatch, utility, rawValue] = match;
+      const fullMatch = match[0];
+      const utility = match[1]!;
+      const rawValue = match[2]!;
 
       if (isTokenReference(rawValue)) continue;
 

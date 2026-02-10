@@ -27,7 +27,7 @@ export function extractSizingSignals(
   const isJSX = fileType === 'tsx' || fileType === 'jsx';
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
 
     if (line.includes('var(--') || line.includes('theme.') || line.includes('tokens.') || line.includes('$')) continue;
 
@@ -37,7 +37,9 @@ export function extractSizingSignals(
       pattern.lastIndex = 0;
       let match;
       while ((match = pattern.exec(line)) !== null) {
-        const [, property, numStr, unit] = match;
+        const property = match[1]!;
+        const numStr = match[2]!;
+        const unit = match[3]!;
         const value = `${numStr}${unit}`;
 
         signals.push({
@@ -52,9 +54,9 @@ export function extractSizingSignals(
             isTokenized: false,
           },
           metadata: {
-            property: property!,
-            numericValue: parseFloat(numStr!),
-            unit: unit!,
+            property,
+            numericValue: parseFloat(numStr),
+            unit,
           },
         });
       }

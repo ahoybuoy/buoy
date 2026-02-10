@@ -33,14 +33,14 @@ export function extractInlineStyleSignals(
   const isJSX = fileType === 'tsx' || fileType === 'jsx';
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     const patterns = [JSX_STYLE_PATTERN, HTML_STYLE_PATTERN];
 
     for (const pattern of patterns) {
       pattern.lastIndex = 0;
       let match;
       while ((match = pattern.exec(line)) !== null) {
-        const styleContent = match[1];
+        const styleContent = match[1]!;
         const styleCount = countStyleProperties(styleContent, pattern === JSX_STYLE_PATTERN);
 
         signals.push({
