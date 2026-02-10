@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   RawSignalSchema,
+  SignalTypeSchema,
   type RawSignal,
 } from './types.js';
 
@@ -76,6 +77,22 @@ describe('RawSignal schema', () => {
 
     const result = RawSignalSchema.safeParse(signal);
     expect(result.success).toBe(true);
+  });
+
+  it('includes z-index signal type', () => {
+    expect(SignalTypeSchema.safeParse('z-index').success).toBe(true);
+  });
+
+  it('includes sizing-value signal type', () => {
+    expect(SignalTypeSchema.safeParse('sizing-value').success).toBe(true);
+  });
+
+  it('includes inline-style signal type', () => {
+    expect(SignalTypeSchema.safeParse('inline-style').success).toBe(true);
+  });
+
+  it('includes arbitrary-value signal type', () => {
+    expect(SignalTypeSchema.safeParse('arbitrary-value').success).toBe(true);
   });
 
   it('rejects invalid signal type', () => {
