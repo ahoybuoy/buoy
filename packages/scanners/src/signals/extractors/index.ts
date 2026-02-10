@@ -4,3 +4,7 @@ export * from './typography.js';
 export * from './radius.js';
 export * from './shadow.js';
 export * from './z-index.js';
+export * from './breakpoint.js';
+export * from './sizing.js';
+export * from './inline-style.js';
+export * from './arbitrary-value.js';
