@@ -38,6 +38,10 @@
     "./analysis": {
       "types": "./dist/analysis/index.d.ts",
       "import": "./dist/analysis/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
     }
   },
   "scripts": {
