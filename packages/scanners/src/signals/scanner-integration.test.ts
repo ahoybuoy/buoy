@@ -113,6 +113,30 @@ describe('ScannerSignalCollector', () => {
     expect(signals.every(s => s.type !== 'color-value')).toBe(true);
   });
 
+  it('routes borderRadius to radius extractor', () => {
+    const collector = createScannerSignalCollector('react', 'Card.tsx');
+    collector.collectFromValue('8px', 'borderRadius', 10);
+    const signals = collector.getSignals();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].type).toBe('radius-value');
+  });
+
+  it('routes boxShadow to shadow extractor', () => {
+    const collector = createScannerSignalCollector('react', 'Card.tsx');
+    collector.collectFromValue('0 2px 4px rgba(0,0,0,0.1)', 'boxShadow', 10);
+    const signals = collector.getSignals();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].type).toBe('shadow-value');
+  });
+
+  it('routes zIndex to z-index extractor', () => {
+    const collector = createScannerSignalCollector('react', 'Modal.tsx');
+    collector.collectFromValue('999', 'zIndex', 10);
+    const signals = collector.getSignals();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].type).toBe('z-index');
+  });
+
   it('provides stats summary', () => {
     const collector = createScannerSignalCollector('react', 'src/Button.tsx');
 

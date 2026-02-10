@@ -14,6 +14,9 @@ import {
   extractFontFamilySignals,
   extractFontWeightSignals,
 } from './extractors/typography.js';
+import { extractRadiusSignals } from './extractors/radius.js';
+import { extractShadowSignals } from './extractors/shadow.js';
+import { extractZIndexSignals } from './extractors/z-index.js';
 
 /**
  * Properties that indicate specific value types
@@ -61,6 +64,19 @@ const SPACING_PROPERTIES = new Set([
   'left',
   'inset',
   'size',
+]);
+
+const RADIUS_PROPERTIES = new Set([
+  'borderRadius',
+  'borderTopLeftRadius',
+  'borderTopRightRadius',
+  'borderBottomLeftRadius',
+  'borderBottomRightRadius',
+]);
+
+const SHADOW_PROPERTIES = new Set([
+  'boxShadow',
+  'textShadow',
 ]);
 
 /**
@@ -209,6 +225,24 @@ export function createScannerSignalCollector(
         signals.forEach(s => emitter.emit(s));
       } else if (property === 'fontWeight') {
         const signals = extractFontWeightSignals(value, filePath, line, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (RADIUS_PROPERTIES.has(property)) {
+        const signals = extractRadiusSignals(value, filePath, line, property, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (SHADOW_PROPERTIES.has(property)) {
+        const signals = extractShadowSignals(value, filePath, line, property, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (property === 'zIndex' || property === 'z-index') {
+        const signals = extractZIndexSignals(value, filePath, line, {
           ...baseContext,
           scope: 'inline',
         });
