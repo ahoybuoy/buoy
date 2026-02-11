@@ -74,4 +74,12 @@ export {
   extractSizingSignals,
   extractInlineStyleSignals,
   extractArbitraryValueSignals,
+  // Extractors (new: opacity, motion, border, typography extensions)
+  extractOpacitySignals,
+  extractDurationSignals,
+  extractEasingSignals,
+  extractTransitionShorthandSignals,
+  extractBorderWidthSignals,
+  extractLineHeightSignals,
+  extractLetterSpacingSignals,
 } from './signals/index.js';

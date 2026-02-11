@@ -8,3 +8,6 @@ export * from './breakpoint.js';
 export * from './sizing.js';
 export * from './inline-style.js';
 export * from './arbitrary-value.js';
+export * from './opacity.js';
+export * from './motion.js';
+export * from './border.js';

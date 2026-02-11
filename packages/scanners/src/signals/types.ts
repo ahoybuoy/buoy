@@ -17,6 +17,12 @@ export const SignalTypeSchema = z.enum([
   'sizing-value',
   'inline-style',
   'arbitrary-value',
+  'opacity-value',
+  'motion-duration',
+  'motion-easing',
+  'border-width',
+  'line-height',
+  'letter-spacing',
   // Token signals
   'token-definition',
   'token-usage',

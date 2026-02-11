@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { extractFontSizeSignals, extractFontFamilySignals, extractFontWeightSignals } from './typography.js';
+import {
+  extractFontSizeSignals,
+  extractFontFamilySignals,
+  extractFontWeightSignals,
+  extractLineHeightSignals,
+  extractLetterSpacingSignals,
+} from './typography.js';
 import type { SignalContext } from '../types.js';
 
 describe('typography signal extractors', () => {
@@ -83,6 +89,83 @@ describe('typography signal extractors', () => {
     it('skips inherit', () => {
       const signals = extractFontWeightSignals('inherit', 'test.tsx', 1, defaultContext);
       expect(signals).toHaveLength(0);
+    });
+  });
+
+  describe('extractLineHeightSignals', () => {
+    it('extracts unitless line-height', () => {
+      const signals = extractLineHeightSignals('1.5', 'test.tsx', 1, defaultContext);
+      expect(signals).toHaveLength(1);
+      expect(signals[0].type).toBe('line-height');
+      expect(signals[0].metadata.numericValue).toBe(1.5);
+      expect(signals[0].metadata.unitless).toBe(true);
+    });
+
+    it('extracts px line-height', () => {
+      const signals = extractLineHeightSignals('24px', 'test.tsx', 1, defaultContext);
+      expect(signals).toHaveLength(1);
+      expect(signals[0].metadata.numericValue).toBe(24);
+      expect(signals[0].metadata.unit).toBe('px');
+      expect(signals[0].metadata.unitless).toBe(false);
+    });
+
+    it('extracts rem line-height', () => {
+      const signals = extractLineHeightSignals('1.5rem', 'test.tsx', 1, defaultContext);
+      expect(signals).toHaveLength(1);
+      expect(signals[0].metadata.unit).toBe('rem');
+    });
+
+    it('extracts percentage line-height', () => {
+      const signals = extractLineHeightSignals('150%', 'test.tsx', 1, defaultContext);
+      expect(signals).toHaveLength(1);
+      expect(signals[0].metadata.unit).toBe('%');
+    });
+
+    it('skips normal', () => {
+      expect(extractLineHeightSignals('normal', 'test.tsx', 1, defaultContext)).toHaveLength(0);
+    });
+
+    it('skips inherit', () => {
+      expect(extractLineHeightSignals('inherit', 'test.tsx', 1, defaultContext)).toHaveLength(0);
+    });
+
+    it('skips token references', () => {
+      expect(extractLineHeightSignals('var(--line-height-base)', 'test.tsx', 1, defaultContext)).toHaveLength(0);
+    });
+
+    it('skips 0 and 1', () => {
+      expect(extractLineHeightSignals('0', 'test.tsx', 1, defaultContext)).toHaveLength(0);
+      expect(extractLineHeightSignals('1', 'test.tsx', 1, defaultContext)).toHaveLength(0);
+    });
+  });
+
+  describe('extractLetterSpacingSignals', () => {
+    it('extracts em letter-spacing', () => {
+      const signals = extractLetterSpacingSignals('0.05em', 'test.tsx', 1, defaultContext);
+      expect(signals).toHaveLength(1);
+      expect(signals[0].type).toBe('letter-spacing');
+      expect(signals[0].metadata.numericValue).toBe(0.05);
+      expect(signals[0].metadata.unit).toBe('em');
+    });
+
+    it('extracts px letter-spacing', () => {
+      const signals = extractLetterSpacingSignals('1px', 'test.tsx', 1, defaultContext);
+      expect(signals).toHaveLength(1);
+      expect(signals[0].metadata.unit).toBe('px');
+    });
+
+    it('extracts negative letter-spacing', () => {
+      const signals = extractLetterSpacingSignals('-0.02em', 'test.tsx', 1, defaultContext);
+      expect(signals).toHaveLength(1);
+      expect(signals[0].metadata.numericValue).toBe(-0.02);
+    });
+
+    it('skips normal', () => {
+      expect(extractLetterSpacingSignals('normal', 'test.tsx', 1, defaultContext)).toHaveLength(0);
+    });
+
+    it('skips token references', () => {
+      expect(extractLetterSpacingSignals('var(--letter-spacing-tight)', 'test.tsx', 1, defaultContext)).toHaveLength(0);
     });
   });
 });

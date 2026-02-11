@@ -17,6 +17,17 @@ import {
 import { extractRadiusSignals } from './extractors/radius.js';
 import { extractShadowSignals } from './extractors/shadow.js';
 import { extractZIndexSignals } from './extractors/z-index.js';
+import { extractOpacitySignals } from './extractors/opacity.js';
+import {
+  extractDurationSignals,
+  extractEasingSignals,
+  extractTransitionShorthandSignals,
+} from './extractors/motion.js';
+import { extractBorderWidthSignals } from './extractors/border.js';
+import {
+  extractLineHeightSignals,
+  extractLetterSpacingSignals,
+} from './extractors/typography.js';
 
 /**
  * Properties that indicate specific value types
@@ -77,6 +88,29 @@ const RADIUS_PROPERTIES = new Set([
 const SHADOW_PROPERTIES = new Set([
   'boxShadow',
   'textShadow',
+]);
+
+const DURATION_PROPERTIES = new Set([
+  'transitionDuration',
+  'animationDuration',
+  'transitionDelay',
+  'animationDelay',
+]);
+
+const EASING_PROPERTIES = new Set([
+  'transitionTimingFunction',
+  'animationTimingFunction',
+]);
+
+const BORDER_WIDTH_PROPERTIES = new Set([
+  'borderWidth',
+  'borderTopWidth',
+  'borderRightWidth',
+  'borderBottomWidth',
+  'borderLeftWidth',
+  'borderInlineWidth',
+  'borderBlockWidth',
+  'outlineWidth',
 ]);
 
 /**
@@ -243,6 +277,48 @@ export function createScannerSignalCollector(
         signals.forEach(s => emitter.emit(s));
       } else if (property === 'zIndex' || property === 'z-index') {
         const signals = extractZIndexSignals(value, filePath, line, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (property === 'opacity') {
+        const signals = extractOpacitySignals(value, filePath, line, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (property === 'transition') {
+        const signals = extractTransitionShorthandSignals(value, filePath, line, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (DURATION_PROPERTIES.has(property)) {
+        const signals = extractDurationSignals(value, filePath, line, property, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (EASING_PROPERTIES.has(property)) {
+        const signals = extractEasingSignals(value, filePath, line, property, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (BORDER_WIDTH_PROPERTIES.has(property)) {
+        const signals = extractBorderWidthSignals(value, filePath, line, property, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (property === 'lineHeight' || property === 'line-height') {
+        const signals = extractLineHeightSignals(value, filePath, line, {
+          ...baseContext,
+          scope: 'inline',
+        });
+        signals.forEach(s => emitter.emit(s));
+      } else if (property === 'letterSpacing' || property === 'letter-spacing') {
+        const signals = extractLetterSpacingSignals(value, filePath, line, {
           ...baseContext,
           scope: 'inline',
         });

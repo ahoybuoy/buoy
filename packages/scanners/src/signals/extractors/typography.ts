@@ -177,3 +177,106 @@ export function extractFontWeightSignals(
     },
   }];
 }
+
+// Line-height pattern: unitless number (1.5), or number + unit (24px, 1.5rem)
+const LINE_HEIGHT_WITH_UNIT = /^(\d+\.?\d*)(px|rem|em|%)$/;
+const LINE_HEIGHT_UNITLESS = /^(\d+\.?\d*)$/;
+
+// Skip common intentional values
+const LINE_HEIGHT_SKIP = new Set(['normal', 'inherit', 'initial', 'unset']);
+
+/**
+ * Extract line-height signals
+ */
+export function extractLineHeightSignals(
+  value: string,
+  path: string,
+  line: number,
+  context: SignalContext,
+): RawSignal[] {
+  if (isTokenReference(value) || LINE_HEIGHT_SKIP.has(value)) {
+    return [];
+  }
+
+  const trimmed = value.trim();
+
+  // With unit: 24px, 1.5rem, 150%
+  const unitMatch = trimmed.match(LINE_HEIGHT_WITH_UNIT);
+  if (unitMatch) {
+    const [, numStr, unit] = unitMatch;
+    return [{
+      id: createSignalId('line-height', path, line, value),
+      type: 'line-height',
+      value: trimmed,
+      location: { path, line },
+      context,
+      metadata: {
+        numericValue: parseFloat(numStr!),
+        unit,
+        unitless: false,
+      },
+    }];
+  }
+
+  // Unitless: 1.5, 2, 1.2
+  const unitlessMatch = trimmed.match(LINE_HEIGHT_UNITLESS);
+  if (unitlessMatch) {
+    const num = parseFloat(unitlessMatch[1]!);
+    // Skip 0 and 1 — not meaningful line-heights for drift
+    if (num === 0 || num === 1) return [];
+    return [{
+      id: createSignalId('line-height', path, line, value),
+      type: 'line-height',
+      value: trimmed,
+      location: { path, line },
+      context,
+      metadata: {
+        numericValue: num,
+        unitless: true,
+      },
+    }];
+  }
+
+  return [];
+}
+
+// Letter-spacing pattern: number + unit
+const LETTER_SPACING_PATTERN = /^(-?\d+\.?\d*)(px|rem|em)$/;
+
+const LETTER_SPACING_SKIP = new Set(['normal', 'inherit', 'initial', 'unset']);
+
+/**
+ * Extract letter-spacing signals
+ */
+export function extractLetterSpacingSignals(
+  value: string,
+  path: string,
+  line: number,
+  context: SignalContext,
+): RawSignal[] {
+  if (isTokenReference(value) || LETTER_SPACING_SKIP.has(value)) {
+    return [];
+  }
+
+  const trimmed = value.trim();
+  const match = trimmed.match(LETTER_SPACING_PATTERN);
+  if (!match) return [];
+
+  const [, numStr, unit] = match;
+  const num = parseFloat(numStr!);
+
+  // Skip 0 — no letter spacing adjustment
+  if (num === 0) return [];
+
+  return [{
+    id: createSignalId('letter-spacing', path, line, value),
+    type: 'letter-spacing',
+    value: trimmed,
+    location: { path, line },
+    context,
+    metadata: {
+      numericValue: num,
+      unit,
+    },
+  }];
+}
