@@ -215,10 +215,32 @@ function mapDriftType(type: string): DriftType {
     'missing-component': 'missing-component',
     'deprecated-token': 'deprecated-token',
     accessibility: 'accessibility',
+    // New signal type mappings
+    'hardcoded-opacity': 'hardcoded-opacity',
+    'hardcoded-motion': 'hardcoded-motion',
+    'hardcoded-border-width': 'hardcoded-border-width',
+    'hardcoded-radius': 'hardcoded-radius',
+    'hardcoded-shadow': 'hardcoded-shadow',
+    'hardcoded-z-index': 'hardcoded-z-index',
+    // Signal type aliases (from scanner extractors)
+    'opacity-value': 'hardcoded-opacity',
+    'motion-duration': 'hardcoded-motion',
+    'motion-easing': 'hardcoded-motion',
+    'border-width': 'hardcoded-border-width',
+    'radius-value': 'hardcoded-radius',
+    'shadow-value': 'hardcoded-shadow',
+    'z-index': 'hardcoded-z-index',
+    'line-height': 'hardcoded-typography',
+    'letter-spacing': 'hardcoded-typography',
     // Common aliases
     color: 'hardcoded-color',
+    'color-value': 'hardcoded-color',
     spacing: 'hardcoded-spacing',
+    'spacing-value': 'hardcoded-spacing',
     typography: 'hardcoded-typography',
+    'font-size': 'hardcoded-typography',
+    'font-family': 'hardcoded-typography',
+    'font-weight': 'hardcoded-typography',
   };
   return typeMap[type] || 'hardcoded-color';
 }

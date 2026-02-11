@@ -449,7 +449,13 @@ export type DriftType =
   | 'inline-style'
   | 'missing-component'
   | 'deprecated-token'
-  | 'accessibility';
+  | 'accessibility'
+  | 'hardcoded-opacity'
+  | 'hardcoded-motion'
+  | 'hardcoded-border-width'
+  | 'hardcoded-radius'
+  | 'hardcoded-shadow'
+  | 'hardcoded-z-index';
 
 export interface DiscoveredToken {
   name: string;
