@@ -92,6 +92,8 @@ export const TokenConfigSchema = z.object({
   enabled: z.boolean().default(true),
   files: z.array(z.string()).default([]),
   cssVariablePrefix: z.string().optional(),
+  /** Glob patterns for canonical (source-of-truth) token files */
+  canonical: z.array(z.string()).default([]),
 });
 
 // Tailwind source config (for arbitrary value detection)

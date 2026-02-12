@@ -407,6 +407,7 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
     config.sources.tokens = {
       enabled: true,
       files: tokenFiles,
+      canonical: [],
     };
   }
 
