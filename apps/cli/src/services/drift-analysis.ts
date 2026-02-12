@@ -216,6 +216,7 @@ export class DriftAnalysisService {
       checkDeprecated: true,
       checkNaming: true,
       checkDocumentation: true,
+      checkAccessibility: true,
     });
 
     let drifts: DriftSignal[] = applySeverityOverrides(

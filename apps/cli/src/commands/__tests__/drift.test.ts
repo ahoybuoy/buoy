@@ -775,6 +775,7 @@ describe("drift command", () => {
         checkDeprecated: true,
         checkNaming: true,
         checkDocumentation: true,
+        checkAccessibility: true,
       });
 
       // With no components, should show info message guiding user to alternatives

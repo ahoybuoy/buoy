@@ -518,6 +518,125 @@ describe("SemanticDiffEngine", () => {
     });
   });
 
+  describe("accessibility-conflict", () => {
+    it("detects accessibility issues on interactive components without aria-label or children", () => {
+      const component: Component = {
+        ...createMockComponent("Button", "react"),
+        props: [], // No children or aria-label props
+        metadata: {
+          accessibility: {
+            issues: ["Missing accessible label for interactive element"],
+          },
+        },
+      };
+
+      const result = engine.analyzeComponents([component], {
+        checkAccessibility: true,
+      });
+
+      const a11yDrifts = result.drifts.filter(
+        (d) => d.type === "accessibility-conflict",
+      );
+      expect(a11yDrifts).toHaveLength(1);
+      expect(a11yDrifts[0]!.severity).toBe("critical");
+      expect(a11yDrifts[0]!.message).toContain("accessibility issues");
+    });
+
+    it("does not flag interactive components that have aria-label prop", () => {
+      const component: Component = {
+        ...createMockComponent("Button", "react"),
+        props: [
+          {
+            name: "aria-label",
+            type: "string",
+            required: false,
+          },
+        ],
+        metadata: {
+          accessibility: {
+            issues: ["Missing accessible label for interactive element"],
+          },
+        },
+      };
+
+      const result = engine.analyzeComponents([component], {
+        checkAccessibility: true,
+      });
+
+      const a11yDrifts = result.drifts.filter(
+        (d) => d.type === "accessibility-conflict",
+      );
+      expect(a11yDrifts).toHaveLength(0);
+    });
+
+    it("does not flag interactive components that have children prop", () => {
+      const component: Component = {
+        ...createMockComponent("Button", "react"),
+        props: [
+          {
+            name: "children",
+            type: "ReactNode",
+            required: false,
+          },
+        ],
+        metadata: {
+          accessibility: {
+            issues: ["Missing accessible label for interactive element"],
+          },
+        },
+      };
+
+      const result = engine.analyzeComponents([component], {
+        checkAccessibility: true,
+      });
+
+      const a11yDrifts = result.drifts.filter(
+        (d) => d.type === "accessibility-conflict",
+      );
+      expect(a11yDrifts).toHaveLength(0);
+    });
+
+    it("skips accessibility checks when checkAccessibility is false", () => {
+      const component: Component = {
+        ...createMockComponent("Button", "react"),
+        props: [],
+        metadata: {
+          accessibility: {
+            issues: ["Missing accessible label for interactive element"],
+          },
+        },
+      };
+
+      const result = engine.analyzeComponents([component], {
+        checkAccessibility: false,
+      });
+
+      const a11yDrifts = result.drifts.filter(
+        (d) => d.type === "accessibility-conflict",
+      );
+      expect(a11yDrifts).toHaveLength(0);
+    });
+
+    it("skips accessibility checks when checkAccessibility is undefined", () => {
+      const component: Component = {
+        ...createMockComponent("Button", "react"),
+        props: [],
+        metadata: {
+          accessibility: {
+            issues: ["Missing accessible label for interactive element"],
+          },
+        },
+      };
+
+      const result = engine.analyzeComponents([component], {});
+
+      const a11yDrifts = result.drifts.filter(
+        (d) => d.type === "accessibility-conflict",
+      );
+      expect(a11yDrifts).toHaveLength(0);
+    });
+  });
+
   describe("checkColorContrast", () => {
     it("detects insufficient color contrast", () => {
       const component = createMockComponentWithMetadata("Button", {
