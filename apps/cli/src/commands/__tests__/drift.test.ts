@@ -230,6 +230,8 @@ describe("drift command", () => {
         analyzeComponents: vi.fn().mockReturnValue({
           drifts: [createDrift("warning"), createDrift("info")],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -284,6 +286,8 @@ describe("drift command", () => {
 
       const mockEngine = {
         analyzeComponents: vi.fn().mockReturnValue({ drifts: [] }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -302,6 +306,8 @@ describe("drift command", () => {
         analyzeComponents: vi.fn().mockReturnValue({
           drifts: [createDrift("critical"), createDrift("warning")],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -343,6 +349,8 @@ describe("drift command", () => {
         analyzeComponents: vi.fn().mockReturnValue({
           drifts: [createDrift("warning")],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -444,6 +452,8 @@ describe("drift command", () => {
             createDrift("info"),
           ],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -477,6 +487,8 @@ describe("drift command", () => {
             createDrift("info"),
           ],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -510,6 +522,8 @@ describe("drift command", () => {
             createDrift("info"),
           ],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -566,6 +580,8 @@ describe("drift command", () => {
             createDrift("warning", "hardcoded-value"),
           ],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -597,6 +613,8 @@ describe("drift command", () => {
             createDrift("info", "hardcoded-value"),
           ],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -658,6 +676,8 @@ describe("drift command", () => {
             createDrift("warning", "naming-inconsistency", "LegacyCard"),
           ],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -707,6 +727,8 @@ describe("drift command", () => {
             createDrift("info", "naming-inconsistency", "Input"),
           ],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -765,6 +787,8 @@ describe("drift command", () => {
       // Analysis engine should still be called (with empty components)
       const mockEngine = {
         analyzeComponents: vi.fn().mockReturnValue({ drifts: [] }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
       (
         analysis.SemanticDiffEngine as unknown as ReturnType<typeof vi.fn>
@@ -842,7 +866,11 @@ describe("drift command", () => {
 
     it("passes correct analysis options to SemanticDiffEngine", async () => {
       const analyzeComponentsMock = vi.fn().mockReturnValue({ drifts: [] });
-      const mockEngine = { analyzeComponents: analyzeComponentsMock };
+      const mockEngine = {
+        analyzeComponents: analyzeComponentsMock,
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
+      };
 
       (
         analysis.SemanticDiffEngine as unknown as ReturnType<typeof vi.fn>
@@ -891,6 +919,8 @@ describe("drift command", () => {
 
       const mockEngine = {
         analyzeComponents: vi.fn().mockReturnValue({ drifts: [] }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -948,6 +978,8 @@ describe("drift command", () => {
 
       const mockEngine = {
         analyzeComponents: vi.fn().mockReturnValue({ drifts: [] }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -997,6 +1029,8 @@ describe("drift command", () => {
             createDrift("info"),
           ],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (
@@ -1021,6 +1055,8 @@ describe("drift command", () => {
             createDrift("info"),
           ],
         }),
+        checkUnusedComponents: vi.fn().mockReturnValue([]),
+        checkUnusedTokens: vi.fn().mockReturnValue([]),
       };
 
       (

@@ -240,6 +240,55 @@ export class DriftAnalysisService {
       }
     }
 
+    // Step 2.2: Scan for unused components and tokens
+    onProgress?.("Scanning for unused components and tokens...");
+    const { collectUsages } = await import("@buoy-design/core");
+    const { tokens: scannedTokens } = await orchestrator.scanTokens({ onProgress });
+
+    const componentNames = components.map((c) => c.name);
+    const tokenNames = scannedTokens.map((t) => t.name);
+
+    const usageResult = await collectUsages({
+      projectRoot: process.cwd(),
+      knownComponents: componentNames,
+      knownTokens: tokenNames,
+    });
+
+    // Build usage count maps
+    const componentUsageMap = new Map<string, number>();
+    for (const cu of usageResult.componentUsages) {
+      componentUsageMap.set(
+        cu.componentName,
+        (componentUsageMap.get(cu.componentName) || 0) + 1,
+      );
+    }
+
+    const tokenUsageMap = new Map<string, number>();
+    for (const tu of usageResult.tokenUsages) {
+      tokenUsageMap.set(
+        tu.tokenName,
+        (tokenUsageMap.get(tu.tokenName) || 0) + 1,
+      );
+    }
+
+    // Check for unused components
+    const unusedComponentDrifts = engine.checkUnusedComponents(components, componentUsageMap);
+    if (unusedComponentDrifts.length > 0) {
+      drifts.push(
+        ...applySeverityOverrides(unusedComponentDrifts, this.config.drift.severity),
+      );
+      onProgress?.(`Found ${unusedComponentDrifts.length} unused components`);
+    }
+
+    // Check for unused tokens
+    const unusedTokenDrifts = engine.checkUnusedTokens(scannedTokens, tokenUsageMap);
+    if (unusedTokenDrifts.length > 0) {
+      drifts.push(
+        ...applySeverityOverrides(unusedTokenDrifts, this.config.drift.severity),
+      );
+      onProgress?.(`Found ${unusedTokenDrifts.length} unused tokens`);
+    }
+
     // Step 2.5: Run Tailwind arbitrary value detection if tailwind is configured
     if (this.config.sources.tailwind?.enabled) {
       onProgress?.("Scanning for Tailwind arbitrary values...");

@@ -820,6 +820,14 @@ describe("SemanticDiffEngine", () => {
 
       expect(drifts).toHaveLength(0);
     });
+
+    it("flags components not in the usage map (no references found)", () => {
+      const comp = createMockComponent("NewComp", "react");
+      const usageMap = new Map<string, number>();
+      const drifts = engine.checkUnusedComponents([comp], usageMap);
+      expect(drifts).toHaveLength(1);
+      expect(drifts[0]!.type).toBe("unused-component");
+    });
   });
 
   describe("checkUnusedTokens", () => {
@@ -869,6 +877,14 @@ describe("SemanticDiffEngine", () => {
       const drifts = engine.checkUnusedTokens(tokens, usageMap);
 
       expect(drifts).toHaveLength(0);
+    });
+
+    it("flags tokens not in the usage map (no references found)", () => {
+      const token = createMockToken("color-primary", "#ff0000", "css");
+      const usageMap = new Map<string, number>();
+      const drifts = engine.checkUnusedTokens([token], usageMap);
+      expect(drifts).toHaveLength(1);
+      expect(drifts[0]!.type).toBe("unused-token");
     });
   });
 });
