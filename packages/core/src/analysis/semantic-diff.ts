@@ -340,6 +340,24 @@ export class SemanticDiffEngine {
         drifts.push(this.createDeprecatedDrift(component));
       }
 
+      // Check documentation
+      if (options.checkDocumentation && !component.metadata.documentation) {
+        drifts.push({
+          id: createDriftId("missing-documentation", component.id),
+          type: "missing-documentation",
+          severity: "info",
+          source: this.componentToDriftSource(component),
+          message: `Component "${component.name}" has no documentation`,
+          details: {
+            suggestions: [
+              "Add a JSDoc comment or README describing the component's purpose",
+              "Document props, variants, and usage examples",
+            ],
+          },
+          detectedAt: new Date(),
+        });
+      }
+
       // Check naming consistency
       if (options.checkNaming) {
         const namingIssue = checkNamingConsistency(component.name, namingPatterns);

@@ -725,6 +725,53 @@ describe("SemanticDiffEngine", () => {
     });
   });
 
+  describe("missing-documentation", () => {
+    it("flags components without documentation", () => {
+      const comp = createMockComponent("Button", "react");
+      // createMockComponent sets metadata: {} — ensure documentation is undefined
+      comp.metadata.documentation = undefined;
+
+      const result = engine.analyzeComponents([comp], {
+        checkDocumentation: true,
+      });
+
+      const docDrifts = result.drifts.filter(
+        (d) => d.type === "missing-documentation",
+      );
+      expect(docDrifts.length).toBeGreaterThan(0);
+      expect(docDrifts[0]!.severity).toBe("info");
+      expect(docDrifts[0]!.message).toContain("Button");
+    });
+
+    it("does not flag components with documentation", () => {
+      const comp = createMockComponent("Button", "react");
+      comp.metadata.documentation = "A primary action button component";
+
+      const result = engine.analyzeComponents([comp], {
+        checkDocumentation: true,
+      });
+
+      const docDrifts = result.drifts.filter(
+        (d) => d.type === "missing-documentation",
+      );
+      expect(docDrifts).toHaveLength(0);
+    });
+
+    it("skips documentation check when flag is false", () => {
+      const comp = createMockComponent("Button", "react");
+      comp.metadata.documentation = undefined;
+
+      const result = engine.analyzeComponents([comp], {
+        checkDocumentation: false,
+      });
+
+      const docDrifts = result.drifts.filter(
+        (d) => d.type === "missing-documentation",
+      );
+      expect(docDrifts).toHaveLength(0);
+    });
+  });
+
   describe("checkUnusedComponents", () => {
     it("detects unused components", () => {
       const components = [
