@@ -47,6 +47,11 @@ vi.mock("@buoy-design/scanners", () => ({
 
 vi.mock("@buoy-design/core/analysis", () => ({
   SemanticDiffEngine: vi.fn(),
+  detectRepeatedPatterns: vi.fn().mockReturnValue([]),
+  checkVariantConsistency: vi.fn().mockReturnValue([]),
+  checkExampleCompliance: vi.fn().mockReturnValue([]),
+  detectTokenUtilities: vi.fn().mockReturnValue([]),
+  checkTokenUtilityUsage: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock("../../output/reporters.js", () => ({

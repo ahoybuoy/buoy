@@ -193,7 +193,6 @@ export class DriftAnalysisService {
       minSeverity,
       filterType,
       cache,
-      experimental,
       checkVariants,
       checkTokenUtilities,
       checkExamples,
@@ -249,23 +248,20 @@ export class DriftAnalysisService {
       }
     }
 
-    // Step 2.6: Experimental repeated pattern detection
-    const experimentalEnabled = this.config.experimental?.repeatedPatternDetection || experimental;
-    if (experimentalEnabled) {
-      const patternConfig = (this.config.drift?.types?.["repeated-pattern"] ?? {}) as {
-        enabled?: boolean;
-        minOccurrences?: number;
-        matching?: "exact" | "tight" | "loose";
-      };
-      if (patternConfig.enabled !== false) {
-        onProgress?.("Detecting repeated patterns (experimental)...");
-        const patternDrifts = await this.detectRepeatedPatterns(patternConfig);
-        drifts.push(...patternDrifts);
-        if (patternDrifts.length > 0) {
-          onProgress?.(
-            `Found ${patternDrifts.length} repeated pattern issues`,
-          );
-        }
+    // Step 2.6: Repeated pattern detection (always-on, opt-out via config)
+    const repeatedPatternConfig = (this.config.drift?.types?.["repeated-pattern"] ?? {}) as {
+      enabled?: boolean;
+      minOccurrences?: number;
+      matching?: "exact" | "tight" | "loose";
+    };
+    if (repeatedPatternConfig.enabled !== false) {
+      onProgress?.("Detecting repeated patterns...");
+      const patternDrifts = await this.detectRepeatedPatterns(repeatedPatternConfig);
+      drifts.push(...patternDrifts);
+      if (patternDrifts.length > 0) {
+        onProgress?.(
+          `Found ${patternDrifts.length} repeated pattern issues`,
+        );
       }
     }
 
