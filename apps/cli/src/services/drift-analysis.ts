@@ -287,6 +287,40 @@ export class DriftAnalysisService {
       onProgress?.(`Found ${unusedTokenDrifts.length} unused tokens`);
     }
 
+    // Step 2.3: Cross-source comparison (orphaned-component, orphaned-token, value-divergence)
+    const { classifyComponents, classifyTokens } = await import("./source-classifier.js");
+    const canonicalPatterns = this.config.sources.tokens?.canonical ?? [];
+    const classifiedComponents = classifyComponents(components);
+    const classifiedTokens = classifyTokens(scannedTokens, canonicalPatterns);
+
+    if (classifiedComponents.canonical.length > 0 && classifiedComponents.code.length > 0) {
+      onProgress?.(`Comparing ${classifiedComponents.code.length} code components against ${classifiedComponents.canonical.length} design components...`);
+      const componentDiff = engine.compareComponents(
+        classifiedComponents.code,
+        classifiedComponents.canonical,
+      );
+      if (componentDiff.drifts.length > 0) {
+        drifts.push(
+          ...applySeverityOverrides(componentDiff.drifts, this.config.drift.severity),
+        );
+        onProgress?.(`Found ${componentDiff.drifts.length} cross-source component issues`);
+      }
+    }
+
+    if (classifiedTokens.canonical.length > 0 && classifiedTokens.code.length > 0) {
+      onProgress?.(`Comparing ${classifiedTokens.code.length} code tokens against ${classifiedTokens.canonical.length} design tokens...`);
+      const tokenDiff = engine.compareTokens(
+        classifiedTokens.code,
+        classifiedTokens.canonical,
+      );
+      if (tokenDiff.drifts.length > 0) {
+        drifts.push(
+          ...applySeverityOverrides(tokenDiff.drifts, this.config.drift.severity),
+        );
+        onProgress?.(`Found ${tokenDiff.drifts.length} cross-source token issues`);
+      }
+    }
+
     // Step 2.5: Run Tailwind arbitrary value detection if tailwind is configured
     if (this.config.sources.tailwind?.enabled) {
       onProgress?.("Scanning for Tailwind arbitrary values...");
