@@ -223,6 +223,23 @@ export class DriftAnalysisService {
       this.config.drift.severity,
     );
 
+    // Step 2.1: Check framework sprawl
+    onProgress?.("Checking for framework sprawl...");
+    const { ProjectDetector } = await import("../detect/project-detector.js");
+    const detector = new ProjectDetector(process.cwd());
+    const projectInfo = await detector.detect();
+    if (projectInfo.frameworks.length > 0) {
+      const sprawlDrift = engine.checkFrameworkSprawl(
+        projectInfo.frameworks.map((f) => ({ name: f.name, version: f.version })),
+      );
+      if (sprawlDrift) {
+        drifts.push(
+          ...applySeverityOverrides([sprawlDrift], this.config.drift.severity),
+        );
+        onProgress?.(`Framework sprawl detected: ${projectInfo.frameworks.map((f) => f.name).join(", ")}`);
+      }
+    }
+
     // Step 2.5: Run Tailwind arbitrary value detection if tailwind is configured
     if (this.config.sources.tailwind?.enabled) {
       onProgress?.("Scanning for Tailwind arbitrary values...");
