@@ -19,9 +19,15 @@ import {
   readFileSync,
   mkdirSync,
   appendFileSync,
+  readdirSync,
+  copyFileSync,
 } from "fs";
 import { resolve, dirname, join } from "path";
 import { homedir } from "os";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import chalk from "chalk";
 import { stringify as stringifyYaml } from "yaml";
 import { createInterface } from "readline";
@@ -54,6 +60,8 @@ import {
 import {
   detectFrameworks,
   getPluginInstallCommand,
+  BUILTIN_SCANNERS,
+  PLUGIN_INFO,
 } from "../detect/frameworks.js";
 import type { BuoyConfig } from "../config/schema.js";
 import { showMenu } from "../wizard/menu.js";
@@ -132,7 +140,213 @@ export function createDockCommand(): Command {
       await runHooksDock(options);
     });
 
+  // dock commands - Install global Claude Code slash commands
+  const commandsCmd = cmd
+    .command("commands")
+    .description("Manage Claude Code slash commands");
+
+  commandsCmd
+    .command("list")
+    .description("List available Buoy slash commands")
+    .option("--json", "Output as JSON")
+    .action((options) => {
+      if (options.json) setJsonMode(true);
+
+      const available = listAvailableSlashCommands();
+      const commandsDir = join(homedir(), ".claude", "commands");
+
+      if (options.json) {
+        const result = available.map(name => ({
+          name,
+          installed: existsSync(join(commandsDir, `${name}.md`)),
+        }));
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      console.log("");
+      console.log(chalk.cyan.bold("  Available Buoy Commands"));
+      console.log("");
+
+      if (available.length === 0) {
+        console.log(chalk.dim("  No commands available"));
+        return;
+      }
+
+      for (const name of available) {
+        const isInstalled = existsSync(join(commandsDir, `${name}.md`));
+        const status = isInstalled
+          ? chalk.green("✓ installed")
+          : chalk.dim("not installed");
+        console.log(`  /${name}  ${status}`);
+      }
+
+      console.log("");
+      console.log(chalk.dim("  Run `buoy dock commands install` to install all commands"));
+      console.log("");
+    });
+
+  commandsCmd
+    .command("install")
+    .description("Install Buoy slash commands to ~/.claude/commands/")
+    .option("--dry-run", "Show what would be installed")
+    .option("--json", "Output as JSON")
+    .action((options) => {
+      if (options.json) setJsonMode(true);
+
+      const result = installGlobalSlashCommands(options.dryRun);
+
+      if (options.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      console.log("");
+
+      if (options.dryRun) {
+        console.log(chalk.cyan.bold("  Dry Run - Would install:"));
+        console.log("");
+        for (const name of result.installed) {
+          console.log(`  ${chalk.green("+")} /${name}`);
+        }
+        for (const name of result.alreadyExisted) {
+          console.log(`  ${chalk.dim("○")} /${name} (already exists)`);
+        }
+      } else {
+        if (result.installed.length > 0) {
+          console.log(chalk.green.bold("  ✓ Installed slash commands:"));
+          console.log("");
+          for (const name of result.installed) {
+            console.log(`    /${name}`);
+          }
+        }
+
+        if (result.alreadyExisted.length > 0) {
+          console.log("");
+          console.log(chalk.dim(`  Already installed: ${result.alreadyExisted.map(c => `/${c}`).join(", ")}`));
+        }
+
+        if (result.installed.length === 0 && result.alreadyExisted.length > 0) {
+          console.log(chalk.dim("  All commands already installed"));
+        }
+      }
+
+      console.log("");
+      console.log(chalk.dim("  Commands installed to: ~/.claude/commands/"));
+      console.log(chalk.dim("  Restart Claude Code to use them"));
+      console.log("");
+    });
+
+  // dock plugins - Show and suggest scanners/plugins
+  const pluginsCmd = cmd
+    .command("plugins")
+    .description("Show available scanners and plugins");
+
+  pluginsCmd
+    .command("list")
+    .description("List available scanners and plugins")
+    .action(async () => {
+      console.log(chalk.bold('\nBuilt-in Scanners') + chalk.dim(' (always available)'));
+      console.log('');
+
+      for (const [_key, scannerInfo] of Object.entries(BUILTIN_SCANNERS)) {
+        console.log(`  ${chalk.green('✓')} ${chalk.cyan(scannerInfo.description)}`);
+        console.log(`    ${chalk.dim(`Detects: ${scannerInfo.detects}`)}`);
+        console.log();
+      }
+
+      console.log(chalk.bold('Optional Plugins'));
+      console.log('');
+
+      for (const [_key, pluginInfo] of Object.entries(PLUGIN_INFO)) {
+        console.log(`  ${chalk.dim('○')} ${chalk.cyan(pluginInfo.name)}`);
+        console.log(`    ${chalk.dim(pluginInfo.description)}`);
+        console.log();
+      }
+    });
+
+  pluginsCmd
+    .command("suggest")
+    .description("Suggest plugins based on detected frameworks")
+    .action(async () => {
+      try {
+        const detected = await detectFrameworks(process.cwd());
+
+        if (detected.length === 0) {
+          console.log(chalk.yellow('No frameworks detected.'));
+          return;
+        }
+
+        const builtIn = detected.filter(fw => fw.scanner);
+        const needsPlugin = detected.filter(fw => fw.plugin && !fw.scanner);
+
+        if (builtIn.length > 0) {
+          console.log(chalk.bold('\nDetected (built-in support):'));
+          for (const fw of builtIn) {
+            console.log(`  ${chalk.green('✓')} ${fw.name} ${chalk.dim(`- ${fw.evidence}`)}`);
+          }
+        }
+
+        if (needsPlugin.length > 0) {
+          console.log(chalk.bold('\nDetected (optional plugin available):'));
+          for (const fw of needsPlugin) {
+            console.log(`  ${chalk.yellow('○')} ${fw.name} ${chalk.dim(`- ${fw.evidence}`)}`);
+          }
+
+          const pluginNames = needsPlugin
+            .map(fw => fw.plugin!)
+            .filter((p, i, arr) => arr.indexOf(p) === i);
+
+          console.log('\n' + chalk.bold('Install optional plugins:'));
+          console.log(`  ${chalk.cyan(getPluginInstallCommand(pluginNames))}`);
+        }
+      } catch (err) {
+        console.error(chalk.red(`Failed to detect frameworks: ${err instanceof Error ? err.message : String(err)}`));
+        process.exit(1);
+      }
+    });
+
   return cmd;
+}
+
+function listAvailableSlashCommands(): string[] {
+  const assetsDir = resolve(__dirname, "..", "..", "assets", "commands");
+  if (!existsSync(assetsDir)) return [];
+  return readdirSync(assetsDir)
+    .filter(f => f.endsWith(".md"))
+    .map(f => f.replace(".md", ""));
+}
+
+function installGlobalSlashCommands(dryRun = false): { installed: string[]; alreadyExisted: string[] } {
+  const commandsDir = join(homedir(), ".claude", "commands");
+  const assetsDir = resolve(__dirname, "..", "..", "assets", "commands");
+
+  const installed: string[] = [];
+  const alreadyExisted: string[] = [];
+
+  if (!existsSync(assetsDir)) return { installed, alreadyExisted };
+
+  if (!dryRun && !existsSync(commandsDir)) {
+    mkdirSync(commandsDir, { recursive: true });
+  }
+
+  const commandFiles = readdirSync(assetsDir).filter(f => f.endsWith(".md"));
+
+  for (const file of commandFiles) {
+    const srcPath = join(assetsDir, file);
+    const destPath = join(commandsDir, file);
+
+    if (existsSync(destPath)) {
+      alreadyExisted.push(file.replace(".md", ""));
+    } else {
+      if (!dryRun) {
+        copyFileSync(srcPath, destPath);
+      }
+      installed.push(file.replace(".md", ""));
+    }
+  }
+
+  return { installed, alreadyExisted };
 }
 
 /**

@@ -30,12 +30,10 @@ import {
 } from "@buoy-design/core";
 
 export function createGraphCommand(): Command {
-  const cmd = new Command("graph")
-    .description("Build and query the design system knowledge graph")
-    .addCommand(createBuildCommand())
-    .addCommand(createQueryCommand())
-    .addCommand(createExportCommand())
-    .addCommand(createStatsCommand());
+  const cmd = createBuildCommand();
+  cmd.addCommand(createQueryCommand());
+  cmd.addCommand(createExportCommand());
+  cmd.addCommand(createStatsCommand());
 
   return cmd;
 }
@@ -45,8 +43,8 @@ export function createGraphCommand(): Command {
 // ============================================================================
 
 function createBuildCommand(): Command {
-  return new Command("build")
-    .description("Build the knowledge graph from the codebase")
+  return new Command("graph")
+    .description("Build and query the design system knowledge graph")
     .option("--git", "Include git history", true)
     .option("--no-git", "Skip git history collection")
     .option("--usages", "Include token/component usages", true)
