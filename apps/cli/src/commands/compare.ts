@@ -17,6 +17,7 @@ import {
   parseTokenFile,
   detectFormat,
   compareTokens,
+  findCloseMatches,
   type DesignToken,
 } from '@buoy-design/core';
 import { TokenScanner } from '@buoy-design/scanners';
@@ -118,6 +119,40 @@ export function createCompareCommand(): Command {
         }
         newline();
 
+        // Gap 1: Coverage percentage
+        const coveragePct = result.summary.totalDesignTokens > 0
+          ? Math.round((result.summary.matched / result.summary.totalDesignTokens) * 100)
+          : 0;
+        const coverageColor = coveragePct >= 80 ? chalk.green : coveragePct >= 50 ? chalk.yellow : chalk.red;
+        keyValue('Coverage', coverageColor(`${coveragePct}% (${result.summary.matched} of ${result.summary.totalDesignTokens} design tokens matched)`));
+        newline();
+
+        // Gap 2: Per-category matched count breakdown
+        const matchedByCategory = new Map<string, number>();
+        for (const match of result.matches) {
+          const cat = match.designToken.category;
+          matchedByCategory.set(cat, (matchedByCategory.get(cat) || 0) + 1);
+        }
+        const missingByCategory = new Map<string, number>();
+        for (const token of result.missingTokens) {
+          const cat = token.category;
+          missingByCategory.set(cat, (missingByCategory.get(cat) || 0) + 1);
+        }
+        const allCategories = new Set([...matchedByCategory.keys(), ...missingByCategory.keys()]);
+        if (allCategories.size > 0) {
+          console.log(chalk.bold('By Category:'));
+          for (const cat of [...allCategories].sort()) {
+            const matched = matchedByCategory.get(cat) || 0;
+            const missing = missingByCategory.get(cat) || 0;
+            const parts: string[] = [`${matched} matched`];
+            if (missing > 0) {
+              parts.push(chalk.red(`${missing} missing`));
+            }
+            console.log(`  ${cat}:${' '.repeat(Math.max(1, 12 - cat.length))}${parts.join(', ')}`);
+          }
+          newline();
+        }
+
         // Match details
         if (options.verbose && result.matches.length > 0) {
           console.log(chalk.bold('Matches:'));
@@ -133,23 +168,79 @@ export function createCompareCommand(): Command {
           newline();
         }
 
+        // Gap 4 (part 1): Build orphan usage frequency from codeTokens
+        const orphanUsageCount = new Map<string, number>();
+        for (const codeToken of codeTokens) {
+          const name = codeToken.name;
+          orphanUsageCount.set(name, (orphanUsageCount.get(name) || 0) + 1);
+        }
+
         // Missing tokens
         if (result.missingTokens.length > 0) {
           console.log(chalk.bold.red('Missing in codebase:'));
           for (const token of result.missingTokens.slice(0, 10)) {
-            console.log(`  ${chalk.red('✗')} ${token.name}`);
+            // Gap 4: Show usage count (always 0 for missing tokens since they are not in code)
+            console.log(`  ${chalk.red('✗')} ${token.name} ${chalk.dim('(used 0 times in code)')}`);
           }
           if (result.missingTokens.length > 10) {
             console.log(chalk.dim(`  ... and ${result.missingTokens.length - 10} more`));
           }
           newline();
+
+          // Gap 3: Close matches / typo detection
+          const closeMatches: Array<{ missingToken: DesignToken; orphanToken: DesignToken; distance: number }> = [];
+
+          // Group missing and orphan tokens by category for close match detection
+          const missingByCat = new Map<string, DesignToken[]>();
+          for (const token of result.missingTokens) {
+            const cat = token.category;
+            if (!missingByCat.has(cat)) missingByCat.set(cat, []);
+            missingByCat.get(cat)!.push(token);
+          }
+          const orphanByCat = new Map<string, DesignToken[]>();
+          for (const token of result.orphanTokens) {
+            const cat = token.category;
+            if (!orphanByCat.has(cat)) orphanByCat.set(cat, []);
+            orphanByCat.get(cat)!.push(token);
+          }
+
+          for (const [cat, missingTokens] of missingByCat) {
+            const orphans = orphanByCat.get(cat) || [];
+            if (orphans.length === 0) continue;
+
+            const findCategory = (cat === 'color' || cat === 'spacing') ? cat : null;
+            if (!findCategory) continue;
+
+            const missingValues = missingTokens.map(t => formatValue(t.value));
+            const orphanValues = orphans.map(t => formatValue(t.value));
+
+            const matches = findCloseMatches(missingValues, orphanValues, findCategory as 'color' | 'spacing');
+
+            for (const match of matches) {
+              const missingToken = missingTokens.find(t => formatValue(t.value) === match.value);
+              const orphanToken = orphans.find(t => formatValue(t.value) === match.closeTo);
+              if (missingToken && orphanToken) {
+                closeMatches.push({ missingToken, orphanToken, distance: match.distance });
+              }
+            }
+          }
+
+          if (closeMatches.length > 0) {
+            console.log(chalk.bold.yellow('Close matches (possible typos):'));
+            for (const { missingToken, orphanToken } of closeMatches) {
+              console.log(`  ${chalk.yellow('⚠')} ${missingToken.name} (${formatValue(missingToken.value)}) → close to ${orphanToken.name} (${formatValue(orphanToken.value)})`);
+            }
+            newline();
+          }
         }
 
         // Orphan tokens (optional, dimmed)
         if (options.verbose && result.orphanTokens.length > 0) {
           console.log(chalk.bold.dim('Code tokens not in design:'));
           for (const token of result.orphanTokens.slice(0, 5)) {
-            console.log(chalk.dim(`  ? ${token.name}`));
+            // Gap 4: Show usage frequency for orphan code tokens
+            const usages = orphanUsageCount.get(token.name) || 1;
+            console.log(chalk.dim(`  ? ${token.name} (${usages} usage${usages !== 1 ? 's' : ''})`));
           }
           if (result.orphanTokens.length > 5) {
             console.log(chalk.dim(`  ... and ${result.orphanTokens.length - 5} more`));

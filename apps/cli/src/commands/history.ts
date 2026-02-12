@@ -102,9 +102,10 @@ export function createHistoryCommand(): Command {
               chalk.dim("Status".padEnd(12)) +
               chalk.dim("Components".padEnd(12)) +
               chalk.dim("Drift".padEnd(8)) +
+              chalk.dim("Coverage".padEnd(10)) +
               chalk.dim("Date")
           );
-          console.log(chalk.dim("─".repeat(60)));
+          console.log(chalk.dim("─".repeat(70)));
 
           for (const scan of scans) {
             const snapshot = snapshots.find((s) => s.scanId === scan.id);
@@ -120,12 +121,16 @@ export function createHistoryCommand(): Command {
 
             const compCount = snapshot?.componentCount ?? scan.stats?.componentCount ?? "—";
             const driftCount = snapshot?.driftCount ?? scan.stats?.driftCount ?? "—";
+            const coverage = snapshot?.coverageScore != null
+              ? `${snapshot.coverageScore}%`
+              : "—";
 
             console.log(
               chalk.cyan(scan.id.padEnd(15)) +
                 statusColor(scan.status.padEnd(12)) +
                 String(compCount).padEnd(12) +
                 String(driftCount).padEnd(8) +
+                coverage.padEnd(10) +
                 chalk.dim(dateStr)
             );
 
@@ -181,6 +186,17 @@ export function createHistoryCommand(): Command {
               );
             } else {
               console.log(`Components: ${chalk.dim("no change")}`);
+            }
+
+            if (latest.coverageScore != null && previous.coverageScore != null) {
+              const covDelta = latest.coverageScore - previous.coverageScore;
+              if (covDelta > 0) {
+                console.log(`Coverage: ${chalk.green("+" + covDelta + "%")} since last scan`);
+              } else if (covDelta < 0) {
+                console.log(`Coverage: ${chalk.red(covDelta + "%")} since last scan`);
+              } else {
+                console.log(`Coverage: ${chalk.dim("no change")}`);
+              }
             }
           }
 
@@ -274,6 +290,19 @@ export function createHistoryCommand(): Command {
         keyValue("Components", String(components.length));
         keyValue("Tokens", String(tokens.length));
         keyValue("Drift signals", String(drifts.length));
+
+        // Calculate coverage from drift data
+        if (components.length > 0) {
+          const componentsWithDrift = new Set(
+            drifts.map(d => d.source?.location).filter(Boolean)
+          ).size;
+          const coveragePercent = Math.round(
+            ((components.length - componentsWithDrift) / components.length) * 100
+          );
+          const coverageColor = coveragePercent >= 80 ? chalk.green : coveragePercent >= 50 ? chalk.yellow : chalk.red;
+          keyValue("Coverage", coverageColor(`${coveragePercent}%`));
+        }
+
         newline();
 
         // Show drift breakdown
@@ -369,6 +398,15 @@ export function createHistoryCommand(): Command {
           if (diff.added.drifts.length > 5) {
             console.log(chalk.dim(`  ... and ${diff.added.drifts.length - 5} more`));
           }
+        }
+
+        newline();
+        console.log(chalk.bold("Summary"));
+        if (diff.removed.drifts.length > 0) {
+          console.log(`  ${chalk.green("\u2193")} ${diff.removed.drifts.length} issues resolved`);
+        }
+        if (diff.added.drifts.length > 0) {
+          console.log(`  ${chalk.red("\u2191")} ${diff.added.drifts.length} new issues introduced`);
         }
 
         store.close();

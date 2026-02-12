@@ -14,6 +14,14 @@ export { createTokensCommand } from "./tokens.js";
 export { createComponentsCommand } from "./components.js";
 export { createScanCommand } from "./scan.js";
 export { createCommandsCommand } from "./commands.js";
+export { createCompareCommand } from "./compare.js";
+export { createImportCommand } from "./import.js";
+
+// Analysis & Reporting
+export { createAuditCommand } from "./audit.js";
+export { createGraphCommand } from "./graph.js";
+export { createHistoryCommand } from "./history.js";
+export { createLearnCommand } from "./learn.js";
 
 // Ahoy (cloud features)
 export { createAhoyCommand } from "./ahoy.js";

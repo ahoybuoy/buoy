@@ -1,5 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import { mkdir, writeFile, readFile } from "fs/promises";
+import { existsSync } from "fs";
 import {
   spinner,
   success,
@@ -16,6 +18,7 @@ import {
   exportToDOT,
   exportToCytoscape,
   exportToJSON,
+  importFromJSON,
   findUnusedTokens,
   findUntestedComponents,
   findUndocumentedComponents,
@@ -51,6 +54,7 @@ function createBuildCommand(): Command {
     .option("--imports", "Include import relationships", true)
     .option("--no-imports", "Skip import collection")
     .option("--since <date>", "Only include commits since date (ISO format)")
+    .option("--incremental", "Incrementally update existing graph")
     .option("--json", "Output as JSON")
     .action(async (options) => {
       if (options.json) {
@@ -59,9 +63,22 @@ function createBuildCommand(): Command {
 
       const spin = spinner("Building knowledge graph...");
       const projectRoot = process.cwd();
+      const graphPath = `${projectRoot}/.buoy/graph.json`;
 
       try {
         const builder = new GraphBuilder({ projectId: "default" });
+
+        // Handle incremental mode
+        if (options.incremental) {
+          if (existsSync(graphPath)) {
+            spin.text = "Loading existing graph...";
+            const existingData = JSON.parse(await readFile(graphPath, "utf-8"));
+            const existingGraph = importFromJSON(existingData);
+            info(`Loaded existing graph from .buoy/graph.json (${existingGraph.order} nodes, ${existingGraph.size} edges)`);
+          } else {
+            info("No existing graph found at .buoy/graph.json, building from scratch...");
+          }
+        }
         const stats = {
           commits: 0,
           developers: 0,
@@ -162,6 +179,11 @@ function createBuildCommand(): Command {
         const graph = builder.build();
         const graphStats = getGraphStats(graph);
 
+        // Save graph to .buoy/graph.json
+        const graphJson = exportToJSON(graph);
+        await mkdir(`${projectRoot}/.buoy`, { recursive: true });
+        await writeFile(graphPath, JSON.stringify(graphJson, null, 2));
+
         if (options.json) {
           console.log(
             JSON.stringify(
@@ -185,6 +207,7 @@ function createBuildCommand(): Command {
         }
 
         success("Graph built successfully!");
+        success("Graph saved to .buoy/graph.json");
         newline();
 
         header("Graph Statistics");
@@ -330,16 +353,146 @@ function createQueryCommand(): Command {
             keyValue("Test coverage", `${(coverage.testCoverage * 100).toFixed(1)}%`);
             keyValue("Story coverage", `${(coverage.storyCoverage * 100).toFixed(1)}%`);
           }
+        } else if (queryLower.includes("most used") || queryLower.includes("popular")) {
+          // Find tokens/components with most edges
+          const edgeCounts = new Map<string, number>();
+          graph.forEachNode((node: string) => {
+            edgeCounts.set(node, graph.degree(node));
+          });
+          const sorted = Array.from(edgeCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10);
+
+          if (options.json) {
+            console.log(JSON.stringify({ mostUsed: sorted.map(([id, count]) => ({ id, connections: count })) }, null, 2));
+          } else {
+            header("Most Used (by connections)");
+            if (sorted.length === 0) {
+              info("No nodes found in graph");
+            } else {
+              for (const [id, count] of sorted) {
+                console.log(`  ${chalk.yellow("•")} ${id} ${chalk.dim(`(${count} connections)`)}`);
+              }
+            }
+          }
+        } else if (queryLower.includes("who changed") || queryLower.includes("who modified")) {
+          // Find developers who touched files
+          const developers = graph.filterNodes(
+            (_node, attrs) => (attrs as unknown as { type: string }).type === "Developer"
+          );
+          if (options.json) {
+            const devInfo = developers.map((devId: string) => {
+              const attrs = graph.getNodeAttributes(devId) as { name: string; email: string; commitCount: number };
+              return { id: devId, name: attrs.name, email: attrs.email, commitCount: attrs.commitCount };
+            });
+            console.log(JSON.stringify({ developers: devInfo }, null, 2));
+          } else {
+            header("Developers Who Changed Files");
+            if (developers.length === 0) {
+              info("No developer data found (try building with --git)");
+            } else {
+              for (const devId of developers) {
+                const attrs = graph.getNodeAttributes(devId) as { name: string; commitCount: number };
+                console.log(`  ${chalk.yellow("•")} ${attrs.name} ${chalk.dim(`(${attrs.commitCount} commits)`)}`);
+              }
+            }
+          }
+        } else if (queryLower.includes("dependencies of") || queryLower.includes("depends on")) {
+          // Find import relationships
+          const importEdges = graph.filterEdges(
+            (_edge, attrs) => (attrs as unknown as { type: string }).type === "IMPORTS"
+          );
+          if (options.json) {
+            const deps = importEdges.map((eid: string) => ({
+              source: graph.source(eid),
+              target: graph.target(eid),
+            }));
+            console.log(JSON.stringify({ dependencies: deps }, null, 2));
+          } else {
+            header("Import Dependencies");
+            if (importEdges.length === 0) {
+              info("No import relationships found (try building with --imports)");
+            } else {
+              for (const eid of importEdges.slice(0, 20)) {
+                const source = graph.source(eid);
+                const target = graph.target(eid);
+                console.log(`  ${chalk.yellow("•")} ${source} ${chalk.dim("->")} ${target}`);
+              }
+              if (importEdges.length > 20) {
+                info(`  ... and ${importEdges.length - 20} more`);
+              }
+            }
+          }
+        } else if (queryLower.includes("what uses") || queryLower.includes("used by")) {
+          // Find what references a token/component
+          const usesEdges = graph.filterEdges(
+            (_edge, attrs) => {
+              const type = (attrs as unknown as { type: string }).type;
+              return type === "USES" || type === "IMPORTS" || type === "RENDERS";
+            }
+          );
+          if (options.json) {
+            const usages = usesEdges.map((eid: string) => ({
+              source: graph.source(eid),
+              target: graph.target(eid),
+              type: (graph.getEdgeAttributes(eid) as { type: string }).type,
+            }));
+            console.log(JSON.stringify({ usages }, null, 2));
+          } else {
+            header("Usage Relationships");
+            if (usesEdges.length === 0) {
+              info("No usage relationships found (try building with --usages)");
+            } else {
+              for (const eid of usesEdges.slice(0, 20)) {
+                const source = graph.source(eid);
+                const target = graph.target(eid);
+                const edgeType = (graph.getEdgeAttributes(eid) as { type: string }).type;
+                console.log(`  ${chalk.yellow("•")} ${source} ${chalk.dim(`--[${edgeType}]-->`)} ${target}`);
+              }
+              if (usesEdges.length > 20) {
+                info(`  ... and ${usesEdges.length - 20} more`);
+              }
+            }
+          }
         } else {
-          error(`Unknown query: "${question}"`);
-          newline();
-          info("Available queries:");
-          info("  • unused tokens");
-          info("  • untested components");
-          info("  • undocumented components");
-          info("  • repeat offenders");
-          info("  • coverage");
-          process.exit(1);
+          // Fuzzy keyword search across node names
+          const searchTerm = queryLower;
+          const matchingNodes: Array<{ id: string; name: string; type: string }> = [];
+          graph.forEachNode((node, attrs) => {
+            const nodeAttrs = attrs as unknown as { name: string; type: string };
+            if (
+              node.toLowerCase().includes(searchTerm) ||
+              (nodeAttrs.name && nodeAttrs.name.toLowerCase().includes(searchTerm))
+            ) {
+              matchingNodes.push({ id: node, name: nodeAttrs.name, type: nodeAttrs.type });
+            }
+          });
+
+          if (options.json) {
+            console.log(JSON.stringify({ searchResults: matchingNodes }, null, 2));
+          } else if (matchingNodes.length > 0) {
+            header(`Search Results for "${question}"`);
+            for (const node of matchingNodes.slice(0, 20)) {
+              console.log(`  ${chalk.yellow("•")} ${node.id} ${chalk.dim(`[${node.type}]`)}`);
+            }
+            if (matchingNodes.length > 20) {
+              info(`  ... and ${matchingNodes.length - 20} more`);
+            }
+          } else {
+            info(`No results found for "${question}"`);
+            newline();
+            info("Available queries:");
+            info("  • unused tokens");
+            info("  • untested components");
+            info("  • undocumented components");
+            info("  • repeat offenders");
+            info("  • coverage");
+            info("  • most used / popular");
+            info("  • who changed / who modified");
+            info("  • dependencies of / depends on");
+            info("  • what uses / used by");
+            info("  • Or any keyword to search node names");
+          }
         }
       } catch (err) {
         spin.stop();
@@ -503,6 +656,75 @@ function createStatsCommand(): Command {
         keyValue("Local imports", String(stats.imports.localImports));
         keyValue("External packages", String(stats.imports.externalPackages));
         keyValue("Files scanned", String(stats.imports.filesScanned));
+
+        // Build graph and show most connected nodes
+        const builder = new GraphBuilder({ projectId: "default" });
+
+        // Add git data to graph
+        for (const commit of gitResult.commits) {
+          const commitId = builder.addCommit(
+            commit.sha,
+            commit.message,
+            commit.author,
+            commit.authorEmail,
+            commit.timestamp
+          );
+          for (const file of commit.filesChanged) {
+            const fileId = builder.addFile(file.path, file.path);
+            builder.addEdge("CHANGED", commitId, fileId, {
+              createdAt: commit.timestamp,
+            });
+          }
+        }
+
+        for (const dev of gitResult.developers) {
+          const devId = builder.addDeveloper(
+            dev.id,
+            dev.name,
+            dev.email,
+            undefined,
+            dev.commitCount
+          );
+          for (const commit of gitResult.commits) {
+            if (commit.authorEmail === dev.email) {
+              const commitId = `commit:${commit.sha}`;
+              builder.addEdge("AUTHORED", devId, commitId);
+            }
+          }
+        }
+
+        // Add import data to graph
+        for (const imp of importResult.imports) {
+          if (!imp.isExternal) {
+            const sourceId = builder.addFile(imp.sourceFile, imp.sourceFile);
+            const targetId = builder.addFile(imp.targetFile, imp.targetFile);
+            builder.addEdge("IMPORTS", sourceId, targetId, {
+              createdAt: new Date(),
+            });
+          }
+        }
+
+        const graph = builder.build();
+
+        // Count edges per node and show top 5
+        const edgeCounts = new Map<string, number>();
+        graph.forEachNode((node: string) => {
+          edgeCounts.set(node, graph.degree(node));
+        });
+
+        const topConnected = Array.from(edgeCounts.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+
+        if (topConnected.length > 0 && (topConnected[0]?.[1] ?? 0) > 0) {
+          newline();
+          header("Most Connected");
+          for (const [nodeId, count] of topConnected) {
+            const attrs = graph.getNodeAttributes(nodeId) as { name: string };
+            const label = attrs.name || nodeId;
+            console.log(`  ${chalk.magenta("•")} ${label} ${chalk.dim(`(${count} connections)`)}`);
+          }
+        }
 
         // Show top external deps
         if (importResult.externalDependencies.size > 0) {

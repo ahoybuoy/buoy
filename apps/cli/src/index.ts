@@ -13,6 +13,12 @@ import {
   createComponentsCommand,
   createScanCommand,
   createCommandsCommand,
+  createCompareCommand,
+  createImportCommand,
+  createAuditCommand,
+  createGraphCommand,
+  createHistoryCommand,
+  createLearnCommand,
   createAhoyCommand,
 } from "./commands/index.js";
 
@@ -31,12 +37,12 @@ export function createCli(): Command {
       "after",
       `
 Command Groups:
-  For AI Agents      show (components, tokens, drift, health, all, history)
-  Getting Started    begin, dock (config, skills, agents, context, hooks)
-  CI/Hooks           check, baseline
-  Fixing             fix
+  Setup              begin, dock (config, skills, agents, context, hooks), commands
+  Drift Detection    drift, check, fix, baseline
+  Design Tokens      tokens, compare, import
+  Analysis           show, audit, graph, history, learn
   Plugins            plugins
-  Ahoy (Cloud)       ahoy (login, logout, status, github, gitlab, billing, plans)
+  Cloud              ahoy (login, logout, status, github, gitlab, billing, plans)
 
 Quick Start:
   $ buoy                    # auto-launches wizard if no config
@@ -65,6 +71,16 @@ Quick Start:
 
   // === Fixing ===
   program.addCommand(createFixCommand());
+
+  // === Design Tokens ===
+  program.addCommand(createCompareCommand());
+  program.addCommand(createImportCommand());
+
+  // === Analysis & Reporting ===
+  program.addCommand(createAuditCommand());
+  program.addCommand(createGraphCommand());
+  program.addCommand(createHistoryCommand());
+  program.addCommand(createLearnCommand());
 
   // === Plugins ===
   program.addCommand(createPluginsCommand());
