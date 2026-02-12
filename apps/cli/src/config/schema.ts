@@ -177,9 +177,9 @@ export const OutputConfigSchema = z.object({
   colors: z.boolean().default(true),
 });
 
-// Experimental features config
+// Experimental features config (repeatedPatternDetection is now always-on, kept for backwards compat)
 export const ExperimentalConfigSchema = z.object({
-  repeatedPatternDetection: z.boolean().default(false),
+  repeatedPatternDetection: z.boolean().optional(),
 }).default({});
 
 // Main config schema

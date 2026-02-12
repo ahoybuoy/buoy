@@ -296,7 +296,7 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
     },
     claude: { enabled: false, model: 'claude-sonnet-4-20250514' },
     output: { format: 'table', colors: true },
-    experimental: { repeatedPatternDetection: false },
+    experimental: {},
   };
 
   // Map detected frameworks to source configs

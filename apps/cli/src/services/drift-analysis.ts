@@ -36,8 +36,6 @@ export interface DriftAnalysisOptions {
   filterType?: string;
   /** Scan cache for incremental scanning */
   cache?: ScanCache;
-  /** Enable experimental features (repeated pattern detection) */
-  experimental?: boolean;
   /** Enable variant consistency checking (Phase 4.1) */
   checkVariants?: boolean;
   /** Enable token utility detection (Phase 4.2) */
@@ -415,7 +413,7 @@ export class DriftAnalysisService {
   }
 
   /**
-   * Detect repeated class patterns across source files (experimental)
+   * Detect repeated class patterns across source files
    */
   private async detectRepeatedPatterns(config: {
     minOccurrences?: number;
