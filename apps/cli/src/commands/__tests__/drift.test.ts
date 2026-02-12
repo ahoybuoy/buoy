@@ -232,6 +232,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -288,6 +301,19 @@ describe("drift command", () => {
         analyzeComponents: vi.fn().mockReturnValue({ drifts: [] }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -308,6 +334,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -351,6 +390,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -454,6 +506,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -489,6 +554,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -524,6 +602,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -582,6 +673,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -615,6 +719,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -678,6 +795,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -729,6 +859,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -789,6 +932,19 @@ describe("drift command", () => {
         analyzeComponents: vi.fn().mockReturnValue({ drifts: [] }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
       (
         analysis.SemanticDiffEngine as unknown as ReturnType<typeof vi.fn>
@@ -870,6 +1026,19 @@ describe("drift command", () => {
         analyzeComponents: analyzeComponentsMock,
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -921,6 +1090,19 @@ describe("drift command", () => {
         analyzeComponents: vi.fn().mockReturnValue({ drifts: [] }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -980,6 +1162,19 @@ describe("drift command", () => {
         analyzeComponents: vi.fn().mockReturnValue({ drifts: [] }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -1031,6 +1226,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
@@ -1057,6 +1265,19 @@ describe("drift command", () => {
         }),
         checkUnusedComponents: vi.fn().mockReturnValue([]),
         checkUnusedTokens: vi.fn().mockReturnValue([]),
+        checkFrameworkSprawl: vi.fn().mockReturnValue(null),
+        compareComponents: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
+        compareTokens: vi.fn().mockReturnValue({
+          matches: [],
+          orphanedSource: [],
+          orphanedTarget: [],
+          drifts: [],
+        }),
       };
 
       (
