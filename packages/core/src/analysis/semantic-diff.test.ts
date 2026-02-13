@@ -905,6 +905,46 @@ describe("SemanticDiffEngine", () => {
       expect(drifts[0]!.type).toBe("unused-token");
     });
   });
+
+  describe("checkUnusedTokens prefix matching", () => {
+    it("matches token usage when map key lacks -- prefix", () => {
+      const tokens = [
+        createMockToken("--primary-color", "#0066cc", "css"),
+      ];
+      // Usage map has key WITHOUT -- prefix (as collectUsages captures)
+      const usageMap = new Map([["primary-color", 3]]);
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+      expect(drifts).toHaveLength(0); // Should NOT flag as unused
+    });
+
+    it("matches token usage when map key has -- prefix", () => {
+      const tokens = [
+        createMockToken("--primary-color", "#0066cc", "css"),
+      ];
+      const usageMap = new Map([["--primary-color", 3]]);
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+      expect(drifts).toHaveLength(0);
+    });
+
+    it("matches SCSS token when map key lacks $ prefix", () => {
+      const tokens = [
+        createMockToken("$primary-color", "#0066cc", "css"),
+      ];
+      const usageMap = new Map([["primary-color", 3]]);
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+      expect(drifts).toHaveLength(0);
+    });
+
+    it("flags truly unused token", () => {
+      const tokens = [
+        createMockToken("--unused-color", "#999999", "css"),
+      ];
+      const usageMap = new Map([["primary-color", 3]]);
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+      expect(drifts).toHaveLength(1);
+      expect(drifts[0]!.type).toBe("unused-token");
+    });
+  });
 });
 
 // Helper functions

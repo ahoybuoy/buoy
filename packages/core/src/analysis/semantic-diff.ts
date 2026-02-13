@@ -482,8 +482,25 @@ export class SemanticDiffEngine {
   ): DriftSignal[] {
     const drifts: DriftSignal[] = [];
 
+    // Build normalized usage map: strip -- and $ prefixes for matching
+    // collectUsages() regex captures var(--name) WITHOUT the -- prefix,
+    // but token.name typically includes the prefix (e.g. "--primary-color")
+    const normalizedUsageMap = new Map<string, number>();
+    for (const [key, count] of usageMap) {
+      const normalized = key.replace(/^--|^\$/, "");
+      normalizedUsageMap.set(
+        normalized,
+        (normalizedUsageMap.get(normalized) || 0) + count,
+      );
+    }
+
     for (const token of tokens) {
-      const usageCount = usageMap.get(token.id) || usageMap.get(token.name) || 0;
+      const normalizedName = token.name.replace(/^--|^\$/, "");
+      const usageCount =
+        usageMap.get(token.id) ||
+        usageMap.get(token.name) ||
+        normalizedUsageMap.get(normalizedName) ||
+        0;
       if (usageCount === 0) {
         drifts.push({
           id: createDriftId("unused-token", token.id),
