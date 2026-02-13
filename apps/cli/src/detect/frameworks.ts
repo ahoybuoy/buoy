@@ -92,6 +92,26 @@ const FRAMEWORK_PATTERNS: Array<{
   // Design tools - require plugins
   { name: 'figma', plugin: 'figma', files: ['.figmarc', 'figma.config.*'] },
   { name: 'storybook', plugin: 'storybook', packages: ['@storybook/react', '@storybook/vue3', '@storybook/svelte'], files: ['.storybook/**'] },
+
+  // Design system libraries (detection only - no scanner)
+  { name: 'mui', packages: ['@mui/material', '@mui/core', '@material-ui/core'] },
+  { name: 'chakra', packages: ['@chakra-ui/react', '@chakra-ui/core'] },
+  { name: 'mantine', packages: ['@mantine/core'] },
+  { name: 'ant-design', packages: ['antd'] },
+  { name: 'headlessui', packages: ['@headlessui/react', '@headlessui/vue'] },
+  { name: 'fluentui', packages: ['@fluentui/react-components'] },
+  { name: 'nextui', packages: ['@nextui-org/react'] },
+  { name: 'primereact', packages: ['primereact'] },
+  { name: 'ariakit', packages: ['@ariakit/react'] },
+  { name: 'vuetify', packages: ['vuetify'] },
+  { name: 'element-plus', packages: ['element-plus'] },
+  { name: 'naive-ui', packages: ['naive-ui'] },
+  { name: 'bootstrap', packages: ['bootstrap', 'react-bootstrap'] },
+
+  // CSS-in-JS (acts as utility framework for styling)
+  { name: 'styled-components', packages: ['styled-components'] },
+  { name: 'emotion', packages: ['@emotion/react', '@emotion/styled'] },
+  { name: 'stitches', packages: ['@stitches/react'] },
 ];
 
 export interface MonorepoInfoForDetection {
@@ -178,6 +198,18 @@ export async function detectFrameworks(projectRoot: string, monorepoInfo?: Monor
           break;
         }
       }
+    }
+  }
+
+  // Special case: Radix UI uses many scoped packages (@radix-ui/react-*)
+  if (!detected.some(d => d.name === 'radix')) {
+    const hasRadix = depNames.some(dep => dep.startsWith('@radix-ui/react-'));
+    if (hasRadix) {
+      detected.push({
+        name: 'radix',
+        confidence: 'high',
+        evidence: 'Found @radix-ui/react-* packages',
+      });
     }
   }
 

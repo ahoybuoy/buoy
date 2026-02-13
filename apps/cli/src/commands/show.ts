@@ -38,6 +38,21 @@ import {
   PLUGIN_INFO,
 } from "../detect/frameworks.js";
 
+// Design system library names detected by detectFrameworks()
+const DS_LIBRARY_NAMES = [
+  "mui", "chakra", "mantine", "ant-design", "radix",
+  "headlessui", "fluentui", "nextui", "primereact",
+  "ariakit", "vuetify", "element-plus", "naive-ui", "bootstrap",
+];
+
+// Utility/styling framework names
+const UTILITY_FRAMEWORK_NAMES = [
+  "tailwind", "styled-components", "emotion", "stitches",
+];
+
+// DS libraries that include their own styling systems
+const DS_WITH_STYLING = ["chakra", "mantine", "mui"];
+
 export function createShowCommand(): Command {
   const cmd = new Command("show")
     .description("Show design system information")
@@ -1400,10 +1415,9 @@ export function createShowCommand(): Command {
           unusedTokenCount: drifts.filter(d => d.type === "unused-token").length,
           namingInconsistencyCount: drifts.filter(d => d.type === "naming-inconsistency").length,
           criticalCount: drifts.filter(d => d.severity === "critical").length,
-          hasUtilityFramework: detected.some(f => f.name === "tailwind"),
-          hasDesignSystemLibrary: detected.some(f =>
-            ["mui", "chakra", "mantine", "ant-design", "radix"].includes(f.name)
-          ),
+          hasUtilityFramework: detected.some(f => UTILITY_FRAMEWORK_NAMES.includes(f.name))
+            || detected.some(f => DS_WITH_STYLING.includes(f.name)),
+          hasDesignSystemLibrary: detected.some(f => DS_LIBRARY_NAMES.includes(f.name)),
         };
         const healthResult = calculateHealthScorePillar(healthMetrics);
 
@@ -1603,12 +1617,9 @@ async function gatherHealthMetrics(
 
   // Detect framework context
   const detected = await detectFrameworks(cwd);
-  const hasUtilityFramework = detected.some(f =>
-    f.name === "tailwind"
-  );
-  const hasDesignSystemLibrary = detected.some(f =>
-    ["mui", "chakra", "mantine", "ant-design", "radix"].includes(f.name)
-  );
+  const hasUtilityFramework = detected.some(f => UTILITY_FRAMEWORK_NAMES.includes(f.name))
+    || detected.some(f => DS_WITH_STYLING.includes(f.name));
+  const hasDesignSystemLibrary = detected.some(f => DS_LIBRARY_NAMES.includes(f.name));
 
   return {
     componentCount: scanResult.components.length,

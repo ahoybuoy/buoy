@@ -363,6 +363,26 @@ describe('calculateHealthScorePillar', () => {
     });
   });
 
+  describe('design system library detection', () => {
+    it('scores token health higher when hasDesignSystemLibrary is true', () => {
+      const without = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        hardcodedValueCount: 10,
+        hasDesignSystemLibrary: false,
+        hasUtilityFramework: false,
+      }));
+
+      const with_ = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        hardcodedValueCount: 10,
+        hasDesignSystemLibrary: true,
+        hasUtilityFramework: false,
+      }));
+
+      expect(with_.pillars.tokenHealth.score).toBeGreaterThan(without.pillars.tokenHealth.score);
+    });
+  });
+
   describe('suggestions', () => {
     it('suggests extracting hardcoded values when density > 0.5', () => {
       const result = calculateHealthScorePillar(makeMetrics({
