@@ -849,6 +849,7 @@ export class ProjectDetector {
           const files = await glob(`**/*.${ext}`, {
             cwd: fullPath,
             ignore: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*', '**/node_modules/**'],
+            maxDepth: 8,
           });
           if (files.length > 0) {
             extensionCounts[ext] = files.length;
@@ -880,6 +881,7 @@ export class ProjectDetector {
           const files = await glob(`**/*.${ext}`, {
             cwd: srcPath,
             ignore: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*', '**/node_modules/**'],
+            maxDepth: 8,
           });
           if (files.length > 0) {
             extensionCounts[ext] = files.length;
@@ -906,6 +908,7 @@ export class ProjectDetector {
         const files = await glob(`**/*.${ext}`, {
           cwd: fullPath,
           ignore: ['**/node_modules/**', '**/vendor/**', '**/cache/**'],
+          maxDepth: 8,
         });
 
         if (files.length > 0) {
@@ -931,6 +934,7 @@ export class ProjectDetector {
       const files = await glob(pattern, {
         cwd: this.root,
         ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/vendor/**'],
+        maxDepth: 8,
       });
 
       for (const file of files) {
@@ -949,6 +953,7 @@ export class ProjectDetector {
     const allCssFiles = await glob('**/*.css', {
       cwd: this.root,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/vendor/**', '**/*.min.css'],
+      maxDepth: 8,
     });
 
     for (const file of allCssFiles) {
@@ -980,6 +985,7 @@ export class ProjectDetector {
     const allScssFiles = await glob('**/*.scss', {
       cwd: this.root,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/vendor/**'],
+      maxDepth: 8,
     });
 
     for (const file of allScssFiles) {

@@ -303,6 +303,26 @@ export class ScanOrchestrator {
       }
     }
 
+    // Deduplicate components by source file path + component name
+    // When multiple scanners find the same component (e.g., React + NextJS both
+    // scanning a .tsx file), keep only the first occurrence. Fixes #5 and #12.
+    const seenComponents = new Map<string, boolean>();
+    result.components = result.components.filter(comp => {
+      const path = 'path' in comp.source ? comp.source.path : '';
+      const key = `${path}:${comp.name}`;
+      if (seenComponents.has(key)) return false;
+      seenComponents.set(key, true);
+      return true;
+    });
+
+    // Deduplicate tokens by id
+    const seenTokens = new Set<string>();
+    result.tokens = result.tokens.filter(token => {
+      if (seenTokens.has(token.id)) return false;
+      seenTokens.add(token.id);
+      return true;
+    });
+
     // Add cache stats if cache was used
     if (this.cache) {
       result.cacheStats = { hits: totalCacheHits, misses: totalCacheMisses };

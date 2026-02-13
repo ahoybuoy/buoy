@@ -795,6 +795,69 @@ export function formatDriftTree(drifts: DriftSignal[], fileCount: number = 0): s
   return lines.join('\n');
 }
 
+// Format scan results as markdown
+export function formatScanMarkdown(components: Component[], tokens: DesignToken[]): string {
+  const lines: string[] = [];
+  lines.push('# Scan Results');
+  lines.push('');
+  lines.push(`Generated: ${new Date().toISOString()}`);
+  lines.push('');
+
+  lines.push(`## Components (${components.length})`);
+  lines.push('');
+  if (components.length > 0) {
+    lines.push('| Name | Source | Props | Variants |');
+    lines.push('|------|--------|-------|----------|');
+    for (const comp of components) {
+      const sourcePath = 'path' in comp.source ? comp.source.path : comp.source.type;
+      lines.push(`| ${comp.name} | ${sourcePath} | ${comp.props.length} | ${comp.variants.length} |`);
+    }
+  } else {
+    lines.push('No components found.');
+  }
+  lines.push('');
+
+  lines.push(`## Tokens (${tokens.length})`);
+  lines.push('');
+  if (tokens.length > 0) {
+    lines.push('| Name | Category | Source | Value |');
+    lines.push('|------|----------|--------|-------|');
+    for (const token of tokens) {
+      let value = '';
+      switch (token.value.type) {
+        case 'color':
+          value = token.value.hex;
+          break;
+        case 'spacing':
+          value = `${token.value.value}${token.value.unit}`;
+          break;
+        case 'typography':
+          value = `${token.value.fontFamily} ${token.value.fontSize}px`;
+          break;
+        case 'shadow':
+          value = `${token.value.x}px ${token.value.y}px ${token.value.blur}px ${token.value.color}`;
+          break;
+        case 'border':
+          value = `${token.value.width}px ${token.value.style} ${token.value.color}`;
+          break;
+        case 'raw':
+          value = token.value.value.length > 40
+            ? token.value.value.slice(0, 37) + '...'
+            : token.value.value;
+          break;
+        default:
+          value = JSON.stringify(token.value).slice(0, 30);
+      }
+      const sourcePath = 'path' in token.source ? token.source.path : token.source.type;
+      lines.push(`| ${token.name} | ${token.category} | ${sourcePath} | ${value} |`);
+    }
+  } else {
+    lines.push('No tokens found.');
+  }
+
+  return lines.join('\n');
+}
+
 // Format as markdown
 export function formatMarkdown(drifts: DriftSignal[]): string {
   if (drifts.length === 0) {

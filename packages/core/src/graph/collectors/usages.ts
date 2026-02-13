@@ -196,9 +196,13 @@ export async function collectUsages(
   // Filter to known tokens if provided
   let filteredTokenUsages = tokenUsages;
   if (options.knownTokens && options.knownTokens.length > 0) {
-    const knownSet = new Set(options.knownTokens.map(t => t.toLowerCase()));
+    // Normalize token names by stripping -- and $ prefixes before comparison.
+    // Token scanner outputs names WITH prefix (--primary-color, $primary)
+    // but usage regex captures WITHOUT prefix (primary-color, primary).
+    const normalize = (name: string) => name.replace(/^--|^\$/, '').toLowerCase();
+    const knownSet = new Set(options.knownTokens.map(normalize));
     filteredTokenUsages = tokenUsages.filter(u =>
-      knownSet.has(u.tokenName.toLowerCase())
+      knownSet.has(normalize(u.tokenName))
     );
   }
 

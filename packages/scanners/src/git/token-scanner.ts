@@ -46,8 +46,10 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
 
     // Collect all files to scan
     let filesToScan: string[] = [];
+    let usedExplicitFiles = false;
 
     if (this.config.files && this.config.files.length > 0) {
+      usedExplicitFiles = true;
       // Scan explicitly configured files
       for (const pattern of this.config.files) {
         const matches = await glob(pattern, {
@@ -57,75 +59,40 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
 
         // Warn if configured pattern matches no files
         if (matches.length === 0) {
+          const warning = `Token file pattern '${pattern}' did not match any files. Check that the path is correct.`;
+          console.warn(`[buoy:token-scanner] ${warning}`);
           errors.push({
             file: pattern,
-            message: `Token file pattern '${pattern}' did not match any files. Check that the path is correct.`,
+            message: warning,
             code: "TOKEN_FILE_NOT_FOUND",
           });
         }
 
         filesToScan.push(...matches);
       }
-    } else {
-      // Scan default patterns
-      const jsonFiles = await this.findTokenFiles([
-        "**/*.tokens.json",
-        "**/tokens.json",
-        "**/tokens/**/*.json",
-        // Semantic token JSON files (Chakra UI v3)
-        "**/semantic-tokens/**/*.json",
-        // Style definition files (text-styles.json, animation-styles.json, layer-styles.json)
-        "**/*-styles.json",
-        // Theme token JSON files
-        "**/theme/**/*.json",
-      ]);
-      const cssFiles = await this.findTokenFiles(["**/*.css", "**/*.scss"]);
-      const tsFiles = await this.findTokenFiles([
-        // Type definition files
-        "**/types.ts",
-        "**/types.tsx",
-        "**/types/**/*.ts",
-        "**/types/**/*.tsx",
-        "**/*.types.ts",
-        "**/*.types.tsx",
-        // Token definition files (TypeScript objects)
-        "**/tokens/**/*.ts",
-        "**/tokens/**/*.tsx",
-        "**/tokens.ts",
-        "**/theme/tokens.ts",
-        "**/theme/**/*.ts",
-        // Semantic token files (Chakra UI v3, Panda CSS)
-        "**/semantic-tokens/**/*.ts",
-        "**/semantic-tokens/**/*.tsx",
-        // Mantine-style theme definition files
-        "**/default-theme.ts",
-        "**/default-colors.ts",
-        "**/*Provider/**/*.ts",
-        "**/*Provider/**/*.tsx",
-        // Generated token files (Chakra UI v3, Panda CSS)
-        "**/*.gen.ts",
-        "**/generated/**/*.ts",
-        // Keyframes/animations files
-        "**/keyframes.ts",
-        "**/animations.ts",
-        // Tailwind config files (for theme.extend tokens)
-        "**/tailwind.config.ts",
-        "**/tailwind.config.js",
-        "**/tailwind.config.mjs",
-        "**/tailwind.config.cjs",
-        // Design system configuration files
-        "**/design-system.config.ts",
-        "**/design-tokens.ts",
-        "**/design-tokens.js",
-        // Common theme file patterns
-        "**/colors.ts",
-        "**/colors.js",
-        "**/spacing.ts",
-        "**/spacing.js",
-        "**/typography.ts",
-        "**/typography.js",
-      ]);
-      filesToScan = [...jsonFiles, ...cssFiles, ...tsFiles];
+
+      // Also discover CSS/SCSS files with custom properties that weren't
+      // in the explicit list. This catches token files the config missed
+      // (e.g., root-level design-tokens.css not listed in config).
+      const additionalCssFiles = await this.discoverCssTokenFiles();
+      for (const cssFile of additionalCssFiles) {
+        if (!filesToScan.includes(cssFile)) {
+          filesToScan.push(cssFile);
+        }
+      }
+    }
+
+    if (!usedExplicitFiles || filesToScan.length === 0) {
+      // Scan default patterns (either no explicit files configured,
+      // or explicit patterns matched nothing -- fall back to auto-discovery)
+      if (usedExplicitFiles && filesToScan.length === 0) {
+        console.warn(
+          "[buoy:token-scanner] Configured token file patterns matched no files. " +
+          "Falling back to auto-discovery of token files."
+        );
+      }
+      const defaultFiles = await this.findDefaultTokenFiles();
+      filesToScan = [...new Set([...filesToScan, ...defaultFiles])];
     }
 
     // Deduplicate files
@@ -187,7 +154,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       addTokens(success.tokens);
     }
 
-    // Map failures to errors
+    // Map failures to errors and warn so they are not silently ignored
     for (let i = 0; i < results.length; i++) {
       const result = results[i]!;
       if (result.status === "rejected") {
@@ -203,6 +170,10 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
             : ext === ".ts" || ext === ".tsx"
               ? "TS_PARSE_ERROR"
               : "CSS_PARSE_ERROR";
+        const relPath = relative(this.config.projectRoot, file);
+        console.warn(
+          `[buoy:token-scanner] Failed to parse ${relPath}: ${message}`
+        );
         errors.push({ file, message, code });
       }
     }
@@ -240,6 +211,131 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     }
 
     return [...new Set(allFiles)];
+  }
+
+  /**
+   * Return all files matching the default auto-discovery patterns.
+   * This is extracted so it can be reused both in the normal default path
+   * and as a fallback when explicit file patterns yield no results.
+   */
+  private async findDefaultTokenFiles(): Promise<string[]> {
+    const jsonFiles = await this.findTokenFiles([
+      "**/*.tokens.json",
+      "**/tokens.json",
+      "**/tokens/**/*.json",
+      // Semantic token JSON files (Chakra UI v3)
+      "**/semantic-tokens/**/*.json",
+      // Style definition files (text-styles.json, animation-styles.json, layer-styles.json)
+      "**/*-styles.json",
+      // Theme token JSON files
+      "**/theme/**/*.json",
+    ]);
+    const cssFiles = await this.findTokenFiles(["**/*.css", "**/*.scss"]);
+    const tsFiles = await this.findTokenFiles([
+      // Type definition files
+      "**/types.ts",
+      "**/types.tsx",
+      "**/types/**/*.ts",
+      "**/types/**/*.tsx",
+      "**/*.types.ts",
+      "**/*.types.tsx",
+      // Token definition files (TypeScript objects)
+      "**/tokens/**/*.ts",
+      "**/tokens/**/*.tsx",
+      "**/tokens.ts",
+      "**/theme/tokens.ts",
+      "**/theme/**/*.ts",
+      // Semantic token files (Chakra UI v3, Panda CSS)
+      "**/semantic-tokens/**/*.ts",
+      "**/semantic-tokens/**/*.tsx",
+      // Mantine-style theme definition files
+      "**/default-theme.ts",
+      "**/default-colors.ts",
+      "**/*Provider/**/*.ts",
+      "**/*Provider/**/*.tsx",
+      // Generated token files (Chakra UI v3, Panda CSS)
+      "**/*.gen.ts",
+      "**/generated/**/*.ts",
+      // Keyframes/animations files
+      "**/keyframes.ts",
+      "**/animations.ts",
+      // Tailwind config files (for theme.extend tokens)
+      "**/tailwind.config.ts",
+      "**/tailwind.config.js",
+      "**/tailwind.config.mjs",
+      "**/tailwind.config.cjs",
+      // Design system configuration files
+      "**/design-system.config.ts",
+      "**/design-tokens.ts",
+      "**/design-tokens.js",
+      // Common theme file patterns
+      "**/colors.ts",
+      "**/colors.js",
+      "**/spacing.ts",
+      "**/spacing.js",
+      "**/typography.ts",
+      "**/typography.js",
+    ]);
+    return [...new Set([...jsonFiles, ...cssFiles, ...tsFiles])];
+  }
+
+  /**
+   * Discover CSS/SCSS files that contain CSS custom properties (variables).
+   * This supplements explicit file lists by scanning common locations for
+   * files containing `:root` blocks or `--` custom properties that may not
+   * have been included in the user's configuration.
+   */
+  private async discoverCssTokenFiles(): Promise<string[]> {
+    const ignore = this.config.exclude || ["**/node_modules/**", "**/dist/**"];
+    const candidatePatterns = [
+      // Root-level CSS files (often missed by specific config paths)
+      "*.css",
+      "*.scss",
+      // Common token/variable file locations
+      "src/**/*.css",
+      "src/**/*.scss",
+      "styles/**/*.css",
+      "styles/**/*.scss",
+      "css/**/*.css",
+      "css/**/*.scss",
+      // Design token naming conventions
+      "**/design-tokens.css",
+      "**/design-tokens.scss",
+      "**/tokens.css",
+      "**/tokens.scss",
+      "**/variables.css",
+      "**/variables.scss",
+      "**/_variables.scss",
+      "**/_tokens.scss",
+      "**/theme.css",
+      "**/theme.scss",
+    ];
+
+    const allCandidates: string[] = [];
+    for (const pattern of candidatePatterns) {
+      const matches = await glob(pattern, {
+        cwd: this.config.projectRoot,
+        ignore,
+        absolute: true,
+      });
+      allCandidates.push(...matches);
+    }
+
+    // Filter to only files that actually contain CSS custom properties
+    const filesWithTokens: string[] = [];
+    for (const filePath of [...new Set(allCandidates)]) {
+      try {
+        const content = await readFile(filePath, "utf-8");
+        // Check for CSS custom properties (--variable-name: value)
+        if (/--[a-zA-Z][\w-]*\s*:/.test(content)) {
+          filesWithTokens.push(filePath);
+        }
+      } catch {
+        // Ignore read errors for individual files
+      }
+    }
+
+    return filesWithTokens;
   }
 
   private async parseJsonTokenFile(filePath: string): Promise<DesignToken[]> {
@@ -1348,8 +1444,11 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           scannedAt: new Date(),
         });
       }
-    } catch {
-      // Ignore parse errors
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[buoy:token-scanner] Failed to parse token object in ${relativePath}: ${errMessage}`
+      );
     }
 
     return tokens;

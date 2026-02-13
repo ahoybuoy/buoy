@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import chalk from "chalk";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { writeFileSync } from "fs";
@@ -245,7 +245,7 @@ export function createShowCommand(): Command {
     .option("--json", "Output as JSON")
     .option("--raw", "Output raw signals without grouping")
     .option("-f, --format <type>", "Output format: json, markdown, html, table, tree, agent")
-    .option("-S, --severity <level>", "Filter by minimum severity (info, warning, critical)")
+    .addOption(new Option("-S, --severity <level>", "Filter by minimum severity").choices(["info", "warning", "critical"]))
     .option("-t, --type <type>", "Filter by drift type")
     .option("-v, --verbose", "Verbose output with full details")
     .option("--include-baseline", "Include baselined drifts (show all)")

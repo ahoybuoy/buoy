@@ -16,6 +16,7 @@ import {
 import {
   formatComponentTable,
   formatTokenTable,
+  formatScanMarkdown,
 } from "../output/formatters.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import type { BuoyConfig } from "../config/schema.js";
@@ -41,13 +42,14 @@ export function createScanCommand(): Command {
       "Specific sources to scan (react, vue, svelte, angular, tokens, etc.)",
     )
     .option("--json", "Output as JSON")
+    .option("-f, --format <type>", "Output format (json, markdown, table)")
     .option("-v, --verbose", "Verbose output")
     .option("--no-persist", "Skip saving results to local database")
     .option("--no-cache", "Disable incremental scanning cache")
     .option("--clear-cache", "Clear cache before scanning")
     .action(async (options) => {
       // Set JSON mode before creating spinner to redirect spinner to stderr
-      if (options.json) {
+      if (options.json || options.format === "json") {
         setJsonMode(true);
       }
       const spin = spinner("Loading configuration...");
@@ -75,7 +77,7 @@ export function createScanCommand(): Command {
           isAutoDetected = true;
 
           // Show what we detected (but not in JSON mode)
-          if (!options.json && (autoResult.detected.length > 0 || autoResult.monorepo)) {
+          if (!options.json && !options.format && (autoResult.detected.length > 0 || autoResult.monorepo)) {
             spin.stop();
             console.log(chalk.cyan.bold("⚡ Zero-config mode"));
             console.log(chalk.dim("   Auto-detected:"));
@@ -130,8 +132,14 @@ export function createScanCommand(): Command {
           spin.stop();
 
           // JSON mode: return empty results
-          if (options.json) {
+          if (options.json || options.format === "json") {
             console.log(JSON.stringify({ components: [], tokens: [], errors: [] }, null, 2));
+            return;
+          }
+
+          // Markdown mode: return empty results
+          if (options.format === "markdown") {
+            console.log(formatScanMarkdown([], []));
             return;
           }
 
@@ -194,8 +202,11 @@ export function createScanCommand(): Command {
 
         spin.stop();
 
-        // Output results
-        if (options.json) {
+        // Resolve format: --json flag is shorthand for --format json
+        const format = options.format || (options.json ? "json" : undefined);
+
+        // Output results based on format
+        if (format === "json") {
           console.log(
             JSON.stringify(
               {
@@ -211,6 +222,12 @@ export function createScanCommand(): Command {
               2,
             ),
           );
+          store?.close();
+          return;
+        }
+
+        if (format === "markdown") {
+          console.log(formatScanMarkdown(results.components, results.tokens));
           store?.close();
           return;
         }

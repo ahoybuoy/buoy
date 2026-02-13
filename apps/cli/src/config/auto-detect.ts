@@ -449,6 +449,7 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
       cwd: projectRoot,
       nodir: true,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      maxDepth: 8,
     });
     found.push(...matches);
   }
@@ -472,6 +473,7 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
       cwd: projectRoot,
       nodir: true,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      maxDepth: 8,
     });
 
     for (const file of matches) {

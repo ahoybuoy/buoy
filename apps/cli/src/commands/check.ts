@@ -215,11 +215,17 @@ export function createCheckCommand(): Command {
       "Output format: text, json, ai-feedback",
       "text",
     )
+    .option("--json", "Output as JSON (shorthand for --format json)")
     .option("--preview-comment", "Preview what a PR comment would look like")
     .option("--report", "Report results to Buoy Cloud (requires login)")
     .option("--repo <repo>", "Repository name (owner/repo) for cloud reporting")
     .option("--pr <number>", "PR number for cloud reporting", parseInt)
     .action(async (options) => {
+      // --json is shorthand for --format json
+      if (options.json) {
+        options.format = "json";
+      }
+
       const log = options.quiet
         ? () => {}
         : options.verbose
