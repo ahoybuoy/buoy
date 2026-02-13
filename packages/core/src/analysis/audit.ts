@@ -36,6 +36,56 @@ export interface AuditReport {
   score: number;
 }
 
+// --- 4-Pillar Health Score System ---
+
+/**
+ * Metrics gathered from drift analysis for health scoring.
+ * All counts come from drift signals and scan results.
+ */
+export interface HealthMetrics {
+  /** Total components found in codebase */
+  componentCount: number;
+  /** Total design tokens defined */
+  tokenCount: number;
+  /** Number of hardcoded-value drift signals */
+  hardcodedValueCount: number;
+  /** Number of unused-token drift signals */
+  unusedTokenCount: number;
+  /** Number of naming-inconsistency drift signals */
+  namingInconsistencyCount: number;
+  /** Number of critical-severity drift signals */
+  criticalCount: number;
+  /** Whether a utility CSS framework (Tailwind) is detected */
+  hasUtilityFramework: boolean;
+  /** Whether a design system library (MUI, Chakra, shadcn, etc.) is detected */
+  hasDesignSystemLibrary: boolean;
+}
+
+export interface HealthPillar {
+  name: string;
+  score: number;
+  maxScore: number;
+  description: string;
+}
+
+export interface HealthScoreResult {
+  /** Overall score 0-100 */
+  score: number;
+  /** Tier label */
+  tier: 'Great' | 'Good' | 'OK' | 'Bad' | 'Terrible';
+  /** Individual pillar scores */
+  pillars: {
+    valueDiscipline: HealthPillar;
+    tokenHealth: HealthPillar;
+    consistency: HealthPillar;
+    criticalIssues: HealthPillar;
+  };
+  /** Actionable improvement suggestions */
+  suggestions: string[];
+  /** Raw metrics used for scoring */
+  metrics: HealthMetrics;
+}
+
 /**
  * Generate an audit report from extracted values
  */
@@ -211,43 +261,136 @@ function numericDistance(a: string, b: string): number {
 }
 
 /**
- * Calculate health score (0-100) from audit report
- * 
- * The score reflects how "clean" the codebase is:
- * - 100 = No hardcoded design values found (using tokens properly)
- * - Lower scores = More hardcoded values that should be tokens
- * 
- * Penalties:
- * - Each unique hardcoded value: -3 points
- * - Each file with issues: -1 point  
- * - Extra penalty for files with many issues: -0.5 per issue over 5
- * - Close matches (typos): -5 points each
+ * Calculate health score (0-100) from audit report (legacy compatibility).
+ * Delegates to the 4-pillar system using available audit data.
  */
 export function calculateHealthScore(report: AuditReport): number {
-  // Perfect score if no issues
-  if (report.totals.uniqueValues === 0) {
-    return 100;
+  // Legacy: use audit report data to approximate metrics
+  const metrics: HealthMetrics = {
+    componentCount: report.totals.filesAffected || 1,
+    tokenCount: 0,
+    hardcodedValueCount: report.totals.uniqueValues,
+    unusedTokenCount: 0,
+    namingInconsistencyCount: 0,
+    criticalCount: 0,
+    hasUtilityFramework: false,
+    hasDesignSystemLibrary: false,
+  };
+  return calculateHealthScorePillar(metrics).score;
+}
+
+/**
+ * 4-Pillar Health Score System
+ *
+ * Measures design system health across four dimensions:
+ * - Value Discipline (0-60): Hardcoded values per component (density)
+ * - Token Health (0-20): Token system existence and adoption
+ * - Consistency (0-10): Naming convention adherence
+ * - Critical Issues (0-10): Accessibility and critical failures
+ *
+ * Tiers: 80-100 Great, 60-79 Good, 40-59 OK, 20-39 Bad, 0-19 Terrible
+ */
+export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreResult {
+  const suggestions: string[] = [];
+
+  // Pillar 1: Value Discipline (0-60)
+  const density = metrics.hardcodedValueCount / Math.max(metrics.componentCount, 1);
+  const valueDisciplineScore = Math.round(60 * clamp(1 - density / 3, 0, 1));
+
+  if (density > 0.5) {
+    suggestions.push(
+      `${metrics.hardcodedValueCount} hardcoded values across your components — extract to design tokens`
+    );
   }
 
-  let score = 100;
-
-  // Penalize for each unique hardcoded value
-  // 2 values = -6, 10 values = -30, 30 values = -90
-  score -= report.totals.uniqueValues * 3;
-
-  // Penalize for each file affected (encourages consolidation)
-  score -= report.totals.filesAffected;
-
-  // Extra penalty for files with many hardcoded values
-  for (const file of report.worstFiles) {
-    if (file.issueCount > 5) {
-      score -= (file.issueCount - 5) * 0.5;
+  // Pillar 2: Token Health (0-20)
+  let tokenHealthScore: number;
+  if (metrics.tokenCount > 0) {
+    const usedTokens = metrics.tokenCount - metrics.unusedTokenCount;
+    tokenHealthScore = Math.round(20 * clamp(usedTokens / metrics.tokenCount, 0, 1));
+    if (metrics.unusedTokenCount > 0) {
+      suggestions.push(
+        `${metrics.unusedTokenCount} tokens defined but unused — wire them into components`
+      );
+    }
+  } else if (metrics.hasUtilityFramework || metrics.hasDesignSystemLibrary) {
+    // Utility framework or design system library acts as token system
+    tokenHealthScore = density < 0.5 ? 15 : density < 1.0 ? 10 : 5;
+  } else if (density < 0.1) {
+    // No explicit system but very few hardcoded values = implied system
+    tokenHealthScore = 10;
+  } else {
+    tokenHealthScore = 0;
+    if (metrics.componentCount > 0) {
+      suggestions.push(
+        'No design token system detected — add tokens or a utility framework'
+      );
     }
   }
 
-  // Penalize for close matches (typos) - these are especially bad
-  score -= report.closeMatches.length * 5;
+  // Pillar 3: Consistency (0-10)
+  const namingRate = metrics.namingInconsistencyCount / Math.max(metrics.componentCount, 1);
+  const consistencyScore = Math.round(10 * clamp(1 - namingRate / 0.15, 0, 1));
 
-  // Clamp to 0-100
-  return Math.max(0, Math.min(100, Math.round(score)));
+  if (namingRate > 0.05) {
+    suggestions.push(
+      `${metrics.namingInconsistencyCount} naming inconsistencies — standardize prop/component conventions`
+    );
+  }
+
+  // Pillar 4: Critical Issues (0-10)
+  const criticalScore = Math.max(0, 10 - metrics.criticalCount * 5);
+
+  if (metrics.criticalCount > 0) {
+    suggestions.push(
+      `${metrics.criticalCount} critical issue${metrics.criticalCount === 1 ? '' : 's'} (accessibility/contrast) — fix immediately`
+    );
+  }
+
+  const total = valueDisciplineScore + tokenHealthScore + consistencyScore + criticalScore;
+
+  return {
+    score: total,
+    tier: getHealthTier(total),
+    pillars: {
+      valueDiscipline: {
+        name: 'Value Discipline',
+        score: valueDisciplineScore,
+        maxScore: 60,
+        description: 'Hardcoded values per component',
+      },
+      tokenHealth: {
+        name: 'Token Health',
+        score: tokenHealthScore,
+        maxScore: 20,
+        description: 'Token system adoption',
+      },
+      consistency: {
+        name: 'Consistency',
+        score: consistencyScore,
+        maxScore: 10,
+        description: 'Naming convention adherence',
+      },
+      criticalIssues: {
+        name: 'Critical Issues',
+        score: criticalScore,
+        maxScore: 10,
+        description: 'Accessibility and critical failures',
+      },
+    },
+    suggestions,
+    metrics,
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function getHealthTier(score: number): 'Great' | 'Good' | 'OK' | 'Bad' | 'Terrible' {
+  if (score >= 80) return 'Great';
+  if (score >= 60) return 'Good';
+  if (score >= 40) return 'OK';
+  if (score >= 20) return 'Bad';
+  return 'Terrible';
 }

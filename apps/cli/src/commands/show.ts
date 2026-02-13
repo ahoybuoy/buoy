@@ -29,11 +29,7 @@ import { DriftAnalysisService } from "../services/drift-analysis.js";
 import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
 import type { DriftSignal, Severity } from "@buoy-design/core";
 import { formatUpgradeHint } from "../utils/upgrade-hints.js";
-import { generateAuditReport, findCloseMatches, type AuditValue, type AuditReport, DriftAggregator } from "@buoy-design/core";
-import { extractStyles, extractCssFileStyles } from "@buoy-design/scanners";
-import { parseCssValues } from "@buoy-design/core";
-import { glob } from "glob";
-import { readFile } from "fs/promises";
+import { calculateHealthScorePillar, type HealthMetrics, type HealthScoreResult, DriftAggregator } from "@buoy-design/core";
 import type { BuoyConfig } from "../config/schema.js";
 import { detectHookSystem } from "../hooks/index.js";
 import {
@@ -446,73 +442,38 @@ export function createShowCommand(): Command {
     .command("health")
     .description("Show design system health score")
     .option("--json", "Output as JSON")
-    .option("--tokens <path>", "Path to design tokens file for close-match detection")
     .action(async (options, command) => {
       const parentOpts = command.parent?.opts() || {};
       const json = options.json ?? parentOpts.json;
       if (json) setJsonMode(true);
 
-      const spin = spinner("Auditing codebase...");
+      const spin = spinner("Analyzing design system health...");
 
       try {
-        const extractedValues = await extractAllValues(spin);
+        const config = await getOrBuildConfig();
+
+        // Gather all health metrics from drift analysis
+        const healthMetrics = await gatherHealthMetrics(config, spin, parentOpts.cache !== false);
+
         spin.stop();
 
-        if (extractedValues.length === 0) {
-          if (json) {
-            console.log(JSON.stringify({
-              score: 100,
-              message: "No hardcoded design values found",
-              categories: {},
-              worstFiles: [],
-            }, null, 2));
-          } else {
-            console.log('');
-            console.log(chalk.green.bold('  Health Score: 100/100 (Good)'));
-            console.log('');
-            console.log(chalk.dim('  No hardcoded design values found.'));
-            console.log(chalk.dim('  Your codebase is using design tokens correctly!'));
-            console.log('');
-          }
-          return;
-        }
-
-        const report = generateAuditReport(extractedValues);
-
-        // Load design tokens for close-match detection if provided
-        if (options.tokens) {
-          try {
-            const tokenContent = await readFile(options.tokens, "utf-8");
-            const tokenData = JSON.parse(tokenContent);
-            const colorTokens = extractTokenValues(tokenData, "color");
-            const spacingTokens = extractTokenValues(tokenData, "spacing");
-
-            const colorValues = extractedValues
-              .filter((v) => v.category === "color")
-              .map((v) => v.value);
-            const spacingValues = extractedValues
-              .filter((v) => v.category === "spacing")
-              .map((v) => v.value);
-
-            report.closeMatches = [
-              ...findCloseMatches(colorValues, colorTokens, "color"),
-              ...findCloseMatches(spacingValues, spacingTokens, "spacing"),
-            ];
-          } catch {
-            // Ignore token loading errors
-          }
-        }
+        const result = calculateHealthScorePillar(healthMetrics);
 
         if (json) {
           console.log(JSON.stringify({
-            score: report.score,
-            categories: report.categories,
-            worstFiles: report.worstFiles,
-            totals: report.totals,
-            closeMatches: report.closeMatches,
+            score: result.score,
+            tier: result.tier,
+            pillars: {
+              valueDiscipline: { score: result.pillars.valueDiscipline.score, max: 60 },
+              tokenHealth: { score: result.pillars.tokenHealth.score, max: 20 },
+              consistency: { score: result.pillars.consistency.score, max: 10 },
+              criticalIssues: { score: result.pillars.criticalIssues.score, max: 10 },
+            },
+            suggestions: result.suggestions,
+            metrics: result.metrics,
           }, null, 2));
         } else {
-          printHealthReport(report);
+          printPillarHealthReport(result);
         }
       } catch (err) {
         spin.stop();
@@ -1425,14 +1386,27 @@ export function createShowCommand(): Command {
           },
         );
 
-        // Calculate health (doesn't need cache)
-        spin.text = "Calculating health score...";
-        const extractedValues = await extractAllValues(spin);
-        const healthReport = extractedValues.length > 0
-          ? generateAuditReport(extractedValues)
-          : { score: 100, categories: {}, worstFiles: [], totals: { uniqueValues: 0, totalUsages: 0, filesAffected: 0 } };
-
         const { scanResult, driftResult } = allResults;
+
+        // Calculate health using 4-pillar system
+        spin.text = "Calculating health score...";
+        const drifts = driftResult.drifts;
+        const detected = await detectFrameworks(process.cwd());
+
+        const healthMetrics: HealthMetrics = {
+          componentCount: scanResult.components.length,
+          tokenCount: scanResult.tokens.length,
+          hardcodedValueCount: drifts.filter(d => d.type === "hardcoded-value").length,
+          unusedTokenCount: drifts.filter(d => d.type === "unused-token").length,
+          namingInconsistencyCount: drifts.filter(d => d.type === "naming-inconsistency").length,
+          criticalCount: drifts.filter(d => d.severity === "critical").length,
+          hasUtilityFramework: detected.some(f => f.name === "tailwind"),
+          hasDesignSystemLibrary: detected.some(f =>
+            ["mui", "chakra", "mantine", "ant-design", "radix"].includes(f.name)
+          ),
+        };
+        const healthResult = calculateHealthScorePillar(healthMetrics);
+
         spin.stop();
 
         // Aggregate drift signals
@@ -1473,9 +1447,15 @@ export function createShowCommand(): Command {
             },
           },
           health: {
-            score: healthReport.score,
-            categories: healthReport.categories,
-            worstFiles: healthReport.worstFiles.slice(0, 5),
+            score: healthResult.score,
+            tier: healthResult.tier,
+            pillars: {
+              valueDiscipline: { score: healthResult.pillars.valueDiscipline.score, max: 60 },
+              tokenHealth: { score: healthResult.pillars.tokenHealth.score, max: 20 },
+              consistency: { score: healthResult.pillars.consistency.score, max: 10 },
+              criticalIssues: { score: healthResult.pillars.criticalIssues.score, max: 10 },
+            },
+            suggestions: healthResult.suggestions,
           },
           setup,
         };
@@ -1566,76 +1546,6 @@ function getSetupStatus(cwd: string): Record<string, unknown> {
   };
 }
 
-// Helper: Extract all hardcoded values for health audit
-async function extractAllValues(spin: { text: string }): Promise<AuditValue[]> {
-  const cwd = process.cwd();
-
-  spin.text = "Finding source files...";
-  const patterns = [
-    "**/*.tsx", "**/*.jsx", "**/*.vue", "**/*.svelte",
-    "**/*.css", "**/*.scss",
-  ];
-  const ignore = [
-    "**/node_modules/**", "**/dist/**", "**/build/**",
-    "**/*.min.css", "**/*.test.*", "**/*.spec.*", "**/*.stories.*",
-  ];
-
-  const files: string[] = [];
-  for (const pattern of patterns) {
-    const matches = await glob(pattern, { cwd, ignore, absolute: true });
-    files.push(...matches);
-  }
-
-  if (files.length === 0) return [];
-
-  spin.text = `Scanning ${files.length} files...`;
-  const extractedValues: AuditValue[] = [];
-
-  for (const filePath of files) {
-    try {
-      const content = await readFile(filePath, "utf-8");
-      const relativePath = filePath.replace(cwd + "/", "");
-      const ext = filePath.split(".").pop()?.toLowerCase();
-      const isCss = ext === "css" || ext === "scss";
-
-      const styles = isCss
-        ? extractCssFileStyles(content)
-        : extractStyles(content, ext === "vue" ? "vue" : ext === "svelte" ? "svelte" : "react");
-
-      for (const style of styles) {
-        const { values } = parseCssValues(style.css);
-        for (const v of values) {
-          extractedValues.push({
-            category: mapCategory(v.property),
-            value: v.value,
-            file: relativePath,
-            line: 1,
-          });
-        }
-      }
-    } catch {
-      // Skip files that can't be processed
-    }
-  }
-
-  return extractedValues;
-}
-
-function mapCategory(property: string): AuditValue["category"] {
-  const colorProps = ["color", "background", "background-color", "border-color", "fill", "stroke"];
-  const spacingProps = ["padding", "margin", "gap", "top", "right", "bottom", "left", "width", "height"];
-  const radiusProps = ["border-radius"];
-  const typographyProps = ["font-size", "line-height", "font-weight", "font-family"];
-
-  const propLower = property.toLowerCase();
-
-  if (colorProps.some(p => propLower.includes(p))) return "color";
-  if (radiusProps.some(p => propLower.includes(p))) return "radius";
-  if (typographyProps.some(p => propLower.includes(p))) return "typography";
-  if (spacingProps.some(p => propLower.includes(p))) return "spacing";
-
-  return "spacing";
-}
 
 function getSummary(drifts: DriftSignal[]): {
   critical: number;
@@ -1649,76 +1559,107 @@ function getSummary(drifts: DriftSignal[]): {
   };
 }
 
-function printHealthReport(report: AuditReport): void {
-  newline();
-  header("Design System Health Report");
+/**
+ * Gather all metrics needed for the 4-pillar health score.
+ */
+async function gatherHealthMetrics(
+  config: BuoyConfig,
+  spin: { text: string },
+  useCache: boolean,
+): Promise<HealthMetrics> {
+  const cwd = process.cwd();
+
+  // Run drift analysis to get all signals
+  spin.text = "Scanning components and tokens...";
+  const { result } = await withOptionalCache(
+    cwd,
+    useCache,
+    async (cache: ScanCache | undefined) => {
+      const orchestrator = new ScanOrchestrator(config, cwd, { cache });
+      const scanResult = await orchestrator.scan({
+        onProgress: (msg) => { spin.text = msg; },
+      });
+
+      spin.text = "Analyzing drift...";
+      const service = new DriftAnalysisService(config);
+      const driftResult = await service.analyze({
+        onProgress: (msg) => { spin.text = msg; },
+        includeBaseline: false,
+        cache,
+      });
+
+      return { scanResult, driftResult };
+    },
+  );
+
+  const { scanResult, driftResult } = result;
+  const drifts = driftResult.drifts;
+
+  // Count drift types
+  const hardcodedValueCount = drifts.filter(d => d.type === "hardcoded-value").length;
+  const unusedTokenCount = drifts.filter(d => d.type === "unused-token").length;
+  const namingInconsistencyCount = drifts.filter(d => d.type === "naming-inconsistency").length;
+  const criticalCount = drifts.filter(d => d.severity === "critical").length;
+
+  // Detect framework context
+  const detected = await detectFrameworks(cwd);
+  const hasUtilityFramework = detected.some(f =>
+    f.name === "tailwind"
+  );
+  const hasDesignSystemLibrary = detected.some(f =>
+    ["mui", "chakra", "mantine", "ant-design", "radix"].includes(f.name)
+  );
+
+  return {
+    componentCount: scanResult.components.length,
+    tokenCount: scanResult.tokens.length,
+    hardcodedValueCount,
+    unusedTokenCount,
+    namingInconsistencyCount,
+    criticalCount,
+    hasUtilityFramework,
+    hasDesignSystemLibrary,
+  };
+}
+
+function printPillarHealthReport(result: HealthScoreResult): void {
   newline();
 
   const scoreColor =
-    report.score >= 80 ? chalk.green :
-    report.score >= 50 ? chalk.yellow :
+    result.score >= 80 ? chalk.green :
+    result.score >= 60 ? chalk.yellow :
     chalk.red;
 
-  const scoreLabel =
-    report.score >= 80 ? "Good" :
-    report.score >= 50 ? "Fair" :
-    report.score < 30 ? "Poor" : "Needs Work";
-
-  console.log(`Overall Score: ${scoreColor.bold(`${report.score}/100`)} (${scoreLabel})`);
+  console.log(`  Health Score: ${scoreColor.bold(`${result.score}/100`)} (${result.tier})`);
   newline();
 
-  // Category breakdown
-  for (const [category, stats] of Object.entries(report.categories)) {
-    const expected = getExpectedCount(category);
-    const drift = stats.uniqueCount - expected;
-    const driftColor = drift > 5 ? chalk.red : drift > 0 ? chalk.yellow : chalk.green;
+  // Pillar breakdown with progress bars
+  const pillars = [
+    result.pillars.valueDiscipline,
+    result.pillars.tokenHealth,
+    result.pillars.consistency,
+    result.pillars.criticalIssues,
+  ];
 
-    console.log(chalk.bold(capitalize(category)));
-    keyValue("  Found", `${stats.uniqueCount} unique values`);
-    keyValue("  Expected", `~${expected}`);
-    if (drift > 0) {
-      keyValue("  Drift", driftColor(`+${drift} extra values`));
-    }
-
-    if (stats.mostCommon.length > 0) {
-      console.log(chalk.dim("  Most common:"));
-      for (const { value, count } of stats.mostCommon.slice(0, 3)) {
-        console.log(chalk.dim(`    ${value}  (${count} usages)`));
-      }
-    }
-    newline();
+  for (const pillar of pillars) {
+    const barWidth = 20;
+    const filled = Math.round((pillar.score / pillar.maxScore) * barWidth);
+    const empty = barWidth - filled;
+    const bar = chalk.green("\u2588".repeat(filled)) + chalk.dim("\u2591".repeat(empty));
+    const label = pillar.name.padEnd(20);
+    const scoreStr = `${pillar.score}/${pillar.maxScore}`;
+    console.log(`    ${label}${bar} ${scoreStr}`);
   }
 
-  // Close matches (typos)
-  if (report.closeMatches.length > 0) {
-    console.log(chalk.bold.yellow("Possible Typos"));
-    for (const match of report.closeMatches.slice(0, 5)) {
-      console.log(`  ${chalk.yellow("⚠")} ${match.value} → close to ${chalk.cyan(match.closeTo)}`);
-    }
-    if (report.closeMatches.length > 5) {
-      console.log(chalk.dim(`  ... and ${report.closeMatches.length - 5} more`));
-    }
-    newline();
-  }
-
-  // Worst files
-  if (report.worstFiles.length > 0) {
-    console.log(chalk.bold("Worst Offenders"));
-    for (const { file, issueCount } of report.worstFiles.slice(0, 5)) {
-      console.log(`  ${chalk.red(issueCount.toString().padStart(3))} issues  ${file}`);
-    }
-    newline();
-  }
-
-  // Summary
-  console.log(chalk.dim("─".repeat(50)));
-  keyValue("Total unique values", String(report.totals.uniqueValues));
-  keyValue("Total usages", String(report.totals.totalUsages));
-  keyValue("Files affected", String(report.totals.filesAffected));
   newline();
 
-  if (report.score < 50) {
-    console.log(chalk.yellow("Run `buoy show drift` for detailed fixes."));
+  // Improvement suggestions
+  if (result.suggestions.length > 0) {
+    console.log("  Improve your score:");
+    for (const suggestion of result.suggestions) {
+      console.log(`    ${chalk.yellow("\u2192")} ${suggestion}`);
+    }
+    newline();
   }
 
   // Show upgrade hint after health score
@@ -1729,40 +1670,6 @@ function printHealthReport(report: AuditReport): void {
   }
 }
 
-function extractTokenValues(tokenData: Record<string, unknown>, _category: string): string[] {
-  const values: string[] = [];
-
-  function traverse(obj: unknown): void {
-    if (typeof obj !== "object" || obj === null) return;
-
-    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-      if (key === "$value" || key === "value") {
-        if (typeof value === "string") {
-          values.push(value);
-        }
-      } else if (typeof value === "object") {
-        traverse(value);
-      }
-    }
-  }
-
-  traverse(tokenData);
-  return values;
-}
-
-function getExpectedCount(category: string): number {
-  const expected: Record<string, number> = {
-    color: 12,
-    spacing: 8,
-    typography: 6,
-    radius: 4,
-  };
-  return expected[category] || 10;
-}
-
-function capitalize(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
 
 function fuzzyScore(query: string, target: string): number {
   const q = query.toLowerCase();

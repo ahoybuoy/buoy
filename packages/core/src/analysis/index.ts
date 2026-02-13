@@ -35,11 +35,16 @@ export {
   generateAuditReport,
   findCloseMatches,
   calculateHealthScore,
+  calculateHealthScorePillar,
+  getHealthTier,
   type AuditValue,
   type AuditReport,
   type CategoryStats,
   type FileIssue,
   type CloseMatch,
+  type HealthMetrics,
+  type HealthPillar,
+  type HealthScoreResult,
 } from "./audit.js";
 
 // Drift aggregation
