@@ -261,11 +261,11 @@ function numericDistance(a: string, b: string): number {
 }
 
 /**
- * Calculate health score (0-100) from audit report (legacy compatibility).
- * Delegates to the 4-pillar system using available audit data.
+ * @deprecated Use calculateHealthScorePillar() with proper HealthMetrics instead.
+ * This legacy function approximates componentCount from filesAffected which
+ * is inaccurate. Kept for backward compatibility with external callers.
  */
 export function calculateHealthScore(report: AuditReport): number {
-  // Legacy: use audit report data to approximate metrics
   const metrics: HealthMetrics = {
     componentCount: report.totals.filesAffected || 1,
     tokenCount: 0,
