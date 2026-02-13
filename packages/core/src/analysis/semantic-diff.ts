@@ -334,14 +334,21 @@ export class SemanticDiffEngine {
     const propTypeMap = buildPropTypeMap(components);
     const propNamingMap = buildPropNamingMap(components);
 
+    // Count documented components to gate missing-documentation signals.
+    // Only flag when there's partial adoption (some have docs, others don't).
+    const documentedCount = options.checkDocumentation
+      ? components.filter(c => c.metadata.documentation).length
+      : 0;
+
     for (const component of components) {
       // Check deprecation
       if (options.checkDeprecated && component.metadata.deprecated) {
         drifts.push(this.createDeprecatedDrift(component));
       }
 
-      // Check documentation
-      if (options.checkDocumentation && !component.metadata.documentation) {
+      // Check documentation — only flag when there's partial adoption.
+      // If no components have docs, the project doesn't use documentation infrastructure.
+      if (options.checkDocumentation && !component.metadata.documentation && documentedCount > 0) {
         drifts.push({
           id: createDriftId("missing-documentation", component.id),
           type: "missing-documentation",

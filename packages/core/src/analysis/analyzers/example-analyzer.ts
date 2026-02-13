@@ -234,39 +234,43 @@ export function checkExampleCompliance(components: Component[]): DriftSignal[] {
   const coverage = analyzeExampleCoverage(components);
 
   // Flag production components without examples (info level)
-  for (const comp of coverage.withoutExamples) {
-    // Skip internal/utility components that typically don't need examples
-    const name = comp.name.toLowerCase();
-    if (
-      name.includes("context") ||
-      name.includes("provider") ||
-      name.includes("wrapper") ||
-      name.includes("internal") ||
-      name.includes("utils")
-    ) {
-      continue;
-    }
+  // Only flag when there's partial adoption (some components have stories, others don't).
+  // If coverage is 0%, the project doesn't use Storybook — don't penalize them.
+  if (coverage.coveragePercent > 0) {
+    for (const comp of coverage.withoutExamples) {
+      // Skip internal/utility components that typically don't need examples
+      const name = comp.name.toLowerCase();
+      if (
+        name.includes("context") ||
+        name.includes("provider") ||
+        name.includes("wrapper") ||
+        name.includes("internal") ||
+        name.includes("utils")
+      ) {
+        continue;
+      }
 
-    drifts.push({
-      id: createStableDriftId("missing-documentation", comp.name),
-      type: "missing-documentation",
-      severity: "info",
-      source: {
-        entityType: "component",
-        entityId: comp.id,
-        entityName: comp.name,
-        location: getSourcePath(comp.source) || "",
-      },
-      message: `Component "${comp.name}" has no example/story files`,
-      details: {
-        suggestions: [
-          "Add a .stories.tsx file to document component usage",
-          "Create examples showing common use cases",
-          "Consider adding to Storybook for interactive documentation",
-        ],
-      },
-      detectedAt: new Date(),
-    });
+      drifts.push({
+        id: createStableDriftId("missing-documentation", comp.name),
+        type: "missing-documentation",
+        severity: "info",
+        source: {
+          entityType: "component",
+          entityId: comp.id,
+          entityName: comp.name,
+          location: getSourcePath(comp.source) || "",
+        },
+        message: `Component "${comp.name}" has no example/story files`,
+        details: {
+          suggestions: [
+            "Add a .stories.tsx file to document component usage",
+            "Create examples showing common use cases",
+            "Consider adding to Storybook for interactive documentation",
+          ],
+        },
+        detectedAt: new Date(),
+      });
+    }
   }
 
   // Compare production to examples for inconsistencies

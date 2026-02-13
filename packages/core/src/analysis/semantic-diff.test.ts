@@ -726,12 +726,14 @@ describe("SemanticDiffEngine", () => {
   });
 
   describe("missing-documentation", () => {
-    it("flags components without documentation", () => {
-      const comp = createMockComponent("Button", "react");
-      // createMockComponent sets metadata: {} — ensure documentation is undefined
-      comp.metadata.documentation = undefined;
+    it("flags components without documentation when there is partial adoption", () => {
+      const undocumented = createMockComponent("Button", "react");
+      undocumented.metadata.documentation = undefined;
 
-      const result = engine.analyzeComponents([comp], {
+      const documented = createMockComponent("Card", "react");
+      documented.metadata.documentation = "A card container component";
+
+      const result = engine.analyzeComponents([undocumented, documented], {
         checkDocumentation: true,
       });
 
@@ -741,6 +743,22 @@ describe("SemanticDiffEngine", () => {
       expect(docDrifts.length).toBeGreaterThan(0);
       expect(docDrifts[0]!.severity).toBe("info");
       expect(docDrifts[0]!.message).toContain("Button");
+    });
+
+    it("does not flag when no components have documentation (no adoption)", () => {
+      const comp1 = createMockComponent("Button", "react");
+      comp1.metadata.documentation = undefined;
+      const comp2 = createMockComponent("Card", "react");
+      comp2.metadata.documentation = undefined;
+
+      const result = engine.analyzeComponents([comp1, comp2], {
+        checkDocumentation: true,
+      });
+
+      const docDrifts = result.drifts.filter(
+        (d) => d.type === "missing-documentation",
+      );
+      expect(docDrifts).toHaveLength(0);
     });
 
     it("does not flag components with documentation", () => {
