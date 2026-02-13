@@ -83,21 +83,29 @@ buoy
 │   ├── health              # Health score
 │   ├── history             # Scan history
 │   └── all                 # Everything combined
+├── drift                   # Drift detection and fixing
+│   ├── scan                # Scan codebase for components/tokens
+│   ├── check               # Pre-commit drift check
+│   ├── fix                 # Suggest/apply fixes
+│   └── baseline            # Accept existing drift
+│       ├── create          # Create baseline (requires --reason)
+│       ├── show            # View current baseline
+│       ├── update          # Add new drift (requires --reason)
+│       └── clear           # Remove baseline
 ├── begin                   # Interactive wizard
-├── dock                    # Configure project
+├── dock                    # Dock tools into your project
 │   ├── config              # Create .buoy.yaml
 │   ├── skills              # Create AI agent skills
 │   ├── agents              # Set up AI agents
 │   ├── context             # Generate CLAUDE.md context
-│   └── hooks               # Set up git hooks
-├── check                   # Pre-commit drift check
-├── baseline                # Accept existing drift
-│   ├── create              # Create baseline (requires --reason)
-│   ├── show                # View current baseline
-│   ├── update              # Add new drift (requires --reason)
-│   └── clear               # Remove baseline
-├── fix                     # Suggest/apply fixes
-├── plugins                 # Show available scanners
+│   ├── hooks               # Set up git hooks
+│   ├── commands            # Install Claude slash commands
+│   ├── plugins             # Show available scanners
+│   ├── tokens              # Generate/export design tokens
+│   │   ├── compare         # Compare token sources
+│   │   └── import          # Import tokens from Figma/CSS
+│   └── graph               # Build design system knowledge graph
+│       └── learn           # Learn patterns from codebase
 └── ahoy                    # Cloud features
     ├── login               # Authenticate
     ├── logout              # Sign out
@@ -130,10 +138,10 @@ All `show` subcommands output JSON by default.
 | `buoy dock config` | Create .buoy.yaml |
 | `buoy dock agents` | Set up AI agents with design system |
 | `buoy dock hooks` | Set up git hooks |
-| `buoy check` | Fast pre-commit hook drift check |
-| `buoy baseline create -r "reason"` | Accept existing drift (reason required) |
-| `buoy baseline update -r "reason"` | Add new drift to baseline (reason required) |
-| `buoy fix` | Suggest and apply fixes for drift issues |
+| `buoy drift check` | Fast pre-commit hook drift check |
+| `buoy drift baseline create -r "reason"` | Accept existing drift (reason required) |
+| `buoy drift baseline update -r "reason"` | Add new drift to baseline (reason required) |
+| `buoy drift fix` | Suggest and apply fixes for drift issues |
 
 ### Zero-Config Mode
 
@@ -189,7 +197,7 @@ Buoy provides comprehensive AI guardrails for design system compliance:
 | `buoy show drift --json` | Current violations |
 | `buoy dock agents` | Set up AI skills and context |
 | `buoy dock context` | Generate CLAUDE.md section |
-| `buoy fix --dry-run` | Preview fix suggestions |
+| `buoy drift fix --dry-run` | Preview fix suggestions |
 
 ### Sub-Agents
 
@@ -201,7 +209,7 @@ See `docs/ai-agents/` for specialized agent definitions:
 ### AI Development Workflow
 
 1. Load design system skill before generating UI
-2. Validate with `buoy check`
-3. Fix issues with `buoy fix`
-4. Verify with `buoy check` again
+2. Validate with `buoy drift check`
+3. Fix issues with `buoy drift fix`
+4. Verify with `buoy drift check` again
 5. Commit (pre-commit hook runs validation)

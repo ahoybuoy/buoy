@@ -672,7 +672,7 @@ function handleResolveToken(
       nextSteps:
         ctx.tokens.length === 0
           ? [
-              "Run `buoy build tokens` to extract tokens from hardcoded values",
+              "Run `buoy dock tokens` to extract tokens from hardcoded values",
               "Add a design-tokens.json file",
               "Run `buoy sweep` to discover tokens from CSS",
             ]
@@ -757,7 +757,7 @@ function handleSuggestFix(
         nextSteps:
           ctx.tokens.length === 0
             ? [
-                "Run `buoy build tokens` to extract tokens from codebase",
+                "Run `buoy dock tokens` to extract tokens from codebase",
                 "Add a design-tokens.json file",
                 "Manual fix: replace with CSS variable or theme token",
               ]

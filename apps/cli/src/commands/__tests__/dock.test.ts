@@ -160,7 +160,7 @@ describe("dock command", () => {
       const cmd = createDockCommand();
 
       expect(cmd.name()).toBe("dock");
-      expect(cmd.description()).toBe("Dock Buoy into your project");
+      expect(cmd.description()).toBe("Dock tools into your project");
     });
 
     it("has expected options on main command", () => {

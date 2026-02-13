@@ -75,7 +75,7 @@ How was this tested?
 1. Check that CI passes
 2. Review code for:
    - Correctness
-   - Design system compliance (run `buoy check`)
+   - Design system compliance (run `buoy drift check`)
    - Error handling
    - Edge cases
 3. Test locally if significant changes

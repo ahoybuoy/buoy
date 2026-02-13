@@ -1,7 +1,9 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { existsSync } from "fs";
+import { existsSync, readFileSync, readdirSync } from "fs";
 import { writeFileSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 import { loadConfig, getConfigPath } from "../config/loader.js";
 import { buildAutoConfig } from "../config/auto-detect.js";
 import {
@@ -33,6 +35,12 @@ import { parseCssValues } from "@buoy-design/core";
 import { glob } from "glob";
 import { readFile } from "fs/promises";
 import type { BuoyConfig } from "../config/schema.js";
+import { detectHookSystem } from "../hooks/index.js";
+import {
+  detectFrameworks,
+  BUILTIN_SCANNERS,
+  PLUGIN_INFO,
+} from "../detect/frameworks.js";
 
 export function createShowCommand(): Command {
   const cmd = new Command("show")
@@ -413,7 +421,7 @@ export function createShowCommand(): Command {
             if (!hasTokens && !hasFigma && !hasStorybook && !hasDesignTokensFile) {
               newline();
               info("No reference source configured.");
-              info("Run " + chalk.cyan("buoy build tokens") + " to extract design tokens.");
+              info("Run " + chalk.cyan("buoy dock tokens") + " to extract design tokens.");
             }
           }
         }
@@ -869,6 +877,515 @@ export function createShowCommand(): Command {
       }
     });
 
+  // show config
+  cmd
+    .command("config")
+    .description("Show current .buoy.yaml configuration")
+    .option("--json", "Output as JSON")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      const json = options.json || parentOpts.json !== false;
+      if (json) setJsonMode(true);
+
+      const configPath = getConfigPath();
+
+      if (!configPath) {
+        if (json) {
+          console.log(JSON.stringify({ exists: false, path: null }, null, 2));
+        } else {
+          info("No config found. Run " + chalk.cyan("buoy dock config") + " to create .buoy.yaml.");
+        }
+        return;
+      }
+
+      try {
+        const { config } = await loadConfig();
+
+        if (json) {
+          console.log(JSON.stringify({ exists: true, path: configPath, config }, null, 2));
+        } else {
+          header("Configuration");
+          newline();
+          keyValue("Path", configPath);
+          if (config.project?.name) keyValue("Project", config.project.name);
+          newline();
+
+          // Show enabled sources
+          if (config.sources) {
+            header("Sources");
+            for (const [key, source] of Object.entries(config.sources)) {
+              if (source && typeof source === "object" && "enabled" in source) {
+                const enabled = (source as { enabled: boolean }).enabled;
+                const status = enabled ? chalk.green("enabled") : chalk.dim("disabled");
+                keyValue(`  ${key}`, status);
+              }
+            }
+          }
+          newline();
+        }
+      } catch (err) {
+        error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
+
+  // show skills
+  cmd
+    .command("skills")
+    .description("Show AI agent skill files")
+    .option("--json", "Output as JSON")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      const json = options.json || parentOpts.json !== false;
+      if (json) setJsonMode(true);
+
+      const cwd = process.cwd();
+      const skillsDir = join(cwd, ".claude", "skills", "design-system");
+
+      if (!existsSync(skillsDir)) {
+        if (json) {
+          console.log(JSON.stringify({ exists: false, path: skillsDir, files: [] }, null, 2));
+        } else {
+          info("No skills found. Run " + chalk.cyan("buoy dock skills") + " to create AI agent skills.");
+        }
+        return;
+      }
+
+      try {
+        const files = walkDir(skillsDir);
+
+        if (json) {
+          console.log(JSON.stringify({
+            exists: true,
+            path: skillsDir,
+            fileCount: files.length,
+            files: files.map(f => f.replace(cwd + "/", "")),
+          }, null, 2));
+        } else {
+          header("Design System Skills");
+          newline();
+          keyValue("Path", skillsDir.replace(cwd + "/", ""));
+          keyValue("Files", String(files.length));
+          newline();
+          for (const file of files) {
+            console.log(`  ${chalk.green("•")} ${file.replace(cwd + "/", "")}`);
+          }
+          newline();
+        }
+      } catch (err) {
+        error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
+
+  // show agents
+  cmd
+    .command("agents")
+    .description("Show configured AI agents and commands")
+    .option("--json", "Output as JSON")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      const json = options.json || parentOpts.json !== false;
+      if (json) setJsonMode(true);
+
+      const cwd = process.cwd();
+      const agentsDir = join(cwd, ".claude", "agents");
+      const commandsDir = join(cwd, ".claude", "commands");
+
+      const hasAgents = existsSync(agentsDir) && readdirSync(agentsDir).some(f => f.endsWith(".md"));
+      const hasCommands = existsSync(commandsDir) && readdirSync(commandsDir).some(f => f.endsWith(".md"));
+
+      if (!hasAgents && !hasCommands) {
+        if (json) {
+          console.log(JSON.stringify({ exists: false, agents: [], commands: [] }, null, 2));
+        } else {
+          info("No agents configured. Run " + chalk.cyan("buoy dock agents") + " to set up AI agents.");
+        }
+        return;
+      }
+
+      const agents = hasAgents
+        ? readdirSync(agentsDir).filter(f => f.endsWith(".md")).map(f => ({
+            name: f.replace(".md", ""),
+            path: join(".claude", "agents", f),
+          }))
+        : [];
+
+      const commands = hasCommands
+        ? readdirSync(commandsDir).filter(f => f.endsWith(".md")).map(f => ({
+            name: f.replace(".md", ""),
+            path: join(".claude", "commands", f),
+          }))
+        : [];
+
+      if (json) {
+        console.log(JSON.stringify({ exists: true, agents, commands }, null, 2));
+      } else {
+        if (agents.length > 0) {
+          header("Agents");
+          newline();
+          for (const agent of agents) {
+            console.log(`  ${chalk.green("•")} ${agent.name}  ${chalk.dim(agent.path)}`);
+          }
+          newline();
+        }
+        if (commands.length > 0) {
+          header("Commands");
+          newline();
+          for (const cmd of commands) {
+            console.log(`  ${chalk.green("•")} /${cmd.name}  ${chalk.dim(cmd.path)}`);
+          }
+          newline();
+        }
+      }
+    });
+
+  // show context
+  cmd
+    .command("context")
+    .description("Show design system context in CLAUDE.md")
+    .option("--json", "Output as JSON")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      const json = options.json || parentOpts.json !== false;
+      if (json) setJsonMode(true);
+
+      const cwd = process.cwd();
+      const claudeMdPath = join(cwd, "CLAUDE.md");
+
+      if (!existsSync(claudeMdPath)) {
+        if (json) {
+          console.log(JSON.stringify({ exists: false, path: claudeMdPath }, null, 2));
+        } else {
+          info("No design system context in CLAUDE.md. Run " + chalk.cyan("buoy dock context") + " to generate it.");
+        }
+        return;
+      }
+
+      const content = readFileSync(claudeMdPath, "utf-8");
+      const sectionMatch = content.match(/^##?\s*Design\s*System\b.*$/m);
+
+      if (!sectionMatch) {
+        if (json) {
+          console.log(JSON.stringify({ exists: false, path: claudeMdPath, hasSection: false }, null, 2));
+        } else {
+          info("No design system context in CLAUDE.md. Run " + chalk.cyan("buoy dock context") + " to generate it.");
+        }
+        return;
+      }
+
+      // Extract section content between ## Design System and next ## header
+      const sectionStart = content.indexOf(sectionMatch[0]);
+      const afterHeader = content.slice(sectionStart + sectionMatch[0].length);
+      const nextHeaderMatch = afterHeader.match(/\n##?\s+[^\n]/);
+      const sectionContent = nextHeaderMatch
+        ? afterHeader.slice(0, nextHeaderMatch.index!)
+        : afterHeader;
+
+      const sectionLines = sectionContent.trim().split("\n").length;
+      const sectionWords = sectionContent.trim().split(/\s+/).length;
+
+      if (json) {
+        console.log(JSON.stringify({
+          exists: true,
+          path: claudeMdPath,
+          hasSection: true,
+          sectionLines,
+          sectionWords,
+        }, null, 2));
+      } else {
+        header("Design System Context");
+        newline();
+        keyValue("Path", "CLAUDE.md");
+        keyValue("Lines", String(sectionLines));
+        keyValue("Words", String(sectionWords));
+        newline();
+        // Show preview (first 5 lines)
+        const preview = sectionContent.trim().split("\n").slice(0, 5);
+        for (const line of preview) {
+          console.log(chalk.dim(`  ${line}`));
+        }
+        if (sectionLines > 5) {
+          console.log(chalk.dim(`  ... ${sectionLines - 5} more lines`));
+        }
+        newline();
+      }
+    });
+
+  // show hooks
+  cmd
+    .command("hooks")
+    .description("Show configured hooks for drift checking")
+    .option("--json", "Output as JSON")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      const json = options.json || parentOpts.json !== false;
+      if (json) setJsonMode(true);
+
+      const cwd = process.cwd();
+
+      // Detect git hook system
+      const hookSystem = detectHookSystem(cwd);
+
+      // Check for buoy in the hook
+      let gitHookInstalled = false;
+      let gitHookPath: string | null = null;
+
+      if (hookSystem === "husky") {
+        gitHookPath = join(cwd, ".husky", "pre-commit");
+      } else if (hookSystem === "pre-commit") {
+        gitHookPath = join(cwd, ".pre-commit-config.yaml");
+      } else if (hookSystem === "git") {
+        gitHookPath = join(cwd, ".git", "hooks", "pre-commit");
+      }
+
+      if (gitHookPath && existsSync(gitHookPath)) {
+        try {
+          const hookContent = readFileSync(gitHookPath, "utf-8");
+          gitHookInstalled = hookContent.includes("buoy");
+        } catch {
+          // Ignore read errors
+        }
+      }
+
+      // Check for Claude hooks
+      const claudeSettingsPath = join(cwd, ".claude", "settings.local.json");
+      let claudeHooksEnabled = false;
+      let claudeEvents: string[] = [];
+
+      if (existsSync(claudeSettingsPath)) {
+        try {
+          const settings = JSON.parse(readFileSync(claudeSettingsPath, "utf-8"));
+          const hooks = settings.hooks;
+          if (hooks) {
+            if (hooks.SessionStart?.some((h: { hooks?: Array<{ command?: string }> }) =>
+              h.hooks?.some(hk => hk.command?.includes("buoy") || hk.command?.includes("Design system"))
+            )) {
+              claudeHooksEnabled = true;
+              claudeEvents.push("SessionStart");
+            }
+            if (hooks.PostToolUse?.some((h: { hooks?: Array<{ command?: string }> }) =>
+              h.hooks?.some(hk => hk.command?.includes("buoy"))
+            )) {
+              claudeHooksEnabled = true;
+              claudeEvents.push("PostToolUse");
+            }
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+
+      if (!gitHookInstalled && !claudeHooksEnabled) {
+        if (json) {
+          console.log(JSON.stringify({
+            gitHooks: { type: hookSystem, installed: false },
+            claudeHooks: { enabled: false, events: [] },
+          }, null, 2));
+        } else {
+          info("No hooks configured. Run " + chalk.cyan("buoy dock hooks") + " to set up drift checking.");
+        }
+        return;
+      }
+
+      if (json) {
+        console.log(JSON.stringify({
+          gitHooks: { type: hookSystem, path: gitHookPath, installed: gitHookInstalled },
+          claudeHooks: { enabled: claudeHooksEnabled, events: claudeEvents },
+        }, null, 2));
+      } else {
+        header("Hooks");
+        newline();
+        if (gitHookInstalled) {
+          console.log(`  ${chalk.green("✓")} Git pre-commit hook (${hookSystem})`);
+          if (gitHookPath) keyValue("    Path", gitHookPath.replace(cwd + "/", ""));
+        } else {
+          console.log(`  ${chalk.dim("○")} Git pre-commit hook not installed`);
+        }
+        if (claudeHooksEnabled) {
+          console.log(`  ${chalk.green("✓")} Claude Code hooks`);
+          keyValue("    Events", claudeEvents.join(", "));
+        } else {
+          console.log(`  ${chalk.dim("○")} Claude Code hooks not configured`);
+        }
+        newline();
+      }
+    });
+
+  // show commands
+  cmd
+    .command("commands")
+    .description("Show installed slash commands")
+    .option("--json", "Output as JSON")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      const json = options.json || parentOpts.json !== false;
+      if (json) setJsonMode(true);
+
+      const commandsDir = join(homedir(), ".claude", "commands");
+
+      if (!existsSync(commandsDir)) {
+        if (json) {
+          console.log(JSON.stringify({ commands: [] }, null, 2));
+        } else {
+          info("No slash commands installed. Run " + chalk.cyan("buoy dock commands install") + " to set them up.");
+        }
+        return;
+      }
+
+      const buoyCommands = readdirSync(commandsDir)
+        .filter(f => f.endsWith(".md"))
+        .map(f => ({
+          name: f.replace(".md", ""),
+          installed: true,
+        }));
+
+      if (buoyCommands.length === 0) {
+        if (json) {
+          console.log(JSON.stringify({ commands: [] }, null, 2));
+        } else {
+          info("No slash commands installed. Run " + chalk.cyan("buoy dock commands install") + " to set them up.");
+        }
+        return;
+      }
+
+      if (json) {
+        console.log(JSON.stringify({ commands: buoyCommands }, null, 2));
+      } else {
+        header("Slash Commands");
+        newline();
+        for (const cmd of buoyCommands) {
+          console.log(`  ${chalk.green("✓")} /${cmd.name}`);
+        }
+        newline();
+      }
+    });
+
+  // show graph
+  cmd
+    .command("graph")
+    .description("Show knowledge graph statistics")
+    .option("--json", "Output as JSON")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      const json = options.json || parentOpts.json !== false;
+      if (json) setJsonMode(true);
+
+      const cwd = process.cwd();
+      const graphPath = join(cwd, ".buoy", "graph.json");
+
+      if (!existsSync(graphPath)) {
+        if (json) {
+          console.log(JSON.stringify({ exists: false }, null, 2));
+        } else {
+          info("No knowledge graph built. Run " + chalk.cyan("buoy dock graph") + " to build it.");
+        }
+        return;
+      }
+
+      try {
+        const { importFromJSON, getGraphStats } = await import("@buoy-design/core");
+        const graphData = JSON.parse(readFileSync(graphPath, "utf-8"));
+        const graph = importFromJSON(graphData);
+        const stats = getGraphStats(graph);
+
+        if (json) {
+          console.log(JSON.stringify({
+            exists: true,
+            path: graphPath,
+            nodes: stats.nodeCount,
+            edges: stats.edgeCount,
+            nodesByType: stats.nodesByType,
+            edgesByType: stats.edgesByType,
+          }, null, 2));
+        } else {
+          header("Knowledge Graph");
+          newline();
+          keyValue("Path", ".buoy/graph.json");
+          keyValue("Nodes", String(stats.nodeCount));
+          keyValue("Edges", String(stats.edgeCount));
+          newline();
+
+          if (Object.keys(stats.nodesByType).length > 0) {
+            header("Nodes by Type");
+            for (const [type, count] of Object.entries(stats.nodesByType)) {
+              keyValue(`  ${type}`, String(count));
+            }
+            newline();
+          }
+        }
+      } catch (err) {
+        error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
+
+  // show plugins
+  cmd
+    .command("plugins")
+    .description("Show available scanners and plugins")
+    .option("--json", "Output as JSON")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      const json = options.json || parentOpts.json !== false;
+      if (json) setJsonMode(true);
+
+      const cwd = process.cwd();
+      const detected = await detectFrameworks(cwd);
+
+      const builtIn = Object.entries(BUILTIN_SCANNERS).map(([key, info]) => ({
+        key,
+        description: info.description,
+        detects: info.detects,
+      }));
+
+      const optional = Object.entries(PLUGIN_INFO).map(([key, info]) => ({
+        key,
+        name: info.name,
+        description: info.description,
+      }));
+
+      if (json) {
+        console.log(JSON.stringify({
+          builtIn,
+          detected: detected.map(fw => ({
+            name: fw.name,
+            scanner: fw.scanner,
+            plugin: fw.plugin,
+            confidence: fw.confidence,
+          })),
+          optional,
+        }, null, 2));
+      } else {
+        header("Built-in Scanners");
+        newline();
+        for (const scanner of builtIn) {
+          console.log(`  ${chalk.green("✓")} ${chalk.cyan(scanner.description)}`);
+          console.log(`    ${chalk.dim(`Detects: ${scanner.detects}`)}`);
+        }
+        newline();
+
+        if (detected.length > 0) {
+          header("Detected Frameworks");
+          newline();
+          for (const fw of detected) {
+            console.log(`  ${chalk.green("•")} ${fw.name} ${chalk.dim(`(${fw.confidence})`)}`);
+          }
+          newline();
+        }
+
+        if (optional.length > 0) {
+          header("Optional Plugins");
+          newline();
+          for (const plugin of optional) {
+            console.log(`  ${chalk.dim("○")} ${chalk.cyan(plugin.name)}`);
+            console.log(`    ${chalk.dim(plugin.description)}`);
+          }
+          newline();
+        }
+      }
+    });
+
   // show all
   cmd
     .command("all")
@@ -927,6 +1444,10 @@ export function createShowCommand(): Command {
         });
         const aggregated = aggregator.aggregate(driftResult.drifts);
 
+        // Gather setup status
+        const cwd = process.cwd();
+        const setup = getSetupStatus(cwd);
+
         const output = {
           components: scanResult.components,
           tokens: scanResult.tokens,
@@ -956,6 +1477,7 @@ export function createShowCommand(): Command {
             categories: healthReport.categories,
             worstFiles: healthReport.worstFiles.slice(0, 5),
           },
+          setup,
         };
 
         console.log(JSON.stringify(output, null, 2));
@@ -978,6 +1500,70 @@ async function getOrBuildConfig(): Promise<BuoyConfig> {
   }
   const autoResult = await buildAutoConfig(process.cwd());
   return autoResult.config;
+}
+
+// Helper: Get setup status for all dock tools
+function getSetupStatus(cwd: string): Record<string, unknown> {
+  const hasConfig = !!getConfigPath();
+  const hasSkills = existsSync(join(cwd, ".claude", "skills", "design-system"));
+  const agentsDir = join(cwd, ".claude", "agents");
+  const hasAgents = existsSync(agentsDir) && readdirSync(agentsDir).some(f => f.endsWith(".md"));
+
+  // Check CLAUDE.md for Design System section
+  const claudeMdPath = join(cwd, "CLAUDE.md");
+  let hasContext = false;
+  if (existsSync(claudeMdPath)) {
+    try {
+      const content = readFileSync(claudeMdPath, "utf-8");
+      hasContext = /^##?\s*Design\s*System/m.test(content);
+    } catch {
+      // Ignore read errors
+    }
+  }
+
+  // Check hooks
+  const hookSystem = detectHookSystem(cwd);
+  let gitHookInstalled = false;
+  if (hookSystem === "husky") {
+    const p = join(cwd, ".husky", "pre-commit");
+    if (existsSync(p)) {
+      try { gitHookInstalled = readFileSync(p, "utf-8").includes("buoy"); } catch { /* skip */ }
+    }
+  } else if (hookSystem === "git") {
+    const p = join(cwd, ".git", "hooks", "pre-commit");
+    if (existsSync(p)) {
+      try { gitHookInstalled = readFileSync(p, "utf-8").includes("buoy"); } catch { /* skip */ }
+    }
+  }
+
+  let claudeHooksEnabled = false;
+  const claudeSettingsPath = join(cwd, ".claude", "settings.local.json");
+  if (existsSync(claudeSettingsPath)) {
+    try {
+      const settings = JSON.parse(readFileSync(claudeSettingsPath, "utf-8"));
+      claudeHooksEnabled = !!settings.hooks?.SessionStart?.some(
+        (h: { hooks?: Array<{ command?: string }> }) =>
+          h.hooks?.some(hk => hk.command?.includes("buoy") || hk.command?.includes("Design system"))
+      );
+    } catch { /* skip */ }
+  }
+
+  // Check commands
+  const commandsDir = join(homedir(), ".claude", "commands");
+  const hasCommands = existsSync(commandsDir) && readdirSync(commandsDir).some(f => f.endsWith(".md"));
+
+  // Check graph
+  const hasGraph = existsSync(join(cwd, ".buoy", "graph.json"));
+
+  return {
+    config: hasConfig,
+    skills: hasSkills,
+    agents: hasAgents,
+    context: hasContext,
+    hooks: { git: gitHookInstalled, claude: claudeHooksEnabled },
+    commands: hasCommands,
+    graph: hasGraph,
+  };
 }
 
 // Helper: Extract all hardcoded values for health audit
@@ -1199,6 +1785,20 @@ function fuzzyScore(query: string, target: string): number {
   }
 
   return 0;
+}
+
+function walkDir(dir: string): string[] {
+  const files: string[] = [];
+  if (!existsSync(dir)) return files;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkDir(fullPath));
+    } else {
+      files.push(fullPath);
+    }
+  }
+  return files;
 }
 
 function formatRelativeDate(date: Date): string {

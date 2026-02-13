@@ -115,7 +115,7 @@ export function createFixCommand(): Command {
           console.log("");
           console.log("  Next steps:");
           console.log(
-            "    • Run `buoy build tokens` to extract tokens from hardcoded values",
+            "    • Run `buoy dock tokens` to extract tokens from hardcoded values",
           );
           console.log("    • Or create a tokens file (design-tokens.json)");
           console.log("    • Run `buoy show all` to see full analysis");
@@ -151,7 +151,7 @@ export function createFixCommand(): Command {
             console.log("  The fix command analyzes component props for drift.");
             console.log("  To see hardcoded inline styles:");
             console.log(`    ${chalk.cyan("buoy show health")}   # See all hardcoded values`);
-            console.log(`    ${chalk.cyan("buoy build tokens")}  # Extract values as tokens`);
+            console.log(`    ${chalk.cyan("buoy dock tokens")}  # Extract values as tokens`);
             console.log("");
             return;
           }

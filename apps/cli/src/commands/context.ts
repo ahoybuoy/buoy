@@ -136,7 +136,7 @@ export function createContextCommand(): Command {
           console.error('');
           console.error('Note: Generated minimal context (no tokens or components found).');
           console.error('  Run `buoy drift scan` to see what can be detected.');
-          console.error('  Run `buoy build tokens` to extract tokens from hardcoded values.');
+          console.error('  Run `buoy dock tokens` to extract tokens from hardcoded values.');
         }
       } catch (err) {
         spin.stop();

@@ -1,7 +1,7 @@
 /**
- * buoy dock - Dock Buoy into your project
+ * buoy dock - Dock tools into your project
  *
- * Smart walkthrough that sets up config, agents, and hooks.
+ * Smart walkthrough that sets up config, agents, hooks, tokens, and graph.
  *
  * Usage:
  *   buoy dock              # Smart walkthrough: config → agents → hooks
@@ -10,6 +10,8 @@
  *   buoy dock skills       # Just create skill files
  *   buoy dock context      # Just generate CLAUDE.md section
  *   buoy dock hooks        # Just set up git hooks
+ *   buoy dock tokens       # Generate/export design tokens
+ *   buoy dock graph        # Build design system knowledge graph
  */
 
 import { Command } from "commander";
@@ -63,13 +65,18 @@ import {
   BUILTIN_SCANNERS,
   PLUGIN_INFO,
 } from "../detect/frameworks.js";
+import { createTokensCommand } from "./tokens.js";
+import { createCompareCommand } from "./compare.js";
+import { createImportCommand } from "./import.js";
+import { createGraphCommand } from "./graph.js";
+import { createLearnCommand } from "./learn.js";
 import type { BuoyConfig } from "../config/schema.js";
 import { showMenu } from "../wizard/menu.js";
 import { generateAgents, generateCommands } from "../templates/agents.js";
 
 export function createDockCommand(): Command {
   const cmd = new Command("dock")
-    .description("Dock Buoy into your project")
+    .description("Dock tools into your project")
     .option("-y, --yes", "Auto-accept all defaults")
     .option("--json", "Output results as JSON")
     .option("-f, --force", "Overwrite existing configuration")
@@ -305,6 +312,17 @@ export function createDockCommand(): Command {
         process.exit(1);
       }
     });
+
+  // dock tokens (with compare and import as subcommands)
+  const tokensCmd = createTokensCommand();
+  tokensCmd.addCommand(createCompareCommand());
+  tokensCmd.addCommand(createImportCommand());
+  cmd.addCommand(tokensCmd);
+
+  // dock graph (with learn as subcommand)
+  const graphCmd = createGraphCommand();
+  graphCmd.addCommand(createLearnCommand());
+  cmd.addCommand(graphCmd);
 
   return cmd;
 }

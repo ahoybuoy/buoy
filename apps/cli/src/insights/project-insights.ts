@@ -124,7 +124,7 @@ function buildSuggestions(project: DetectedProject, summary: InsightSummary): Su
 
   // Always suggest tokens as a starting point - it works on any codebase
   suggestions.push({
-    command: 'buoy build tokens',
+    command: 'buoy dock tokens',
     description: 'Extract design values from your code into tokens',
     reason: 'Works on any codebase - analyzes CSS, inline styles, and more',
   });

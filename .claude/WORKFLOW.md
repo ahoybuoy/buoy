@@ -8,7 +8,7 @@ This document defines the required workflows for all development on Buoy. Claude
 |--------|---------------|
 | Making a release | `/release` |
 | Creating a PR | `/pr-workflow` |
-| Checking drift | `buoy check` |
+| Checking drift | `buoy drift check` |
 
 ## Enforced Rules
 
@@ -121,7 +121,7 @@ Use `/release` skill to ensure all steps are followed.
 - Provides reminders (non-blocking)
 
 ### PostToolUse (Edit/Write)
-- Runs `buoy check` on UI files
+- Runs `buoy drift check` on UI files
 - Provides drift feedback to Claude
 - Enables self-correction
 

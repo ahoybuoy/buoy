@@ -47,27 +47,30 @@ buoy
 │   ├── health              # Health score
 │   ├── history             # Scan history
 │   └── all                 # Everything combined
-├── drift                   # Table/markdown/HTML/agent drift output
-├── tokens                  # Generate/export design tokens (css/json/tailwind)
-├── components              # Component discovery helpers
-├── scan                    # Scan codebase for components/tokens
-├── commands                # Install/list Claude slash commands
+├── drift                   # Drift detection and fixing
+│   ├── scan                # Scan codebase for components/tokens
+│   ├── check               # Pre-commit drift check
+│   ├── fix                 # Suggest/apply fixes
+│   └── baseline            # Accept existing drift
+│       ├── create          # Create baseline (requires --reason)
+│       ├── show            # View current baseline
+│       ├── update          # Add new drift (requires --reason)
+│       └── clear           # Remove baseline
 ├── begin                   # Interactive wizard
-├── dock                    # Configure project
+├── dock                    # Dock tools into your project
 │   ├── config              # Create .buoy.yaml
 │   ├── skills              # Create AI agent skills
 │   ├── agents              # Set up AI agents
 │   ├── context             # Generate CLAUDE.md context
-│   └── hooks               # Set up hooks (--claude for self-validating AI)
-├── check                   # Pre-commit drift check
-├── baseline                # Accept existing drift
-│   ├── create              # Create baseline (requires --reason)
-│   ├── show                # View current baseline
-│   ├── update              # Add new drift (requires --reason)
-│   └── clear               # Remove baseline
-├── fix                     # Suggest/apply fixes
-├── plugins                 # Show available scanners
-└── ship                    # Cloud features
+│   ├── hooks               # Set up hooks (--claude for self-validating AI)
+│   ├── commands            # Install Claude slash commands
+│   ├── plugins             # Show available scanners
+│   ├── tokens              # Generate/export design tokens
+│   │   ├── compare         # Compare token sources
+│   │   └── import          # Import tokens from Figma/CSS
+│   └── graph               # Build design system knowledge graph
+│       └── learn           # Learn patterns from codebase
+└── ahoy                    # Cloud features
     ├── login               # Authenticate
     ├── logout              # Sign out
     ├── status              # Account + bot + sync status
@@ -153,7 +156,7 @@ drift:
 ### Quick Check
 
 ```bash
-buoy check
+buoy drift check
 ```
 
 Fast pre-commit hook friendly. Exits with error code if drift found.
@@ -182,9 +185,9 @@ buoy show drift
 ### Fix Issues
 
 ```bash
-buoy fix                    # Interactive fix suggestions
-buoy fix --dry-run          # Preview changes
-buoy fix --auto             # Auto-apply safe fixes
+buoy drift fix                    # Interactive fix suggestions
+buoy drift fix --dry-run          # Preview changes
+buoy drift fix --auto             # Auto-apply safe fixes
 ```
 
 ### Accept Existing Drift
@@ -192,10 +195,10 @@ buoy fix --auto             # Auto-apply safe fixes
 For brownfield projects, baseline existing issues and only flag new ones:
 
 ```bash
-buoy baseline create -r "Legacy code before design system"  # Accept current drift with reason
-buoy baseline update -r "Third-party components"            # Add new drift to baseline
-buoy baseline show                                          # View baseline with reasons
-buoy check                                                  # Only fails on new drift
+buoy drift baseline create -r "Legacy code before design system"  # Accept current drift with reason
+buoy drift baseline update -r "Third-party components"            # Add new drift to baseline
+buoy drift baseline show                                          # View baseline with reasons
+buoy drift check                                                  # Only fails on new drift
 ```
 
 A reason is required when creating or updating baselines to maintain accountability.
@@ -216,7 +219,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npx ahoybuoy check
+      - run: npx ahoybuoy drift check
 ```
 
 ### PR Comments with Buoy Cloud
@@ -255,7 +258,7 @@ buoy dock hooks --claude
 This installs a PostToolUse hook that:
 
 1. Claude writes/edits a component file
-2. Hook runs `buoy check` on the modified file
+2. Hook runs `buoy drift check` on the modified file
 3. If drift detected, feedback returns to Claude
 4. Claude self-corrects without prompting
 
@@ -333,8 +336,8 @@ Buoy shows you what's happening without getting in your way. Teams adopt enforce
 
 ```bash
 buoy show drift             # Just show me
-buoy check                  # Pre-commit check (fails on drift)
-buoy check --fail-on critical   # Only fail on critical
+buoy drift check            # Pre-commit check (fails on drift)
+buoy drift check --fail-on critical   # Only fail on critical
 ```
 
 ## Development

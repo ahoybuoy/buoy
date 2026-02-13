@@ -3,9 +3,7 @@ import pkg from "../package.json" with { type: "json" };
 import {
   createShowCommand,
   createDriftCommand,
-  createBuildCommand,
   createDockCommand,
-  createBeginCommand,
   createAhoyCommand,
 } from "./commands/index.js";
 
@@ -24,31 +22,25 @@ export function createCli(): Command {
       "after",
       `
 Command Groups:
-  Setup              begin, dock (config, skills, agents, context, hooks, commands, plugins)
-  Design System      show (components, tokens, drift, health, history, all)
+  View               show (components, tokens, drift, health, history, config, skills, agents, context, hooks, commands, graph, plugins, all)
   Drift Actions      drift (scan, check, fix, baseline)
-  Build Artifacts    build (tokens [compare, import], graph [learn, query, export, stats])
+  Setup              dock (config, skills, agents, context, hooks, commands, plugins, tokens, graph)
   Cloud              ahoy (login, logout, status, github, gitlab, billing, plans)
 
 Quick Start:
-  $ buoy                    # auto-launches wizard if no config
   $ buoy show all           # everything an AI agent needs
   $ buoy show drift         # design system violations
   $ buoy dock               # set up config, skills, agents, hooks
 `,
     );
 
-  // === For AI Agents (primary interface) ===
+  // === View (read-only) ===
   program.addCommand(createShowCommand());
 
   // === Drift Actions ===
   program.addCommand(createDriftCommand());
 
-  // === Build Artifacts ===
-  program.addCommand(createBuildCommand());
-
-  // === Getting Started & Configuration ===
-  program.addCommand(createBeginCommand());
+  // === Setup ===
   program.addCommand(createDockCommand());
 
   // === Cloud ===

@@ -1,8 +1,6 @@
 export { createShowCommand } from "./show.js";
 export { createDriftCommand } from "./drift.js";
-export { createBuildCommand } from "./build.js";
 export { createDockCommand } from "./dock.js";
-export { createBeginCommand } from "./begin.js";
 export { createAhoyCommand } from "./ahoy.js";
 
 // Re-exports for internal use (subcommands within groups)
