@@ -67,7 +67,7 @@ runs:
           ARGS="$ARGS --config ${{ inputs.config }}"
         fi
 
-        buoy check $ARGS
+        buoy drift check $ARGS
 
     - name: Run Buoy Architect
       if: inputs.mode == 'architect'

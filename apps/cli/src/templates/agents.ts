@@ -30,7 +30,7 @@ hooks:
   Stop:
     - hooks:
         - type: command
-          command: "buoy check --quiet"
+          command: "buoy drift check --quiet"
 ---
 
 # Design Validator Agent
@@ -123,7 +123,7 @@ TARGET: $ARGUMENTS (defaults to current directory if empty)
 
 ## Workflow
 
-1. Run \`buoy check \${TARGET} --json\` to get drift signals
+1. Run \`buoy drift check \${TARGET} --json\` to get drift signals
 2. Parse the JSON output
 3. For each violation, report:
    - File and line number
@@ -165,11 +165,11 @@ TARGET: $ARGUMENTS (defaults to current directory if empty)
 
 ## Workflow
 
-1. Run \`buoy fix \${TARGET} --dry-run --json\` to preview fixes
+1. Run \`buoy drift fix \${TARGET} --dry-run --json\` to preview fixes
 2. Show the user what will be changed
-3. If confirmed, run \`buoy fix \${TARGET} --auto\` to apply safe fixes
+3. If confirmed, run \`buoy drift fix \${TARGET} --auto\` to apply safe fixes
 4. For fixes requiring review, present options to the user
-5. Re-run \`buoy check\` to verify fixes were applied correctly
+5. Re-run \`buoy drift check\` to verify fixes were applied correctly
 6. Report results
 
 ## Safety

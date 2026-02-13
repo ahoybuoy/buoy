@@ -413,7 +413,7 @@ export function createShowCommand(): Command {
             if (!hasTokens && !hasFigma && !hasStorybook && !hasDesignTokensFile) {
               newline();
               info("No reference source configured.");
-              info("Run " + chalk.cyan("buoy tokens") + " to extract design tokens.");
+              info("Run " + chalk.cyan("buoy build tokens") + " to extract design tokens.");
             }
           }
         }

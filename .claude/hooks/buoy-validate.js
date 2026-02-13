@@ -77,9 +77,9 @@ function validateFile(input) {
   }
 
   try {
-    // Run buoy check with JSON format via temp file to avoid Node.js pipe buffer limits
+    // Run buoy drift check with JSON format via temp file to avoid Node.js pipe buffer limits
     const tempFile = path.join(tmpdir(), `buoy-check-${process.pid}.json`);
-    const result = spawnSync('sh', ['-c', `npx buoy check --format json > "${tempFile}" 2>/dev/null`], {
+    const result = spawnSync('sh', ['-c', `npx buoy drift check --format json > "${tempFile}" 2>/dev/null`], {
       cwd: input.cwd || process.cwd(),
       timeout: 30000,
       shell: false
@@ -124,7 +124,7 @@ function validateFile(input) {
     };
 
   } catch (err) {
-    // buoy check failed or not installed - silent failure
+    // buoy drift check failed or not installed - silent failure
     return null;
   }
 }

@@ -297,7 +297,7 @@ describe("AI Guardrails Generator", () => {
         .mock.calls.find((call) => String(call[0]).includes("SKILL.md"));
 
       const content = skillWriteCall![1] as string;
-      expect(content).toContain("buoy check");
+      expect(content).toContain("buoy drift check");
       expect(content).toContain("buoy show drift");
     });
 

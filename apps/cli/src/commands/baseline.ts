@@ -174,7 +174,7 @@ export function createBaselineCommand(): Command {
             `Baseline already exists with ${existingBaseline.summary.total} drifts.`,
           );
           info(
-            'Use --force to overwrite, or "buoy baseline update" to add new drifts.',
+            'Use --force to overwrite, or "buoy drift baseline update" to add new drifts.',
           );
           return;
         }
@@ -276,7 +276,7 @@ export function createBaselineCommand(): Command {
 
         if (!baseline) {
           info("No baseline exists for this project.");
-          info('Run "buoy baseline create" to establish a baseline.');
+          info('Run "buoy drift baseline create" to establish a baseline.');
           return;
         }
 

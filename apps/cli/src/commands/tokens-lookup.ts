@@ -1,13 +1,13 @@
 /**
- * buoy tokens lookup - Find design tokens by name, value, or category
+ * buoy build tokens lookup - Find design tokens by name, value, or category
  *
  * Helps AI agents (and humans) quickly find the right token when they
  * know what they want but not the exact token name.
  *
  * Examples:
- *   buoy tokens lookup "primary blue"     # Fuzzy name search
- *   buoy tokens lookup --value "#3b82f6"  # Find by color value
- *   buoy tokens lookup --category color   # List all colors
+ *   buoy build tokens lookup "primary blue"     # Fuzzy name search
+ *   buoy build tokens lookup --value "#3b82f6"  # Find by color value
+ *   buoy build tokens lookup --category color   # List all colors
  */
 
 import { Command } from 'commander';
@@ -233,9 +233,9 @@ export function createTokensLookupCommand(): Command {
       if (!query && !options.value && !options.category) {
         error('Please provide a search query, --value, or --category');
         info('Examples:');
-        info('  buoy tokens lookup "primary"');
-        info('  buoy tokens lookup --value "#3b82f6"');
-        info('  buoy tokens lookup --category color');
+        info('  buoy build tokens lookup "primary"');
+        info('  buoy build tokens lookup --value "#3b82f6"');
+        info('  buoy build tokens lookup --category color');
         process.exit(1);
       }
 

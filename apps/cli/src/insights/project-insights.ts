@@ -124,7 +124,7 @@ function buildSuggestions(project: DetectedProject, summary: InsightSummary): Su
 
   // Always suggest tokens as a starting point - it works on any codebase
   suggestions.push({
-    command: 'buoy tokens',
+    command: 'buoy build tokens',
     description: 'Extract design values from your code into tokens',
     reason: 'Works on any codebase - analyzes CSS, inline styles, and more',
   });
@@ -141,7 +141,7 @@ function buildSuggestions(project: DetectedProject, summary: InsightSummary): Su
   // If component scanning isn't available, explain why
   if (hasUnscannable && !hasScannable) {
     suggestions.push({
-      command: 'buoy drift',
+      command: 'buoy show drift',
       description: 'Check for hardcoded values that should be tokens',
       reason: 'Component prop scanning not yet available for your framework',
     });

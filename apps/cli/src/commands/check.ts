@@ -100,7 +100,7 @@ export function formatAiFeedback(
         : [
             "Design system violations detected.",
             "Fix each issue by replacing the current value with the suggested token.",
-            "Re-run `buoy check` after making changes to verify fixes.",
+            "Re-run `buoy drift check` after making changes to verify fixes.",
           ].join(" "),
   };
 

@@ -80,9 +80,9 @@ export function formatFixPreview(fixes: Fix[]): string {
 
   // Next steps
   lines.push(chalk.dim('Next steps:'));
-  lines.push('  buoy fix --dry-run     Show detailed changes');
-  lines.push('  buoy fix --apply       Apply high-confidence fixes');
-  lines.push('  buoy fix --apply --confidence=medium  Include medium confidence');
+  lines.push('  buoy drift fix --dry-run     Show detailed changes');
+  lines.push('  buoy drift fix --apply       Apply high-confidence fixes');
+  lines.push('  buoy drift fix --apply --confidence=medium  Include medium confidence');
 
   return lines.join('\n');
 }

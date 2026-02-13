@@ -177,13 +177,13 @@ ${components.slice(0, 20).map(c => `- ${c.name}`).join('\n')}
 1. **NEVER hardcode colors** - Always use design tokens
 2. **NEVER hardcode spacing** - Use the spacing scale
 3. **USE existing components** - Check the list above before creating new ones
-4. **RUN validation** - Execute \`buoy check\` before committing
+4. **RUN validation** - Execute \`buoy drift check\` before committing
 
 ## Validation
 
 Before committing any UI code:
 \`\`\`bash
-buoy check
+buoy drift check
 \`\`\`
 
 For detailed drift report:

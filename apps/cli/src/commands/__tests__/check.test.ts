@@ -359,7 +359,7 @@ describe("check command", () => {
       const parsed = JSON.parse(result);
 
       expect(parsed.instructions).toContain("violations detected");
-      expect(parsed.instructions).toContain("buoy check");
+      expect(parsed.instructions).toContain("buoy drift check");
     });
   });
 });

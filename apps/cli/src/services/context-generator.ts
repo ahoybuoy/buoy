@@ -256,9 +256,9 @@ function generateValidationSection(): string {
 
 Run before committing:
 \`\`\`bash
-buoy check          # Quick validation
-buoy show drift    # Detailed drift analysis
-buoy fix --dry-run  # See suggested fixes
+buoy drift check          # Quick validation
+buoy show drift          # Detailed drift analysis
+buoy drift fix --dry-run  # See suggested fixes
 \`\`\``;
 }
 

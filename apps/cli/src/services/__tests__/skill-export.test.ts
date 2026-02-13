@@ -161,7 +161,7 @@ describe('SkillExportService', () => {
 
       const result = service.generateSkillMd(data);
 
-      expect(result).toContain('buoy check');
+      expect(result).toContain('buoy drift check');
     });
 
     it('references token and component files', () => {

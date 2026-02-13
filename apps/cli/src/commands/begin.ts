@@ -278,7 +278,7 @@ async function runQuickOnboard(cwd: string): Promise<void> {
   console.log('');
   console.log(chalk.dim('  Next steps:'));
   console.log(`    ${chalk.cyan('buoy show all')}     Check for drift`);
-  console.log(`    ${chalk.cyan('buoy check')}    Pre-commit validation`);
+  console.log(`    ${chalk.cyan('buoy drift check')}    Pre-commit validation`);
   console.log(`    ${chalk.cyan('buoy begin')}    Interactive setup`);
   console.log('');
 }
@@ -799,7 +799,7 @@ function showExitMessage(): void {
   console.log(chalk.dim('  Quick commands:'));
   console.log(`    ${chalk.cyan('buoy show drift')}   See all drift issues`);
   console.log(`    ${chalk.cyan('buoy show health')}  Quick health overview`);
-  console.log(`    ${chalk.cyan('buoy check')}        Pre-commit validation`);
+  console.log(`    ${chalk.cyan('buoy drift check')}        Pre-commit validation`);
   console.log('');
   console.log(chalk.dim(`  Run ${chalk.cyan('buoy begin')} anytime to return here.`));
   console.log('');
@@ -902,11 +902,11 @@ Analyzing your project...
       console.log('This project has no design tokens.');
       console.log('');
       console.log('PRIMARY: Scan your codebase');
-      console.log('  → Run: buoy scan');
+      console.log('  → Run: buoy drift scan');
       console.log('  This finds components and design values in your code.');
       console.log('');
       console.log('ALTERNATIVE: Check for drift without tokens');
-      console.log('  → Run: buoy drift');
+      console.log('  → Run: buoy show drift');
       console.log('  Find hardcoded values that should be tokens.');
     } else if (!hasAISetup) {
       // Has tokens but no AI setup - recommend dock agents
@@ -917,14 +917,14 @@ Analyzing your project...
       console.log('  This creates skill files and updates CLAUDE.md so AI follows your tokens.');
       console.log('');
       console.log('ALTERNATIVE: Check for drift');
-      console.log('  → Run: buoy drift');
+      console.log('  → Run: buoy show drift');
       console.log('  See if code follows your design system.');
     } else {
       // Has tokens + AI - recommend drift check
       console.log('This project is set up! AI tools know about your design system.');
       console.log('');
       console.log('PRIMARY: Check for drift');
-      console.log('  → Run: buoy drift');
+      console.log('  → Run: buoy show drift');
       console.log('  Find code that diverges from your design system.');
       console.log('');
       console.log('OTHER OPTIONS:');

@@ -207,10 +207,10 @@ If you create something not in the design system:
 
 ## Validation
 
-Run \`buoy check\` before committing to validate compliance.
+Run \`buoy drift check\` before committing to validate compliance.
 
 \`\`\`bash
-buoy check           # Quick validation
+buoy drift check           # Quick validation
 buoy show drift     # Detailed drift analysis
 \`\`\`
 `;
@@ -591,7 +591,7 @@ ${sections.join('\n')}
 
 ## How to Fix
 
-Run \`buoy check\` to see current violations with fix suggestions.
+Run \`buoy drift check\` to see current violations with fix suggestions.
 `;
   }
 
@@ -879,7 +879,7 @@ Run \`buoy check\` to see current violations with fix suggestions.
       lines.push('');
     }
 
-    lines.push('To validate compliance: `buoy check`');
+    lines.push('To validate compliance: `buoy drift check`');
 
     return lines.join('\n');
   }

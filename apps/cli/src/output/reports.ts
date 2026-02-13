@@ -200,7 +200,7 @@ export function formatDeveloperBrief(data: DeveloperBriefData): string {
 
     // Quick actions
     lines.push('│  ' + chalk.bold.cyan('Quick actions:') + ' '.repeat(width - 18) + '│');
-    lines.push('│  ' + `  ${chalk.cyan('buoy fix --interactive')}    ${chalk.dim('Fix with guided prompts')}`.padEnd(width + 10) + '│');
+    lines.push('│  ' + `  ${chalk.cyan('buoy drift fix --interactive')}    ${chalk.dim('Fix with guided prompts')}`.padEnd(width + 10) + '│');
     lines.push('│  ' + `  ${chalk.cyan('buoy ignore <file>:<line>')} ${chalk.dim('Mark as intentional')}`.padEnd(width + 10) + '│');
     lines.push('│' + ' '.repeat(width - 2) + '│');
     lines.push(sectionEnd(width));

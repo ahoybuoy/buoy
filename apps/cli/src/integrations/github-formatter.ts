@@ -27,7 +27,7 @@ export function formatPRComment(results: DriftResult, context?: PRContext): stri
       lines.push('> **No design system reference configured.**');
       lines.push('>');
       lines.push('> Buoy works best when you have design tokens to compare against.');
-      lines.push('> Run `buoy tokens` locally to extract tokens from your CSS files.');
+      lines.push('> Run `buoy build tokens` locally to extract tokens from your CSS files.');
       lines.push('');
     } else {
       lines.push(`✅ No design drift detected across ${context.tokenCount || 0} design tokens.`);

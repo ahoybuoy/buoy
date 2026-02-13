@@ -206,9 +206,9 @@ describe("generateContext", () => {
       expect(result.content).toContain("### Validation");
     });
 
-    it("shows buoy check command", () => {
+    it("shows buoy drift check command", () => {
       const result = generateContext(baseData);
-      expect(result.content).toContain("buoy check");
+      expect(result.content).toContain("buoy drift check");
     });
 
     it("shows buoy show drift command", () => {

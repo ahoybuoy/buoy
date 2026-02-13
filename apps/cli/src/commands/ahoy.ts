@@ -414,7 +414,7 @@ function createGitLabCommand(): Command {
       console.log(chalk.dim('  # .gitlab-ci.yml'));
       console.log(chalk.cyan('  buoy_check:'));
       console.log(chalk.cyan('    script:'));
-      console.log(chalk.cyan('      - npx ahoybuoy check --json'));
+      console.log(chalk.cyan('      - npx ahoybuoy drift check --json'));
       newline();
       info('Follow updates at: https://buoy.design/roadmap');
     });

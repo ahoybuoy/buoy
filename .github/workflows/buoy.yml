@@ -25,13 +25,13 @@ jobs:
 
       - name: Run Buoy Drift Check
         id: drift-check
-        run: buoy check --fail-on warning
+        run: buoy drift check --fail-on warning
         # Exit code determines pass/fail - no comments from Action
         # PR comments are handled by the Buoy GitHub App
 
       - name: Report to Buoy Cloud
         if: env.BUOY_API_TOKEN != ''
         run: |
-          buoy check --report --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }} --quiet || true
+          buoy drift check --report --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }} --quiet || true
         env:
           BUOY_API_TOKEN: ${{ secrets.BUOY_API_TOKEN }}

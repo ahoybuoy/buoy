@@ -1,12 +1,12 @@
 /**
- * buoy components query - Find and explore components in the codebase
+ * buoy show components - Find and explore components in the codebase
  *
  * Helps AI agents quickly find relevant components when building features.
  *
  * Examples:
- *   buoy components query "button"          # Find button components
- *   buoy components query --prop "onClick"  # Find components with onClick
- *   buoy components query --pattern "form"  # Find form-related components
+ *   buoy show components "button"          # Find button components
+ *   buoy show components --prop "onClick"  # Find components with onClick
+ *   buoy show components --pattern "form"  # Find form-related components
  */
 
 import { Command } from 'commander';
@@ -190,9 +190,9 @@ export function createComponentsQueryCommand(): Command {
       if (!query && !options.prop && !options.pattern) {
         error('Please provide a search query, --prop, or --pattern');
         info('Examples:');
-        info('  buoy components query "button"');
-        info('  buoy components query --prop "onClick"');
-        info('  buoy components query --pattern "form"');
+        info('  buoy show components "button"');
+        info('  buoy show components --prop "onClick"');
+        info('  buoy show components --pattern "form"');
         process.exit(1);
       }
 
