@@ -81,6 +81,8 @@ export interface HealthMetrics {
   worstFile?: { path: string; issueCount: number };
   /** Total unique spacing values found */
   uniqueSpacingValues?: number;
+  /** Names of detected frameworks/libraries (for framework-aware suggestions) */
+  detectedFrameworkNames?: string[];
 }
 
 export interface HealthPillar {
@@ -318,6 +320,7 @@ export function calculateHealthScore(report: AuditReport): number {
  */
 export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreResult {
   const suggestions: string[] = [];
+  const frameworks = metrics.detectedFrameworkNames ?? [];
 
   // No UI surface area — can't evaluate design system health
   if (metrics.componentCount === 0 && metrics.tokenCount === 0 && (metrics.totalDriftCount ?? 0) === 0) {
@@ -339,8 +342,8 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   // Primary: hardcoded value density
   // Secondary: dead code density (unused/orphaned components, repeated patterns)
   // Tertiary: total drift density as backstop
-  const userHardcodedCount = metrics.hardcodedValueCount - (metrics.vendoredDriftCount ?? 0);
-  const hardcodedDensity = Math.max(0, userHardcodedCount) / Math.max(metrics.componentCount, 1);
+  const userHardcodedCount = Math.max(0, metrics.hardcodedValueCount - (metrics.vendoredDriftCount ?? 0));
+  const hardcodedDensity = userHardcodedCount / Math.max(metrics.componentCount, 1);
   const deadCodeCount = (metrics.unusedComponentCount ?? 0)
     + (metrics.orphanedComponentCount ?? 0)
     + (metrics.repeatedPatternCount ?? 0);
@@ -354,20 +357,44 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   const valueDisciplineScore = Math.round(60 * clamp(1 - density / 2, 0, 1));
 
   if (metrics.hardcodedValueCount > 0) {
+    const hasTailwind = frameworks.includes('tailwind');
+    const hasShadcn = frameworks.includes('shadcn');
+    const hasMui = frameworks.includes('mui');
+
     let suggestion: string;
-    if (density > 0.5) {
-      // Urgent tone for high density
-      suggestion = `${metrics.hardcodedValueCount} hardcoded values across your components — extract to design tokens`;
+
+    if (density > 1.0) {
+      // Severe — high urgency
+      suggestion = `${userHardcodedCount} hardcoded values across your components — high density`;
       if (metrics.topHardcodedColor) {
-        suggestion = `${metrics.hardcodedValueCount} hardcoded values found (most common: ${metrics.topHardcodedColor.value} used ${metrics.topHardcodedColor.count}\u00d7). Create a color token file`;
+        suggestion += `. Most common: ${metrics.topHardcodedColor.value} (${metrics.topHardcodedColor.count}\u00d7)`;
+      }
+      if (hasTailwind) {
+        suggestion += '. Add values to your Tailwind theme config instead of using arbitrary values';
+      } else if (hasMui) {
+        suggestion += '. Use the `sx` prop or `theme.palette` instead of inline colors';
+      } else {
+        suggestion += '. Create a design token file (e.g., tokens.css with CSS custom properties)';
+      }
+    } else if (density > 0.3) {
+      // Moderate
+      suggestion = `${userHardcodedCount} hardcoded value${userHardcodedCount === 1 ? '' : 's'} to extract`;
+      if (hasTailwind && hasShadcn) {
+        suggestion += ' — use `cn()` utility with Tailwind theme classes';
+      } else if (hasTailwind) {
+        suggestion += ' — extend your tailwind.config theme instead of arbitrary values';
       }
       if (metrics.worstFile) {
-        suggestion += `. Start with ${metrics.worstFile.path} (${metrics.worstFile.issueCount} issues)`;
+        suggestion += `. Focus on ${metrics.worstFile.path} (${metrics.worstFile.issueCount} issues)`;
       }
     } else {
-      // Gentle tone for low density
-      suggestion = `Good foundation. ${metrics.hardcodedValueCount} hardcoded value${metrics.hardcodedValueCount === 1 ? '' : 's'} could be extracted to design tokens`;
+      // Low — encouraging
+      suggestion = `Nearly there — just ${userHardcodedCount} hardcoded value${userHardcodedCount === 1 ? '' : 's'} left to tokenize`;
+      if (metrics.worstFile && metrics.worstFile.issueCount > 1) {
+        suggestion += `. ${metrics.worstFile.path} has the most (${metrics.worstFile.issueCount})`;
+      }
     }
+
     suggestions.push(suggestion);
   }
 
@@ -436,9 +463,13 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
     );
   }
   if (tokenHealthScore < 10 && metrics.componentCount > 0) {
-    suggestions.push(
-      'No design token system detected — add tokens or a utility framework'
-    );
+    if (frameworks.includes('tailwind')) {
+      suggestions.push('Tailwind detected but token coverage is low — extend your theme config with custom values');
+    } else if (frameworks.includes('mui') || frameworks.includes('chakra') || frameworks.includes('mantine')) {
+      suggestions.push('Design system library detected — use its theming API for consistent values');
+    } else {
+      suggestions.push('No design token system detected — add CSS custom properties or a utility framework');
+    }
   }
 
   // Pillar 3: Consistency (0-10)

@@ -546,26 +546,31 @@ describe('calculateHealthScorePillar', () => {
       expect(result.suggestions.some(s => s.includes('#ff6b6b') && s.includes('8'))).toBe(true);
     });
 
-    it('includes worst file in suggestion when provided', () => {
+    it('includes worst file in suggestion when provided (moderate density)', () => {
       const result = calculateHealthScorePillar(makeMetrics({
-        componentCount: 10,
-        hardcodedValueCount: 20,
+        componentCount: 20,
+        hardcodedValueCount: 10, // density ~0.5 → moderate tier
         worstFile: { path: 'src/components/Card.tsx', issueCount: 15 },
       }));
       expect(result.suggestions.some(s => s.includes('Card.tsx') && s.includes('15'))).toBe(true);
     });
 
-    it('includes both color and file in same suggestion', () => {
-      const result = calculateHealthScorePillar(makeMetrics({
+    it('includes color in severe suggestion and worst file in moderate suggestion', () => {
+      // Severe tier: color is included
+      const severe = calculateHealthScorePillar(makeMetrics({
         componentCount: 10,
         hardcodedValueCount: 20,
         topHardcodedColor: { value: '#ff6b6b', count: 8 },
+      }));
+      expect(severe.suggestions.some(s => s.includes('#ff6b6b') && s.includes('8'))).toBe(true);
+
+      // Moderate tier: worst file is included
+      const moderate = calculateHealthScorePillar(makeMetrics({
+        componentCount: 20,
+        hardcodedValueCount: 10,
         worstFile: { path: 'src/components/Card.tsx', issueCount: 15 },
       }));
-      const suggestion = result.suggestions.find(s => s.includes('#ff6b6b'));
-      expect(suggestion).toBeDefined();
-      expect(suggestion).toContain('Card.tsx');
-      expect(suggestion).toContain('15');
+      expect(moderate.suggestions.some(s => s.includes('Card.tsx') && s.includes('15'))).toBe(true);
     });
 
     it('falls back to generic suggestion when no rich context', () => {
@@ -595,16 +600,137 @@ describe('calculateHealthScorePillar', () => {
       expect(result.suggestions.every(s => !s.includes('spacing'))).toBe(true);
     });
 
-    it('appends worst file to generic suggestion when no color context', () => {
+    it('appends worst file to moderate-density suggestion', () => {
       const result = calculateHealthScorePillar(makeMetrics({
-        componentCount: 10,
-        hardcodedValueCount: 20,
+        componentCount: 20,
+        hardcodedValueCount: 12, // density ~0.6 → moderate tier
         worstFile: { path: 'src/App.tsx', issueCount: 12 },
       }));
-      const suggestion = result.suggestions.find(s => s.includes('hardcoded values'));
+      const suggestion = result.suggestions.find(s => s.includes('hardcoded value'));
       expect(suggestion).toBeDefined();
       expect(suggestion).toContain('App.tsx');
       expect(suggestion).toContain('12 issues');
+    });
+  });
+
+  describe('tiered, framework-aware suggestions', () => {
+    it('severe tier: Tailwind-specific advice for high density', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 30, // density 3.0 → severe
+        detectedFrameworkNames: ['react', 'tailwind'],
+      }));
+      expect(result.suggestions.some(s =>
+        s.includes('high density') && s.includes('Tailwind theme config')
+      )).toBe(true);
+    });
+
+    it('severe tier: MUI-specific advice for high density', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 30,
+        detectedFrameworkNames: ['react', 'mui'],
+      }));
+      expect(result.suggestions.some(s =>
+        s.includes('high density') && s.includes('theme.palette')
+      )).toBe(true);
+    });
+
+    it('severe tier: generic advice when no framework detected', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 30,
+      }));
+      expect(result.suggestions.some(s =>
+        s.includes('high density') && s.includes('design token file')
+      )).toBe(true);
+    });
+
+    it('moderate tier: Tailwind + shadcn advice uses cn() utility', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 20,
+        hardcodedValueCount: 10, // density ~0.5 → moderate
+        detectedFrameworkNames: ['react', 'tailwind', 'shadcn'],
+      }));
+      expect(result.suggestions.some(s => s.includes('cn()'))).toBe(true);
+    });
+
+    it('moderate tier: Tailwind-only advice extends config', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 20,
+        hardcodedValueCount: 10,
+        detectedFrameworkNames: ['react', 'tailwind'],
+      }));
+      expect(result.suggestions.some(s => s.includes('tailwind.config'))).toBe(true);
+    });
+
+    it('low tier: encouraging message for near-clean codebases', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 3, // density 0.03 → low
+      }));
+      expect(result.suggestions.some(s => s.includes('Nearly there'))).toBe(true);
+    });
+
+    it('low tier: includes worst file when it has multiple issues', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 5,
+        worstFile: { path: 'src/Card.tsx', issueCount: 3 },
+      }));
+      expect(result.suggestions.some(s =>
+        s.includes('Nearly there') && s.includes('Card.tsx') && s.includes('3')
+      )).toBe(true);
+    });
+
+    it('excludes vendored drift from user count', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 20,
+        hardcodedValueCount: 15,
+        vendoredDriftCount: 5, // userCount = 10
+        detectedFrameworkNames: ['react', 'tailwind'],
+      }));
+      expect(result.suggestions.some(s => s.includes('10 hardcoded'))).toBe(true);
+    });
+
+    it('token health: Tailwind-specific suggestion when token coverage is low', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        hardcodedValueCount: 30,
+        detectedFrameworkNames: ['react', 'tailwind'],
+      }));
+      expect(result.suggestions.some(s => s.includes('Tailwind detected but token coverage is low'))).toBe(true);
+    });
+
+    it('token health: design system library suggestion for MUI', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        hardcodedValueCount: 30,
+        detectedFrameworkNames: ['react', 'mui'],
+      }));
+      expect(result.suggestions.some(s => s.includes('Design system library detected'))).toBe(true);
+    });
+
+    it('token health: generic suggestion when no framework', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        hardcodedValueCount: 30,
+      }));
+      expect(result.suggestions.some(s => s.includes('add CSS custom properties'))).toBe(true);
+    });
+
+    it('userCount never goes negative', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 5,
+        vendoredDriftCount: 10, // vendored > hardcoded → userCount clamped to 0
+      }));
+      // With userCount = 0, hardcodedValueCount is still > 0 so we enter the block
+      // but userCount = Math.max(0, 5 - 10) = 0
+      const suggestion = result.suggestions.find(s => s.includes('hardcoded'));
+      if (suggestion) {
+        expect(suggestion).not.toMatch(/-\d+ hardcoded/);
+      }
     });
   });
 
@@ -745,10 +871,10 @@ describe('calculateHealthScorePillar', () => {
   });
 
   describe('suggestions for all repos with drift', () => {
-    it('provides gentle suggestion for low-density hardcoded values', () => {
+    it('provides encouraging suggestion for low-density hardcoded values', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 100,
-        hardcodedValueCount: 5, // density 0.05 — below old 0.5 threshold
+        hardcodedValueCount: 5, // density 0.05 — low tier
         hasUtilityFramework: true,
         hasDesignSystemLibrary: true,
         tokenCount: 50,
@@ -756,15 +882,15 @@ describe('calculateHealthScorePillar', () => {
       }));
       expect(result.score).toBeGreaterThanOrEqual(80);
       expect(result.suggestions.length).toBeGreaterThan(0);
-      expect(result.suggestions.some(s => s.includes('Good foundation'))).toBe(true);
+      expect(result.suggestions.some(s => s.includes('Nearly there'))).toBe(true);
     });
 
-    it('provides urgent suggestion for high-density hardcoded values', () => {
+    it('provides severe suggestion for high-density hardcoded values', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 10,
-        hardcodedValueCount: 20,
+        hardcodedValueCount: 20, // density 2.0 — severe tier
       }));
-      expect(result.suggestions.some(s => s.includes('extract to design tokens'))).toBe(true);
+      expect(result.suggestions.some(s => s.includes('high density'))).toBe(true);
     });
 
     it('provides gentle consistency suggestion for few inconsistencies', () => {

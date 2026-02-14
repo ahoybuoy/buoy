@@ -1475,6 +1475,7 @@ export function createShowCommand(): Command {
           topHardcodedColor: richContext.topHardcodedColor,
           worstFile: richContext.worstFile,
           uniqueSpacingValues: richContext.uniqueSpacingValues,
+          detectedFrameworkNames: detected.map(f => f.name),
         };
         const healthResult = calculateHealthScorePillar(healthMetrics);
 
@@ -1796,6 +1797,7 @@ async function gatherHealthMetrics(
     topHardcodedColor: richContext.topHardcodedColor,
     worstFile: richContext.worstFile,
     uniqueSpacingValues: richContext.uniqueSpacingValues,
+    detectedFrameworkNames: detected.map(f => f.name),
   };
 
   // Development sanity check: totalDriftCount should equal drifts array length
