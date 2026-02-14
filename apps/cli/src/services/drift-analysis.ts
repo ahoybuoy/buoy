@@ -24,6 +24,7 @@ import {
 } from "@buoy-design/core";
 import { glob } from "glob";
 import { readFile } from "fs/promises";
+import { resolve } from "path";
 
 export interface DriftAnalysisOptions {
   /** Callback for progress updates */
@@ -173,6 +174,28 @@ export function applySeverityOverrides(
   });
 }
 
+// Entry point file patterns - these components are rendered by the framework
+// router, not imported by other components, so they should never be flagged as unused
+const ENTRY_POINT_PATTERNS = [
+  /\/pages?\//,           // Next.js pages/ or page.tsx
+  /\/app\/.*page\./,      // Next.js App Router page.tsx
+  /\/app\/.*layout\./,    // Next.js App Router layout.tsx
+  /\/app\/.*loading\./,   // Next.js App Router loading.tsx
+  /\/app\/.*error\./,     // Next.js App Router error.tsx
+  /\/app\/.*not-found\./,  // Next.js App Router not-found.tsx
+  /\/routes?\//,          // Remix/SvelteKit routes
+  /\/\+page\./,           // SvelteKit +page.svelte
+  /\/\+layout\./,         // SvelteKit +layout.svelte
+];
+
+function isEntryPointComponent(component: Component): boolean {
+  const source = component.source;
+  // Only file-based sources (react, vue, svelte) have a path field
+  if (source.type === 'figma' || source.type === 'storybook') return false;
+  const location = source.path || '';
+  return ENTRY_POINT_PATTERNS.some(pattern => pattern.test(location));
+}
+
 /**
  * DriftAnalysisService - Main entry point for drift detection
  */
@@ -269,8 +292,20 @@ export class DriftAnalysisService {
       );
     }
 
-    // Check for unused components
-    const unusedComponentDrifts = engine.checkUnusedComponents(components, componentUsageMap);
+    // Fix 2: Count barrel file re-exports as usage
+    // Components re-exported from barrel files (index.ts) are part of the public API
+    await this.scanBarrelReExports(componentUsageMap);
+
+    // Fix 3: Count dynamic imports as usage
+    // React.lazy(() => import('./Component')) and next/dynamic patterns
+    await this.scanDynamicImports(componentUsageMap);
+
+    // Fix 1: Exempt entry point components (pages, routes, layouts)
+    // These are rendered by the framework router, not imported by other components
+    const nonEntryPointComponents = components.filter(c => !isEntryPointComponent(c));
+
+    // Check for unused components (excluding entry points)
+    const unusedComponentDrifts = engine.checkUnusedComponents(nonEntryPointComponents, componentUsageMap);
     if (unusedComponentDrifts.length > 0) {
       drifts.push(
         ...applySeverityOverrides(unusedComponentDrifts, this.config.drift.severity),
@@ -444,6 +479,89 @@ export class DriftAnalysisService {
       baselinedCount,
       summary: calculateDriftSummary(drifts),
     };
+  }
+
+  /**
+   * Scan barrel files (index.ts) for re-exports and count re-exported components as used.
+   * Components re-exported from barrel files are part of the public API.
+   */
+  private async scanBarrelReExports(componentUsageMap: Map<string, number>): Promise<void> {
+    const cwd = process.cwd();
+    const barrelFiles = await glob('**/index.{ts,tsx,js,jsx}', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
+      nodir: true,
+      maxDepth: 6,
+    });
+
+    for (const barrelFile of barrelFiles.slice(0, 50)) {
+      try {
+        const content = await readFile(resolve(cwd, barrelFile), 'utf-8');
+
+        // Check for named re-exports: export { Button, Card } from './components'
+        const namedPattern = /export\s*\{\s*([^}]+)\s*\}\s*from/g;
+        let match: RegExpExecArray | null;
+        while ((match = namedPattern.exec(content)) !== null) {
+          const names = match[1]!.split(',').map(n => {
+            // Handle "default as Name" and "Name as Alias"
+            const parts = n.trim().split(/\s+as\s+/);
+            return (parts[1] || parts[0] || '').trim();
+          }).filter(n => n && /^[A-Z]/.test(n)); // Only PascalCase (component names)
+
+          for (const name of names) {
+            componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+          }
+        }
+
+        // Check for wildcard re-exports: export * from './Button'
+        // If the module name looks like a component name, count it
+        const wildcardPattern = /export\s*\*\s*from\s*['"]\.\/([^'"]+)['"]/g;
+        while ((match = wildcardPattern.exec(content)) !== null) {
+          const moduleName = match[1]!;
+          const segments = moduleName.split('/');
+          const last = segments[segments.length - 1] || '';
+          if (/^[A-Z]/.test(last)) {
+            componentUsageMap.set(last, (componentUsageMap.get(last) || 0) + 1);
+          }
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  /**
+   * Scan source files for dynamic imports and count imported components as used.
+   * Handles React.lazy(() => import('./Component')) and next/dynamic patterns.
+   */
+  private async scanDynamicImports(componentUsageMap: Map<string, number>): Promise<void> {
+    const cwd = process.cwd();
+    const sourceFiles = await glob('**/*.{tsx,jsx,ts,js}', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.test.*', '**/*.spec.*'],
+      nodir: true,
+      maxDepth: 6,
+    });
+
+    for (const file of sourceFiles.slice(0, 200)) {
+      try {
+        const content = await readFile(resolve(cwd, file), 'utf-8');
+        if (!content.includes('import(')) continue; // Quick check before regex
+
+        const dynamicPattern = /import\(\s*['"]([^'"]+)['"]\s*\)/g;
+        let match: RegExpExecArray | null;
+        while ((match = dynamicPattern.exec(content)) !== null) {
+          const modulePath = match[1]!;
+          const segments = modulePath.split('/');
+          const last = (segments[segments.length - 1] || '').replace(/\.(tsx?|jsx?)$/, '');
+          if (/^[A-Z]/.test(last)) {
+            componentUsageMap.set(last, (componentUsageMap.get(last) || 0) + 1);
+          }
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
   }
 
   /**
