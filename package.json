@@ -1,6 +1,6 @@
 {
   "name": "buoy",
-  "version": "0.3.12",
+  "version": "0.3.14",
   "private": true,
   "description": "Catch design drift before it ships",
   "keywords": [
