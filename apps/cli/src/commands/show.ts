@@ -1788,6 +1788,18 @@ async function gatherHealthMetrics(
 function printPillarHealthReport(result: HealthScoreResult): void {
   newline();
 
+  if (result.score === null) {
+    console.log(`  Health Score: ${chalk.dim('N/A')} (no UI surface detected)`);
+    newline();
+    if (result.suggestions.length > 0) {
+      for (const suggestion of result.suggestions) {
+        console.log(`    ${chalk.dim("\u2192")} ${suggestion}`);
+      }
+      newline();
+    }
+    return;
+  }
+
   const scoreColor =
     result.score >= 80 ? chalk.green :
     result.score >= 60 ? chalk.yellow :

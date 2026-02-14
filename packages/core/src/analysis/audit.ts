@@ -91,10 +91,10 @@ export interface HealthPillar {
 }
 
 export interface HealthScoreResult {
-  /** Overall score 0-100 */
-  score: number;
+  /** Overall score 0-100, or null if no UI surface detected */
+  score: number | null;
   /** Tier label */
-  tier: 'Great' | 'Good' | 'OK' | 'Bad' | 'Terrible';
+  tier: 'Great' | 'Good' | 'OK' | 'Bad' | 'Terrible' | 'N/A';
   /** Individual pillar scores */
   pillars: {
     valueDiscipline: HealthPillar;
@@ -298,7 +298,7 @@ export function calculateHealthScore(report: AuditReport): number {
     hasUtilityFramework: false,
     hasDesignSystemLibrary: false,
   };
-  return calculateHealthScorePillar(metrics).score;
+  return calculateHealthScorePillar(metrics).score ?? 0;
 }
 
 /**
@@ -318,6 +318,22 @@ export function calculateHealthScore(report: AuditReport): number {
  */
 export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreResult {
   const suggestions: string[] = [];
+
+  // No UI surface area — can't evaluate design system health
+  if (metrics.componentCount === 0 && metrics.tokenCount === 0 && (metrics.totalDriftCount ?? 0) === 0) {
+    return {
+      score: null,
+      tier: 'N/A' as const,
+      pillars: {
+        valueDiscipline: { name: 'Value Discipline', score: 0, maxScore: 60, description: 'Hardcoded values per component' },
+        tokenHealth: { name: 'Token Health', score: 0, maxScore: 20, description: 'Token system adoption' },
+        consistency: { name: 'Consistency', score: 0, maxScore: 10, description: 'Naming convention adherence' },
+        criticalIssues: { name: 'Critical Issues', score: 0, maxScore: 10, description: 'Accessibility and critical failures' },
+      },
+      suggestions: ['No UI components or design tokens detected — this repo may not need design system health tracking'],
+      metrics,
+    };
+  }
 
   // Pillar 1: Value Discipline (0-60)
   // Primary: hardcoded value density
