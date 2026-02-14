@@ -304,7 +304,7 @@ export function createShowCommand(): Command {
       const spin = spinner("Analyzing drift...");
 
       try {
-        const { config } = await loadConfig();
+        const config = await getOrBuildConfig();
 
         const { result } = await withOptionalCache(
           process.cwd(),
@@ -1527,6 +1527,7 @@ export function createShowCommand(): Command {
               criticalIssues: { score: healthResult.pillars.criticalIssues.score, max: 10 },
             },
             suggestions: healthResult.suggestions,
+            metrics: healthResult.metrics,
           },
           setup,
         };
@@ -1775,7 +1776,7 @@ async function gatherHealthMetrics(
   }
   const highDensityFileCount = [...fileDriftCounts.values()].filter(count => count > 2).length;
 
-  return {
+  const metrics: HealthMetrics = {
     componentCount: scanResult.components.length,
     tokenCount: scanResult.tokens.length,
     hardcodedValueCount,
@@ -1796,6 +1797,17 @@ async function gatherHealthMetrics(
     worstFile: richContext.worstFile,
     uniqueSpacingValues: richContext.uniqueSpacingValues,
   };
+
+  // Development sanity check: totalDriftCount should equal drifts array length
+  if (process.env.BUOY_DEBUG) {
+    const expectedTotal = drifts.length;
+    const reportedTotal = metrics.totalDriftCount ?? 0;
+    if (reportedTotal !== expectedTotal) {
+      console.error(`[buoy debug] Drift count mismatch: metrics.totalDriftCount=${reportedTotal} but drifts.length=${expectedTotal}`);
+    }
+  }
+
+  return metrics;
 }
 
 function printPillarHealthReport(result: HealthScoreResult): void {
