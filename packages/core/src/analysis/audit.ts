@@ -61,6 +61,16 @@ export interface HealthMetrics {
   hasDesignSystemLibrary: boolean;
   /** Total drift signals of ALL types (hardcoded-value, naming-inconsistency, repeated-pattern, etc.) */
   totalDriftCount?: number;
+  /** Number of unused-component drift signals (dead code) */
+  unusedComponentCount?: number;
+  /** Number of repeated-pattern drift signals (extract to shared component) */
+  repeatedPatternCount?: number;
+  /** Number of orphaned-component drift signals (dead code) */
+  orphanedComponentCount?: number;
+  /** Number of semantic-mismatch drift signals (naming/structure inconsistencies) */
+  semanticMismatchCount?: number;
+  /** Number of deprecated-pattern drift signals (technical debt) */
+  deprecatedPatternCount?: number;
   /** Most common hardcoded color (for suggestions) */
   topHardcodedColor?: { value: string; count: number };
   /** File with the most drift issues */
@@ -303,12 +313,20 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
 
   // Pillar 1: Value Discipline (0-60)
   // Primary: hardcoded value density
-  // Secondary: total drift density (penalizes other drift types)
+  // Secondary: dead code density (unused/orphaned components, repeated patterns)
+  // Tertiary: total drift density as backstop
   const hardcodedDensity = metrics.hardcodedValueCount / Math.max(metrics.componentCount, 1);
+  const deadCodeCount = (metrics.unusedComponentCount ?? 0)
+    + (metrics.orphanedComponentCount ?? 0)
+    + (metrics.repeatedPatternCount ?? 0);
+  const deadCodeDensity = deadCodeCount / Math.max(metrics.componentCount, 1);
   const totalDriftDensity = (metrics.totalDriftCount ?? metrics.hardcodedValueCount) / Math.max(metrics.componentCount, 1);
-  // Use the worse of the two densities (but weight totalDrift lower since it includes info-level)
-  const density = Math.max(hardcodedDensity, totalDriftDensity * 0.5);
-  const valueDisciplineScore = Math.round(60 * clamp(1 - density / 3, 0, 1));
+  // Hardcoded density is primary; dead code adds 30% partial penalty; total drift as backstop
+  const density = Math.max(
+    hardcodedDensity + deadCodeDensity * 0.3,
+    totalDriftDensity * 0.5,
+  );
+  const valueDisciplineScore = Math.round(60 * clamp(1 - density / 2, 0, 1));
 
   if (density > 0.5) {
     let suggestion = `${metrics.hardcodedValueCount} hardcoded values across your components — extract to design tokens`;
@@ -372,21 +390,31 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   }
 
   // Pillar 3: Consistency (0-10)
-  const namingRate = metrics.namingInconsistencyCount / Math.max(metrics.componentCount, 1);
-  const consistencyScore = Math.round(10 * clamp(1 - namingRate / 0.15, 0, 1));
+  // Includes naming-inconsistency + semantic-mismatch signals
+  const inconsistencyCount = metrics.namingInconsistencyCount + (metrics.semanticMismatchCount ?? 0);
+  const namingRate = inconsistencyCount / Math.max(metrics.componentCount, 1);
+  const consistencyScore = Math.round(10 * clamp(1 - namingRate / 0.25, 0, 1));
 
-  if (namingRate > 0.05) {
+  if (namingRate > 0.08) {
     suggestions.push(
-      `${metrics.namingInconsistencyCount} naming inconsistencies — standardize prop/component conventions`
+      `${inconsistencyCount} naming/semantic inconsistencies — standardize prop/component conventions`
     );
   }
 
   // Pillar 4: Critical Issues (0-10)
-  const criticalScore = Math.max(0, 10 - metrics.criticalCount * 5);
+  // Includes critical severity + deprecated patterns (2 deprecated = 1 critical equivalent)
+  const deprecatedCount = metrics.deprecatedPatternCount ?? 0;
+  const effectiveCriticalCount = metrics.criticalCount + Math.ceil(deprecatedCount / 2);
+  const criticalScore = Math.max(0, 10 - effectiveCriticalCount * 3);
 
   if (metrics.criticalCount > 0) {
     suggestions.push(
       `${metrics.criticalCount} critical issue${metrics.criticalCount === 1 ? '' : 's'} (accessibility/contrast) — fix immediately`
+    );
+  }
+  if (deprecatedCount > 0) {
+    suggestions.push(
+      `${deprecatedCount} deprecated pattern${deprecatedCount === 1 ? '' : 's'} — migrate to current API`
     );
   }
 

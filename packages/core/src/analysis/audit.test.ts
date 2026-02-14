@@ -219,21 +219,21 @@ describe('calculateHealthScorePillar', () => {
       expect(result.pillars.valueDiscipline.score).toBe(60);
     });
 
-    it('scores 0 when density >= 3 (3+ hardcoded values per component)', () => {
+    it('scores 0 when density >= 2 (2+ hardcoded values per component)', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 10,
-        hardcodedValueCount: 30, // density = 3
+        hardcodedValueCount: 20, // density = 2
       }));
       expect(result.pillars.valueDiscipline.score).toBe(0);
     });
 
     it('scores proportionally to density', () => {
-      // density = 1.5 → 1 - 1.5/3 = 0.5 → 30
+      // density = 1.5 → 1 - 1.5/2 = 0.25 → round(60 * 0.25) = 15
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 10,
         hardcodedValueCount: 15,
       }));
-      expect(result.pillars.valueDiscipline.score).toBe(30);
+      expect(result.pillars.valueDiscipline.score).toBe(15);
     });
   });
 
@@ -368,21 +368,21 @@ describe('calculateHealthScorePillar', () => {
       expect(result.pillars.consistency.score).toBe(10);
     });
 
-    it('scores 0 when naming rate >= 15%', () => {
+    it('scores 0 when naming rate >= 25%', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 100,
-        namingInconsistencyCount: 15, // 15%
+        namingInconsistencyCount: 25, // 25%
       }));
       expect(result.pillars.consistency.score).toBe(0);
     });
 
     it('scores proportionally', () => {
-      // namingRate = 5/100 = 0.05 → 1 - 0.05/0.15 = 0.667 → 7
+      // namingRate = 5/100 = 0.05 → 1 - 0.05/0.25 = 0.8 → round(10 * 0.8) = 8
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 100,
         namingInconsistencyCount: 5,
       }));
-      expect(result.pillars.consistency.score).toBe(7);
+      expect(result.pillars.consistency.score).toBe(8);
     });
   });
 
@@ -392,13 +392,13 @@ describe('calculateHealthScorePillar', () => {
       expect(result.pillars.criticalIssues.score).toBe(10);
     });
 
-    it('deducts 5 per critical issue', () => {
+    it('deducts 3 per critical issue', () => {
       const result = calculateHealthScorePillar(makeMetrics({ criticalCount: 1 }));
-      expect(result.pillars.criticalIssues.score).toBe(5);
+      expect(result.pillars.criticalIssues.score).toBe(7);
     });
 
-    it('scores 0 when 2+ criticals', () => {
-      const result = calculateHealthScorePillar(makeMetrics({ criticalCount: 3 }));
+    it('scores 0 when 4+ criticals', () => {
+      const result = calculateHealthScorePillar(makeMetrics({ criticalCount: 4 }));
       expect(result.pillars.criticalIssues.score).toBe(0);
     });
   });
@@ -450,7 +450,7 @@ describe('calculateHealthScorePillar', () => {
       }));
       // totalDriftDensity = 500/100 = 5, * 0.5 = 2.5
       // density = max(0, 2.5) = 2.5
-      // valueDiscipline = round(60 * clamp(1 - 2.5/3, 0, 1)) = round(60 * 0.167) = 10
+      // valueDiscipline = round(60 * clamp(1 - 2.5/2, 0, 1)) = round(60 * 0) = 0
       expect(result.score).toBeLessThan(90);
       expect(result.pillars.valueDiscipline.score).toBeLessThan(60);
     });
@@ -475,8 +475,8 @@ describe('calculateHealthScorePillar', () => {
       }));
       // hardcoded density (2) > totalDrift density * 0.5 (1)
       // so uses hardcoded density = 2
-      // valueDiscipline = round(60 * (1 - 2/3)) = round(60 * 0.333) = 20
-      expect(result.pillars.valueDiscipline.score).toBe(20);
+      // valueDiscipline = round(60 * clamp(1 - 2/2, 0, 1)) = round(60 * 0) = 0
+      expect(result.pillars.valueDiscipline.score).toBe(0);
     });
   });
 
@@ -603,6 +603,142 @@ describe('calculateHealthScorePillar', () => {
       expect(suggestion).toBeDefined();
       expect(suggestion).toContain('App.tsx');
       expect(suggestion).toContain('12 issues');
+    });
+  });
+
+  describe('silent drift type mapping', () => {
+    it('penalizes value discipline for unused/orphaned/repeated components', () => {
+      const clean = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 0,
+      }));
+      const withDeadCode = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 0,
+        unusedComponentCount: 50,
+        orphanedComponentCount: 10,
+        repeatedPatternCount: 20,
+      }));
+      expect(withDeadCode.pillars.valueDiscipline.score).toBeLessThan(clean.pillars.valueDiscipline.score);
+    });
+
+    it('penalizes consistency for semantic-mismatch signals', () => {
+      const clean = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+      }));
+      const withMismatch = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        semanticMismatchCount: 10,
+      }));
+      expect(withMismatch.pillars.consistency.score).toBeLessThan(clean.pillars.consistency.score);
+    });
+
+    it('penalizes critical issues for deprecated-pattern signals', () => {
+      const clean = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+      }));
+      const withDeprecated = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        deprecatedPatternCount: 4,
+      }));
+      expect(withDeprecated.pillars.criticalIssues.score).toBeLessThan(clean.pillars.criticalIssues.score);
+    });
+
+    it('does not change scores when silent drift counts are zero or undefined', () => {
+      const withZero = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        unusedComponentCount: 0,
+        repeatedPatternCount: 0,
+        orphanedComponentCount: 0,
+        semanticMismatchCount: 0,
+        deprecatedPatternCount: 0,
+      }));
+      const withUndefined = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+      }));
+      expect(withZero.score).toBe(withUndefined.score);
+    });
+
+    it('adds deprecated pattern suggestion', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        deprecatedPatternCount: 3,
+      }));
+      expect(result.suggestions.some(s => s.includes('deprecated'))).toBe(true);
+    });
+
+    it('counts 2 deprecated patterns as 1 critical equivalent', () => {
+      // 2 deprecated = ceil(2/2) = 1 critical equivalent
+      // effectiveCriticalCount = 0 + 1 = 1 → score = 10 - 3 = 7
+      const result = calculateHealthScorePillar(makeMetrics({
+        criticalCount: 0,
+        deprecatedPatternCount: 2,
+      }));
+      expect(result.pillars.criticalIssues.score).toBe(7);
+    });
+
+    it('combines semantic-mismatch with naming-inconsistency for consistency score', () => {
+      // 5 naming + 5 semantic = 10 / 100 = 0.10 rate
+      // 1 - 0.10/0.25 = 0.6 → round(10 * 0.6) = 6
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        namingInconsistencyCount: 5,
+        semanticMismatchCount: 5,
+      }));
+      expect(result.pillars.consistency.score).toBe(6);
+    });
+
+    it('dead code density adds 30% penalty on top of hardcoded density', () => {
+      // hardcodedDensity = 10/100 = 0.1
+      // deadCodeDensity = 50/100 = 0.5
+      // density = max(0.1 + 0.5*0.3, 60/100*0.5) = max(0.25, 0.30) = 0.30
+      // valueDiscipline = round(60 * (1 - 0.30/2)) = round(60 * 0.85) = 51
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 10,
+        unusedComponentCount: 50,
+        totalDriftCount: 60,
+      }));
+      expect(result.pillars.valueDiscipline.score).toBe(51);
+    });
+  });
+
+  describe('score distribution calibration', () => {
+    it('moderate drift repo scores Good, not Great', () => {
+      // A typical repo: 50 components, 30 hardcoded values, some naming issues
+      // density = 30/50 = 0.6 → valueDiscipline = round(60 * (1 - 0.6/2)) = round(60 * 0.7) = 42
+      // tokenHealth: utility(5) + usage(5) = 10
+      // namingRate = (3+5)/50 = 0.16 → consistency = round(10 * (1 - 0.16/0.25)) = round(10 * 0.36) = 4
+      // criticalScore = 10
+      // total = 42 + 10 + 4 + 10 = 66 → Good
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        hardcodedValueCount: 30, // density 0.6
+        namingInconsistencyCount: 3,
+        semanticMismatchCount: 5,
+        hasUtilityFramework: true,
+      }));
+      expect(result.tier).toBe('Good');
+    });
+
+    it('heavy drift repo scores OK or worse', () => {
+      // Lots of drift signals
+      // hardcodedDensity = 100/100 = 1, deadCode = 30/100 = 0.3 * 0.3 = 0.09
+      // totalDriftDensity = 200/100 = 2 * 0.5 = 1
+      // density = max(1 + 0.09, 1) = 1.09
+      // valueDiscipline = round(60 * (1 - 1.09/2)) = round(60 * clamp(0.455, 0, 1)) = round(27.3) = 27
+      // tokenHealth = 0
+      // namingRate = 25/100 = 0.25 → consistency = 0
+      // criticalScore = 10
+      // total = 27 + 0 + 0 + 10 = 37 → Bad
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 100,
+        namingInconsistencyCount: 10,
+        semanticMismatchCount: 15,
+        unusedComponentCount: 30,
+        totalDriftCount: 200,
+      }));
+      expect(result.score).toBeLessThan(60); // OK or worse
     });
   });
 });
