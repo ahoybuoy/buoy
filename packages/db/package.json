@@ -1,6 +1,6 @@
 {
   "name": "@buoy-design/db",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "Database layer for Buoy drift detection",
   "type": "module",
   "license": "MIT",
