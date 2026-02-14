@@ -1,6 +1,6 @@
 {
   "name": "@buoy-design/cli",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Catch design drift before it ships",
   "type": "module",
   "license": "MIT",
