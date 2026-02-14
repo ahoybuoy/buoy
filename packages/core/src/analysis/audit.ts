@@ -485,7 +485,13 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
     );
   }
 
-  const total = valueDisciplineScore + tokenHealthScore + consistencyScore + criticalScore;
+  // Scale consistency and criticalIssues for repos with very few components
+  // Prevents trivially maxing these pillars when there's nothing to evaluate
+  const componentScale = Math.min(metrics.componentCount / 3, 1);
+  const scaledConsistencyScore = Math.round(consistencyScore * componentScale);
+  const scaledCriticalScore = Math.round(criticalScore * componentScale);
+
+  const total = valueDisciplineScore + tokenHealthScore + scaledConsistencyScore + scaledCriticalScore;
 
   return {
     score: total,
@@ -505,13 +511,13 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
       },
       consistency: {
         name: 'Consistency',
-        score: consistencyScore,
+        score: scaledConsistencyScore,
         maxScore: 10,
         description: 'Naming convention adherence',
       },
       criticalIssues: {
         name: 'Critical Issues',
-        score: criticalScore,
+        score: scaledCriticalScore,
         maxScore: 10,
         description: 'Accessibility and critical failures',
       },

@@ -156,7 +156,9 @@ describe('calculateHealthScore (legacy)', () => {
 
     const score = calculateHealthScore(report);
 
-    expect(score).toBeGreaterThanOrEqual(70);
+    // With componentCount=1 (from filesAffected=0||1), consistency and criticalIssues
+    // are scaled down by componentScale (1/3), so max is ~69 instead of ~83
+    expect(score).toBeGreaterThanOrEqual(60);
   });
 
   it('decreases score based on value density', () => {
