@@ -328,15 +328,36 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   );
   const valueDisciplineScore = Math.round(60 * clamp(1 - density / 2, 0, 1));
 
-  if (density > 0.5) {
-    let suggestion = `${metrics.hardcodedValueCount} hardcoded values across your components — extract to design tokens`;
-    if (metrics.topHardcodedColor) {
-      suggestion = `${metrics.hardcodedValueCount} hardcoded values found (most common: ${metrics.topHardcodedColor.value} used ${metrics.topHardcodedColor.count}\u00d7). Create a color token file`;
-    }
-    if (metrics.worstFile) {
-      suggestion += `. Start with ${metrics.worstFile.path} (${metrics.worstFile.issueCount} issues)`;
+  if (metrics.hardcodedValueCount > 0) {
+    let suggestion: string;
+    if (density > 0.5) {
+      // Urgent tone for high density
+      suggestion = `${metrics.hardcodedValueCount} hardcoded values across your components — extract to design tokens`;
+      if (metrics.topHardcodedColor) {
+        suggestion = `${metrics.hardcodedValueCount} hardcoded values found (most common: ${metrics.topHardcodedColor.value} used ${metrics.topHardcodedColor.count}\u00d7). Create a color token file`;
+      }
+      if (metrics.worstFile) {
+        suggestion += `. Start with ${metrics.worstFile.path} (${metrics.worstFile.issueCount} issues)`;
+      }
+    } else {
+      // Gentle tone for low density
+      suggestion = `Good foundation. ${metrics.hardcodedValueCount} hardcoded value${metrics.hardcodedValueCount === 1 ? '' : 's'} could be extracted to design tokens`;
     }
     suggestions.push(suggestion);
+  }
+
+  // Dead code suggestions
+  const unusedComponentCount = metrics.unusedComponentCount ?? 0;
+  const repeatedPatternCount = metrics.repeatedPatternCount ?? 0;
+  if (unusedComponentCount > 0) {
+    suggestions.push(
+      `${unusedComponentCount} unused component${unusedComponentCount === 1 ? '' : 's'} — remove or document for future use`
+    );
+  }
+  if (repeatedPatternCount > 0) {
+    suggestions.push(
+      `${repeatedPatternCount} repeated pattern${repeatedPatternCount === 1 ? '' : 's'} — extract to shared components`
+    );
   }
 
   // Pillar 2: Token Health (0-20)
@@ -395,10 +416,16 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   const namingRate = inconsistencyCount / Math.max(metrics.componentCount, 1);
   const consistencyScore = Math.round(10 * clamp(1 - namingRate / 0.25, 0, 1));
 
-  if (namingRate > 0.08) {
-    suggestions.push(
-      `${inconsistencyCount} naming/semantic inconsistencies — standardize prop/component conventions`
-    );
+  if (inconsistencyCount > 0) {
+    if (namingRate > 0.08) {
+      suggestions.push(
+        `${inconsistencyCount} naming/semantic inconsistencies — standardize prop/component conventions`
+      );
+    } else {
+      suggestions.push(
+        `${inconsistencyCount} minor naming inconsistenc${inconsistencyCount === 1 ? 'y' : 'ies'} — consider standardizing conventions`
+      );
+    }
   }
 
   // Pillar 4: Critical Issues (0-10)

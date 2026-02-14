@@ -741,6 +741,63 @@ describe('calculateHealthScorePillar', () => {
       expect(result.score).toBeLessThan(60); // OK or worse
     });
   });
+
+  describe('suggestions for all repos with drift', () => {
+    it('provides gentle suggestion for low-density hardcoded values', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 5, // density 0.05 — below old 0.5 threshold
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+        tokenCount: 50,
+        unusedTokenCount: 0,
+      }));
+      expect(result.score).toBeGreaterThanOrEqual(80);
+      expect(result.suggestions.length).toBeGreaterThan(0);
+      expect(result.suggestions.some(s => s.includes('Good foundation'))).toBe(true);
+    });
+
+    it('provides urgent suggestion for high-density hardcoded values', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 20,
+      }));
+      expect(result.suggestions.some(s => s.includes('extract to design tokens'))).toBe(true);
+    });
+
+    it('provides gentle consistency suggestion for few inconsistencies', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        namingInconsistencyCount: 2,
+      }));
+      expect(result.suggestions.some(s => s.includes('minor naming'))).toBe(true);
+    });
+
+    it('suggests removing unused components', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        unusedComponentCount: 10,
+      }));
+      expect(result.suggestions.some(s => s.includes('unused component'))).toBe(true);
+    });
+
+    it('suggests extracting repeated patterns', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        repeatedPatternCount: 5,
+      }));
+      expect(result.suggestions.some(s => s.includes('repeated pattern'))).toBe(true);
+    });
+
+    it('still has no suggestions for truly perfect project', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        tokenCount: 50,
+        unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+      }));
+      expect(result.suggestions).toHaveLength(0);
+    });
+  });
 });
 
 describe('getHealthTier', () => {
