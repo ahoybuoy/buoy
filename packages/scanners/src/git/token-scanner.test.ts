@@ -220,6 +220,57 @@ describe("TokenScanner", () => {
       expect(redToken).toBeDefined();
       expect(redToken?.category).toBe("color");
     });
+
+    it("extracts tokens from Cal.com-style @theme inline with @import tailwindcss", async () => {
+      vol.fromJSON({
+        "/project/app.css": `
+@import "tailwindcss";
+@theme inline {
+  --color-primary: #0066cc;
+  --color-secondary: #6366f1;
+  --spacing-lg: 2rem;
+  --radius-md: 0.5rem;
+}
+`,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["**/*.css"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(4);
+      const names = result.items.map((t) => t.name);
+      expect(names).toContain("--color-primary");
+      expect(names).toContain("--color-secondary");
+      expect(names).toContain("--spacing-lg");
+      expect(names).toContain("--radius-md");
+    });
+
+    it("discovers @theme files via auto-detection without explicit file patterns", async () => {
+      vol.fromJSON({
+        "/project/src/app.css": `
+@import "tailwindcss";
+@theme inline {
+  --color-brand: #0066cc;
+  --spacing-base: 1rem;
+}
+`,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThanOrEqual(2);
+      const names = result.items.map((t) => t.name);
+      expect(names).toContain("--color-brand");
+      expect(names).toContain("--spacing-base");
+    });
   });
 
   describe("JSON token parsing", () => {
