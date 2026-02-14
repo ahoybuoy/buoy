@@ -313,6 +313,14 @@ export class DriftAnalysisService {
     // app.component('MyComponent', ...) and Vue.component('MyComponent', ...)
     await this.scanAutoRegistration(componentUsageMap);
 
+    // Fix 6: Count Angular NgModule declarations as usage
+    // @NgModule({ declarations: [ButtonComponent, ...] })
+    await this.scanNgModuleDeclarations(componentUsageMap);
+
+    // Fix 7: Count Storybook story file imports as usage
+    // Button.stories.tsx importing { Button } means Button is documented/tested
+    await this.scanStoryFileUsages(componentUsageMap);
+
     // Fix 1: Exempt entry point components (pages, routes, layouts)
     // These are rendered by the framework router, not imported by other components
     const nonEntryPointComponents = components.filter(c => !isEntryPointComponent(c));
@@ -578,8 +586,9 @@ export class DriftAnalysisService {
   }
 
   /**
-   * Scan Vue and Svelte template blocks for component usage.
+   * Scan Vue, Svelte, and Angular template blocks for component usage.
    * Vue SFCs reference components in <template> blocks as <MyComponent />,
+   * Angular templates use <app-my-component> selectors,
    * which aren't detected by JS import scanning.
    */
   private async scanTemplateComponentUsage(
@@ -588,7 +597,7 @@ export class DriftAnalysisService {
   ): Promise<void> {
     if (knownComponents.length === 0) return;
     const cwd = process.cwd();
-    const templateFiles = await glob('**/*.{vue,svelte}', {
+    const templateFiles = await glob('**/*.{vue,svelte,html}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
       nodir: true,
@@ -596,11 +605,14 @@ export class DriftAnalysisService {
     });
 
     const knownSet = new Set(knownComponents);
-    // Also build a kebab-case lookup for Vue (MyComponent -> my-component)
+    // Build a kebab-case lookup for Vue/Angular (MyComponent -> my-component)
     const kebabMap = new Map<string, string>();
     for (const name of knownComponents) {
       const kebab = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
       kebabMap.set(kebab, name);
+      // Angular selectors often use app- prefix: ButtonComponent -> app-button
+      const angularSelector = `app-${kebab.replace(/-component$/, '')}`;
+      kebabMap.set(angularSelector, name);
     }
 
     for (const file of templateFiles.slice(0, 300)) {
@@ -654,6 +666,103 @@ export class DriftAnalysisService {
         const pattern = /\.component\(\s*['"]([A-Z][a-zA-Z0-9]*)['"]/g;
         let match: RegExpExecArray | null;
         while ((match = pattern.exec(content)) !== null) {
+          const name = match[1]!;
+          componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  /**
+   * Scan Angular NgModule files for declared components.
+   * Components in declarations: [...] are registered and should count as used.
+   */
+  private async scanNgModuleDeclarations(componentUsageMap: Map<string, number>): Promise<void> {
+    const cwd = process.cwd();
+    const moduleFiles = await glob('**/*.module.ts', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      nodir: true,
+      maxDepth: 8,
+    });
+
+    for (const file of moduleFiles.slice(0, 50)) {
+      try {
+        const content = await readFile(resolve(cwd, file), 'utf-8');
+        if (!content.includes('declarations')) continue;
+
+        // Match declarations: [Component1, Component2, ...]
+        const declMatch = content.match(/declarations\s*:\s*\[([\s\S]*?)\]/);
+        if (declMatch) {
+          const names = declMatch[1]!.match(/\b([A-Z][a-zA-Z]+(?:Component|Directive|Pipe))\b/g);
+          if (names) {
+            for (const name of names) {
+              componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+            }
+          }
+        }
+
+        // Also match imports: [...] and exports: [...] arrays
+        for (const key of ['imports', 'exports']) {
+          const match = content.match(new RegExp(`${key}\\s*:\\s*\\[([\\s\\S]*?)\\]`));
+          if (match) {
+            const names = match[1]!.match(/\b([A-Z][a-zA-Z]+(?:Component|Module))\b/g);
+            if (names) {
+              for (const name of names) {
+                componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  /**
+   * Scan Storybook story files for component imports.
+   * A component referenced in a .stories file is documented/tested and should count as used.
+   */
+  private async scanStoryFileUsages(componentUsageMap: Map<string, number>): Promise<void> {
+    const cwd = process.cwd();
+    const storyFiles = await glob('**/*.stories.{ts,tsx,js,jsx}', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      nodir: true,
+      maxDepth: 8,
+    });
+
+    for (const file of storyFiles.slice(0, 200)) {
+      try {
+        const content = await readFile(resolve(cwd, file), 'utf-8');
+
+        // Match named imports: import { Button, Card } from '...'
+        const importPattern = /import\s*\{\s*([^}]+)\s*\}\s*from/g;
+        let match: RegExpExecArray | null;
+        while ((match = importPattern.exec(content)) !== null) {
+          const names = match[1]!.split(',').map(n => {
+            const parts = n.trim().split(/\s+as\s+/);
+            return (parts[0] || '').trim();
+          }).filter(n => n && /^[A-Z]/.test(n));
+
+          for (const name of names) {
+            componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+          }
+        }
+
+        // Match default imports: import Button from '...'
+        const defaultImportPattern = /import\s+([A-Z][a-zA-Z0-9]*)\s+from/g;
+        while ((match = defaultImportPattern.exec(content)) !== null) {
+          const name = match[1]!;
+          componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+        }
+
+        // Match CSF3 component meta: component: Button or component: () => Button
+        const metaPattern = /component\s*:\s*([A-Z][a-zA-Z0-9]*)/g;
+        while ((match = metaPattern.exec(content)) !== null) {
           const name = match[1]!;
           componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
         }

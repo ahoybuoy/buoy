@@ -1656,22 +1656,18 @@ function computeRichSuggestionContext(drifts: DriftSignal[]): {
   let vendoredDriftCount = 0;
   const userFileCounts = new Map<string, number>();
   for (const d of drifts) {
-    if (d.type !== "hardcoded-value") {
-      // Non-hardcoded-value drifts: count only component files
-      const loc = d.source?.location;
-      if (!loc) continue;
-      const file = loc.split(":")[0];
-      if (file && isComponentFile(file)) userFileCounts.set(file, (userFileCounts.get(file) || 0) + 1);
-      continue;
-    }
     const loc = d.source?.location;
     if (!loc) continue;
     const file = loc.split(":")[0];
     if (!file) continue;
 
+    // Filter vendored files for ALL drift types (not just hardcoded-value)
     if (isVendoredShadcnFile(file)) {
-      vendoredDriftCount++;
-    } else if (isComponentFile(file)) {
+      if (d.type === "hardcoded-value") vendoredDriftCount++;
+      continue;
+    }
+
+    if (isComponentFile(file)) {
       userFileCounts.set(file, (userFileCounts.get(file) || 0) + 1);
     }
   }

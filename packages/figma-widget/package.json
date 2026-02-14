@@ -1,6 +1,6 @@
 {
   "name": "@buoy-design/figma-widget",
-  "version": "0.1.0",
+  "version": "0.3.15",
   "private": true,
   "description": "Figma widget and plugin for Buoy design system health monitoring",
   "scripts": {

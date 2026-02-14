@@ -554,9 +554,20 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
       });
     }
 
+    // Hard cap on files per scanner to prevent hangs on massive repos
+    const MAX_FILES_PER_SCANNER = 5_000;
+    let filesToProcess = files;
+    if (files.length > MAX_FILES_PER_SCANNER) {
+      filesToProcess = files.slice(0, MAX_FILES_PER_SCANNER);
+      warnings.push({
+        code: "LARGE_FILE_COUNT",
+        message: `Capped file scan at ${MAX_FILES_PER_SCANNER} files (found ${files.length}). Results may be incomplete.`,
+      });
+    }
+
     // Process files in parallel with configurable concurrency
     const results = await parallelProcess(
-      files,
+      filesToProcess,
       async (file) => ({ file, items: await processor(file) }),
       this.concurrency,
       options,

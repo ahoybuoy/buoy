@@ -72,6 +72,29 @@ interface ScannerDefinition {
 }
 
 /**
+ * Timeout wrapper for scanner.scan() calls.
+ * Prevents hangs when a scanner encounters massive file trees.
+ */
+async function withScannerTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Scanner "${label}" timed out after ${ms}ms`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
+/**
  * Registry of all scanner definitions - add new scanners here
  */
 const SCANNER_REGISTRY: ScannerDefinition[] = [
@@ -436,7 +459,21 @@ export class ScanOrchestrator {
 
     const options = definition.getOptions(cfg, this.projectRoot, this.cache, files);
     const scanner = new ScannerClass(options);
-    const scanResult = await scanner.scan();
+
+    // Wrap scanner.scan() with a timeout to prevent hangs
+    let scanResult: any;
+    try {
+      scanResult = await withScannerTimeout(scanner.scan(), 60_000, definition.source);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("timed out")) {
+        result.errors.push({
+          source,
+          message: `Scanner "${definition.source}" timed out after 60s — skipped`,
+        });
+        return result;
+      }
+      throw err;
+    }
 
     // Collect results based on type
     if (definition.resultType === "components") {

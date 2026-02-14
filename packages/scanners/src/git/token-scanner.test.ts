@@ -2595,4 +2595,116 @@ type SizeType = 'sm' | 'lg';
       expect(spacingToken?.category).toBe("spacing");
     });
   });
+
+  describe("Tailwind config token extraction", () => {
+    it("should extract colors from theme.extend.colors", async () => {
+      vol.fromJSON({
+        "/project/tailwind.config.ts": `
+          export default {
+            content: ['./src/**/*.{ts,tsx}'],
+            theme: {
+              extend: {
+                colors: {
+                  primary: '#3b82f6',
+                  secondary: '#64748b',
+                },
+              },
+            },
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tailwind.config.ts"],
+      });
+
+      const result = await scanner.scan();
+      const colorTokens = result.items.filter((t) => t.category === "color");
+      expect(colorTokens.length).toBeGreaterThanOrEqual(2);
+      expect(colorTokens.some((t) => t.name === "primary")).toBe(true);
+      expect(colorTokens.some((t) => t.name === "secondary")).toBe(true);
+    });
+
+    it("should extract spacing from theme.extend.spacing", async () => {
+      vol.fromJSON({
+        "/project/tailwind.config.ts": `
+          export default {
+            theme: {
+              extend: {
+                spacing: {
+                  '18': '4.5rem',
+                  '88': '22rem',
+                },
+              },
+            },
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tailwind.config.ts"],
+      });
+
+      const result = await scanner.scan();
+      const spacingTokens = result.items.filter((t) => t.category === "spacing");
+      expect(spacingTokens.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("should extract nested color objects", async () => {
+      vol.fromJSON({
+        "/project/tailwind.config.js": `
+          module.exports = {
+            theme: {
+              extend: {
+                colors: {
+                  brand: {
+                    light: '#fbbf24',
+                    DEFAULT: '#f59e0b',
+                    dark: '#d97706',
+                  },
+                },
+              },
+            },
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tailwind.config.js"],
+      });
+
+      const result = await scanner.scan();
+      const colorTokens = result.items.filter((t) => t.category === "color");
+      expect(colorTokens.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("should extract fontSize tokens", async () => {
+      vol.fromJSON({
+        "/project/tailwind.config.ts": `
+          export default {
+            theme: {
+              extend: {
+                fontSize: {
+                  'xs': '0.75rem',
+                  'sm': '0.875rem',
+                },
+              },
+            },
+          };
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tailwind.config.ts"],
+      });
+
+      const result = await scanner.scan();
+      const typographyTokens = result.items.filter((t) => t.category === "typography");
+      expect(typographyTokens.length).toBeGreaterThanOrEqual(2);
+    });
+  });
 });

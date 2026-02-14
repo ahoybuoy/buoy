@@ -438,15 +438,22 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   //   4. Token usage ratio (0-5): What fraction of defined tokens are used
 
   // Sub-factor 1: Utility framework (0-5)
-  const utilityPoints = metrics.hasUtilityFramework ? 5 : 0;
+  // Scaled: 3 for having the framework, +2 when tokens are also defined
+  const utilityPoints = metrics.hasUtilityFramework
+    ? (metrics.tokenCount > 0 ? 5 : 3)
+    : 0;
 
   // Sub-factor 2: Design system library (0-5)
-  const libraryPoints = metrics.hasDesignSystemLibrary ? 5 : 0;
+  // Scaled: 3 for having the library, +2 when tokens are also defined
+  const libraryPoints = metrics.hasDesignSystemLibrary
+    ? (metrics.tokenCount > 0 ? 5 : 3)
+    : 0;
 
   // Sub-factor 3: Token definition coverage (0-5)
   // More tokens = more structured. Cap at 20 tokens for full credit.
+  // Continuous (not rounded) for granular scoring.
   const tokenCoveragePoints = metrics.tokenCount > 0
-    ? Math.round(5 * clamp(metrics.tokenCount / 20, 0, 1))
+    ? 5 * clamp(metrics.tokenCount / 20, 0, 1)
     : 0;
 
   // Sub-factor 4: Token usage ratio (0-5)
@@ -454,7 +461,7 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   let tokenUsagePoints: number;
   if (metrics.tokenCount > 0) {
     const usedTokens = metrics.tokenCount - metrics.unusedTokenCount;
-    tokenUsagePoints = Math.round(5 * clamp(usedTokens / metrics.tokenCount, 0, 1));
+    tokenUsagePoints = 5 * clamp(usedTokens / metrics.tokenCount, 0, 1);
   } else if (metrics.hasUtilityFramework || metrics.hasDesignSystemLibrary) {
     // No explicit tokens but has a framework/library — give partial credit
     // because the framework handles tokenization internally
@@ -466,7 +473,8 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
     tokenUsagePoints = 0;
   }
 
-  const tokenHealthScore = utilityPoints + libraryPoints + tokenCoveragePoints + tokenUsagePoints;
+  // Round the combined score for integer totals
+  const tokenHealthScore = Math.round(utilityPoints + libraryPoints + tokenCoveragePoints + tokenUsagePoints);
 
   // Token health suggestions (threshold-based)
   if (metrics.tokenCount > 0 && metrics.unusedTokenCount > 5) {
@@ -555,11 +563,16 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   if (totalDrift > 0 && metrics.componentCount > 0) {
     const driftPerComponent = totalDrift / metrics.componentCount;
     if (totalDrift > 200) {
-      // >200 drift signals: cap at Good (79)
-      total = Math.min(total, 79);
-    } else if (totalDrift > 100 && driftPerComponent > 0.5) {
-      // >100 drift + high density: cap at 85
-      total = Math.min(total, 85);
+      // >200 drift signals: cap at OK (69)
+      total = Math.min(total, 69);
+    } else if (totalDrift > 100) {
+      // >100 drift: graduated cap based on density (74-84)
+      const densityFactor = clamp(driftPerComponent, 0, 1);
+      const cap = Math.round(74 + (1 - densityFactor) * 10);
+      total = Math.min(total, cap);
+    } else if (totalDrift > 50 && driftPerComponent > 0.3) {
+      // >50 drift + high density: cap at 89
+      total = Math.min(total, 89);
     }
   }
 

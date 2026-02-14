@@ -1015,6 +1015,12 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     const styleDefTokens = this.extractStyleDefinitionTokens(content, relativePath);
     tokens.push(...styleDefTokens);
 
+    // Extract Tailwind theme tokens from config files
+    if (this.isTailwindConfigFile(filePath)) {
+      const tailwindTokens = this.extractTailwindThemeTokens(content, relativePath);
+      tokens.push(...tailwindTokens);
+    }
+
     return tokens;
   }
 
@@ -1263,6 +1269,96 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           },
           scannedAt: new Date(),
         });
+      }
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Check if a file is a Tailwind config file.
+   */
+  private isTailwindConfigFile(filePath: string): boolean {
+    const filename = filePath.split("/").pop() || "";
+    return /^tailwind\.config\.(ts|js|mjs|cjs)$/.test(filename);
+  }
+
+  /**
+   * Extract design tokens from Tailwind config theme/theme.extend sections.
+   *
+   * Handles patterns like:
+   * - export default { theme: { extend: { colors: { primary: '#3b82f6' } } } }
+   * - module.exports = { theme: { colors: { brand: '#ff0000' } } }
+   * - export default { theme: { extend: { spacing: { '18': '4.5rem' } } } }
+   */
+  private extractTailwindThemeTokens(
+    content: string,
+    relativePath: string,
+  ): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Categories to extract from Tailwind theme config
+    const themeCategories: Record<string, string> = {
+      colors: "color",
+      spacing: "spacing",
+      fontSize: "typography",
+      fontFamily: "typography",
+      fontWeight: "typography",
+      borderRadius: "dimension",
+      borderColor: "color",
+      backgroundColor: "color",
+      textColor: "color",
+      boxShadow: "shadow",
+      screens: "dimension",
+      lineHeight: "typography",
+      letterSpacing: "typography",
+      zIndex: "other",
+    };
+
+    for (const [themeKey, category] of Object.entries(themeCategories)) {
+      // Match both theme.extend.KEY and theme.KEY patterns
+      // Pattern: theme: { extend: { KEY: { ... } } } or theme: { KEY: { ... } }
+      const patterns = [
+        // theme.extend.KEY: { ... }
+        new RegExp(`(?:extend\\s*:\\s*\\{[^}]*?)${themeKey}\\s*:\\s*\\{`, "gs"),
+        // theme.KEY: { ... } (direct, not nested in extend)
+        new RegExp(`theme\\s*:\\s*\\{[^}]*?${themeKey}\\s*:\\s*\\{`, "gs"),
+      ];
+
+      for (const pattern of patterns) {
+        pattern.lastIndex = 0;
+        let match;
+        while ((match = pattern.exec(content)) !== null) {
+          // Find the opening brace of the category object
+          const braceStart = content.lastIndexOf("{", match.index + match[0].length - 1);
+          if (braceStart === -1) continue;
+
+          // Brace-match to find the full object
+          let depth = 1;
+          let i = braceStart + 1;
+          while (i < content.length && depth > 0) {
+            if (content[i] === "{") depth++;
+            if (content[i] === "}") depth--;
+            i++;
+          }
+          if (depth !== 0) continue;
+
+          const objectStr = content.slice(braceStart, i);
+          const lineNumber = content.slice(0, braceStart).split("\n").length;
+
+          // Use existing parsing infrastructure
+          const parsedTokens = this.parseTokenObjectString(
+            objectStr,
+            category,
+            relativePath,
+            lineNumber,
+            `tailwind.${themeKey}`,
+          );
+          tokens.push(...parsedTokens);
+
+          // Only take the first match per pattern to avoid duplicates
+          break;
+        }
       }
     }
 

@@ -260,24 +260,24 @@ describe('calculateHealthScorePillar', () => {
       expect(result.pillars.tokenHealth.score).toBe(20);
     });
 
-    it('scores 10 for clean Tailwind projects without tokens', () => {
+    it('scores 8 for clean Tailwind projects without tokens', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         hasUtilityFramework: true,
         hardcodedValueCount: 5,
         componentCount: 50, // density = 0.1 < 0.5
       }));
-      // utility=5, library=0, coverage=0, usage=5 (density < 0.5) → 10
-      expect(result.pillars.tokenHealth.score).toBe(10);
+      // utility=3 (no tokens), library=0, coverage=0, usage=5 (density < 0.5) → 8
+      expect(result.pillars.tokenHealth.score).toBe(8);
     });
 
-    it('scores 8 for leaky Tailwind projects', () => {
+    it('scores 6 for leaky Tailwind projects', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         hasUtilityFramework: true,
         hardcodedValueCount: 40,
         componentCount: 50, // density = 0.8 (between 0.5 and 1.0)
       }));
-      // utility=5, library=0, coverage=0, usage=3 (density 0.5-1.0) → 8
-      expect(result.pillars.tokenHealth.score).toBe(8);
+      // utility=3 (no tokens), library=0, coverage=0, usage=3 (density 0.5-1.0) → 6
+      expect(result.pillars.tokenHealth.score).toBe(6);
     });
 
     it('scores 3 for implied system (very low density, no tokens)', () => {
@@ -359,8 +359,29 @@ describe('calculateHealthScorePillar', () => {
         tokenCount: 50,
         unusedTokenCount: 0,
       }));
-      // Both have usage=5, but coverage differs: round(5*5/20)=1 vs round(5*50/20)=5
+      // Both have usage=5, but coverage differs: 5*5/20=1.25 vs 5*50/20=5
       expect(manyTokens.pillars.tokenHealth.score).toBeGreaterThan(fewTokens.pillars.tokenHealth.score);
+    });
+
+    it('produces granular scores between utility-only and utility+tokens', () => {
+      // With framework only (no tokens): utility=3, coverage=0, usage=5 → 8
+      const fwOnly = calculateHealthScorePillar(makeMetrics({
+        hasUtilityFramework: true,
+        componentCount: 50,
+        hardcodedValueCount: 5,
+      }));
+      // With framework + some tokens: utility=5, coverage=5*3/20=0.75, usage=5*3/3=5 → round(10.75)=11
+      const fwWithTokens = calculateHealthScorePillar(makeMetrics({
+        hasUtilityFramework: true,
+        tokenCount: 3,
+        unusedTokenCount: 0,
+        componentCount: 50,
+        hardcodedValueCount: 5,
+      }));
+      // Framework+tokens should score higher than framework-only
+      expect(fwWithTokens.pillars.tokenHealth.score).toBeGreaterThan(fwOnly.pillars.tokenHealth.score);
+      // And the scores should differ by more than 0 (not all snapping to same bucket)
+      expect(fwWithTokens.pillars.tokenHealth.score - fwOnly.pillars.tokenHealth.score).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -479,6 +500,47 @@ describe('calculateHealthScorePillar', () => {
       // so uses hardcoded density = 2
       // valueDiscipline = round(60 * clamp(1 - 2/2, 0, 1)) = round(60 * 0) = 0
       expect(result.pillars.valueDiscipline.score).toBe(0);
+    });
+
+    it('caps score at 69 when drift count > 200', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        tokenCount: 50,
+        unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+        totalDriftCount: 250,
+        hardcodedValueCount: 0,
+      }));
+      expect(result.score).toBeLessThanOrEqual(69);
+    });
+
+    it('caps score at 74-84 when drift count > 100 based on density', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        tokenCount: 50,
+        unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+        totalDriftCount: 150,
+        hardcodedValueCount: 0,
+      }));
+      // driftPerComponent = 150/50 = 3, cap = round(74 + (1-1)*10) = 74
+      expect(result.score).toBeLessThanOrEqual(84);
+    });
+
+    it('applies graduated penalty for drift 50-100 with high density', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 20,
+        tokenCount: 50,
+        unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+        totalDriftCount: 60,
+        hardcodedValueCount: 0,
+      }));
+      // driftPerComponent = 60/20 = 3 > 0.3, cap at 89
+      expect(result.score).toBeLessThanOrEqual(89);
     });
   });
 
