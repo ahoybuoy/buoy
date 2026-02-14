@@ -1408,6 +1408,7 @@ export function createShowCommand(): Command {
         const drifts = driftResult.drifts;
         const detected = await detectFrameworks(process.cwd());
 
+        const richContext = computeRichSuggestionContext(drifts);
         const healthMetrics: HealthMetrics = {
           componentCount: scanResult.components.length,
           tokenCount: scanResult.tokens.length,
@@ -1418,6 +1419,10 @@ export function createShowCommand(): Command {
           hasUtilityFramework: detected.some(f => UTILITY_FRAMEWORK_NAMES.includes(f.name))
             || detected.some(f => DS_WITH_STYLING.includes(f.name)),
           hasDesignSystemLibrary: detected.some(f => DS_LIBRARY_NAMES.includes(f.name)),
+          totalDriftCount: drifts.length,
+          topHardcodedColor: richContext.topHardcodedColor,
+          worstFile: richContext.worstFile,
+          uniqueSpacingValues: richContext.uniqueSpacingValues,
         };
         const healthResult = calculateHealthScorePillar(healthMetrics);
 
@@ -1561,6 +1566,69 @@ function getSetupStatus(cwd: string): Record<string, unknown> {
 }
 
 
+/**
+ * Extract rich suggestion context from drift signals for better health suggestions.
+ */
+function computeRichSuggestionContext(drifts: DriftSignal[]): {
+  topHardcodedColor?: { value: string; count: number };
+  worstFile?: { path: string; issueCount: number };
+  uniqueSpacingValues?: number;
+} {
+  // Extract hardcoded colors from drift messages
+  // Messages follow the pattern: 'Component "X" has N hardcoded colors: #fff, #000, #333'
+  const colorCounts = new Map<string, number>();
+  for (const d of drifts) {
+    if (d.type !== "hardcoded-value") continue;
+    if (!d.message.includes("color")) continue;
+
+    // Extract color values from the message after the colon
+    const colonIdx = d.message.lastIndexOf(":");
+    if (colonIdx === -1) continue;
+    const valuesStr = d.message.slice(colonIdx + 1).trim();
+    const colors = valuesStr.split(",").map(v => v.trim()).filter(v =>
+      v.startsWith("#") || v.startsWith("rgb")
+    );
+    for (const c of colors) {
+      colorCounts.set(c, (colorCounts.get(c) || 0) + 1);
+    }
+  }
+  const topColorEntry = [...colorCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const topHardcodedColor = topColorEntry
+    ? { value: topColorEntry[0], count: topColorEntry[1] }
+    : undefined;
+
+  // Find file with most drift issues
+  const fileCounts = new Map<string, number>();
+  for (const d of drifts) {
+    const loc = d.source?.location;
+    if (!loc) continue;
+    const file = loc.split(":")[0];
+    if (file) fileCounts.set(file, (fileCounts.get(file) || 0) + 1);
+  }
+  const worstFileEntry = [...fileCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const worstFile = worstFileEntry
+    ? { path: worstFileEntry[0], issueCount: worstFileEntry[1] }
+    : undefined;
+
+  // Count unique spacing values from hardcoded-value messages about size/spacing
+  const spacingValues = new Set<string>();
+  for (const d of drifts) {
+    if (d.type !== "hardcoded-value") continue;
+    if (!d.message.includes("size value")) continue;
+
+    const colonIdx = d.message.lastIndexOf(":");
+    if (colonIdx === -1) continue;
+    const valuesStr = d.message.slice(colonIdx + 1).trim();
+    const values = valuesStr.split(",").map(v => v.trim()).filter(v => v.length > 0);
+    for (const v of values) {
+      spacingValues.add(v);
+    }
+  }
+  const uniqueSpacingValues = spacingValues.size > 0 ? spacingValues.size : undefined;
+
+  return { topHardcodedColor, worstFile, uniqueSpacingValues };
+}
+
 function getSummary(drifts: DriftSignal[]): {
   critical: number;
   warning: number;
@@ -1621,6 +1689,9 @@ async function gatherHealthMetrics(
     || detected.some(f => DS_WITH_STYLING.includes(f.name));
   const hasDesignSystemLibrary = detected.some(f => DS_LIBRARY_NAMES.includes(f.name));
 
+  // Compute rich suggestion context
+  const richContext = computeRichSuggestionContext(drifts);
+
   return {
     componentCount: scanResult.components.length,
     tokenCount: scanResult.tokens.length,
@@ -1630,6 +1701,10 @@ async function gatherHealthMetrics(
     criticalCount,
     hasUtilityFramework,
     hasDesignSystemLibrary,
+    totalDriftCount: drifts.length,
+    topHardcodedColor: richContext.topHardcodedColor,
+    worstFile: richContext.worstFile,
+    uniqueSpacingValues: richContext.uniqueSpacingValues,
   };
 }
 

@@ -243,42 +243,48 @@ describe('calculateHealthScorePillar', () => {
         tokenCount: 100,
         unusedTokenCount: 20,
       }));
-      // 80 used / 100 total = 0.8 → 16
-      expect(result.pillars.tokenHealth.score).toBe(16);
+      // utility=0, library=0, coverage=5 (100/20 capped at 1), usage=round(5*80/100)=4 → 9
+      expect(result.pillars.tokenHealth.score).toBe(9);
     });
 
-    it('scores 20 when all tokens are used', () => {
+    it('scores 20 when all tokens are used with full ecosystem', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         tokenCount: 50,
         unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
       }));
+      // utility=5, library=5, coverage=5 (50/20 capped at 1), usage=5 → 20
       expect(result.pillars.tokenHealth.score).toBe(20);
     });
 
-    it('scores 15 for clean Tailwind projects', () => {
+    it('scores 10 for clean Tailwind projects without tokens', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         hasUtilityFramework: true,
         hardcodedValueCount: 5,
         componentCount: 50, // density = 0.1 < 0.5
       }));
-      expect(result.pillars.tokenHealth.score).toBe(15);
+      // utility=5, library=0, coverage=0, usage=5 (density < 0.5) → 10
+      expect(result.pillars.tokenHealth.score).toBe(10);
     });
 
-    it('scores 10 for leaky Tailwind projects', () => {
+    it('scores 8 for leaky Tailwind projects', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         hasUtilityFramework: true,
         hardcodedValueCount: 40,
         componentCount: 50, // density = 0.8 (between 0.5 and 1.0)
       }));
-      expect(result.pillars.tokenHealth.score).toBe(10);
+      // utility=5, library=0, coverage=0, usage=3 (density 0.5-1.0) → 8
+      expect(result.pillars.tokenHealth.score).toBe(8);
     });
 
-    it('scores 10 for implied system (very low density, no tokens)', () => {
+    it('scores 3 for implied system (very low density, no tokens)', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 100,
         hardcodedValueCount: 5, // density = 0.05 < 0.1
       }));
-      expect(result.pillars.tokenHealth.score).toBe(10);
+      // utility=0, library=0, coverage=0, usage=3 (density < 0.1) → 3
+      expect(result.pillars.tokenHealth.score).toBe(3);
     });
 
     it('scores 0 when no system detected and values are hardcoded', () => {
@@ -287,6 +293,72 @@ describe('calculateHealthScorePillar', () => {
         hardcodedValueCount: 20,
       }));
       expect(result.pillars.tokenHealth.score).toBe(0);
+    });
+
+    it('achieves score 100 when all four sub-factors are present', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        tokenCount: 50,
+        unusedTokenCount: 0,
+        hardcodedValueCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+      }));
+      expect(result.score).toBe(100);
+      expect(result.pillars.tokenHealth.score).toBe(20);
+    });
+
+    it('gives partial credit for utility framework without tokens', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: false,
+      }));
+      expect(result.pillars.tokenHealth.score).toBeGreaterThan(0);
+      expect(result.pillars.tokenHealth.score).toBeLessThan(20);
+    });
+
+    it('gives more credit for library + framework than framework alone', () => {
+      const fwOnly = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: false,
+      }));
+      const both = calculateHealthScorePillar(makeMetrics({
+        componentCount: 50,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+      }));
+      expect(both.pillars.tokenHealth.score).toBeGreaterThan(fwOnly.pillars.tokenHealth.score);
+    });
+
+    it('penalizes unused tokens proportionally', () => {
+      const halfUnused = calculateHealthScorePillar(makeMetrics({
+        tokenCount: 100,
+        unusedTokenCount: 50,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+      }));
+      const allUsed = calculateHealthScorePillar(makeMetrics({
+        tokenCount: 100,
+        unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+      }));
+      expect(allUsed.pillars.tokenHealth.score).toBeGreaterThan(halfUnused.pillars.tokenHealth.score);
+    });
+
+    it('gives token coverage credit proportionally', () => {
+      const fewTokens = calculateHealthScorePillar(makeMetrics({
+        tokenCount: 5,
+        unusedTokenCount: 0,
+      }));
+      const manyTokens = calculateHealthScorePillar(makeMetrics({
+        tokenCount: 50,
+        unusedTokenCount: 0,
+      }));
+      // Both have usage=5, but coverage differs: round(5*5/20)=1 vs round(5*50/20)=5
+      expect(manyTokens.pillars.tokenHealth.score).toBeGreaterThan(fewTokens.pillars.tokenHealth.score);
     });
   });
 
@@ -332,10 +404,12 @@ describe('calculateHealthScorePillar', () => {
   });
 
   describe('Total score and tiers', () => {
-    it('perfect score: clean project with tokens', () => {
+    it('perfect score: clean project with full token ecosystem', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         tokenCount: 50,
         unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
       }));
       expect(result.score).toBe(100);
       expect(result.tier).toBe('Great');
@@ -347,7 +421,7 @@ describe('calculateHealthScorePillar', () => {
         componentCount: 50,
         hardcodedValueCount: 2, // density 0.04
       }));
-      // P1: ~59, P2: 15, P3: 10, P4: 10 = ~94
+      // P1: ~59, P2: utility(5)+usage(5)=10, P3: 10, P4: 10 = ~89
       expect(result.tier).toBe('Great');
     });
 
@@ -360,6 +434,49 @@ describe('calculateHealthScorePillar', () => {
       }));
       expect(result.score).toBeLessThan(20);
       expect(result.tier).toBe('Terrible');
+    });
+  });
+
+  describe('total drift density penalty', () => {
+    it('penalizes high drift density even without hardcoded values', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 0,
+        tokenCount: 50,
+        unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+        totalDriftCount: 500,
+      }));
+      // totalDriftDensity = 500/100 = 5, * 0.5 = 2.5
+      // density = max(0, 2.5) = 2.5
+      // valueDiscipline = round(60 * clamp(1 - 2.5/3, 0, 1)) = round(60 * 0.167) = 10
+      expect(result.score).toBeLessThan(90);
+      expect(result.pillars.valueDiscipline.score).toBeLessThan(60);
+    });
+
+    it('does not penalize when totalDriftCount is not provided', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 0,
+        tokenCount: 50,
+        unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+      }));
+      expect(result.pillars.valueDiscipline.score).toBe(60);
+    });
+
+    it('uses hardcoded density when worse than half drift density', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        hardcodedValueCount: 200, // density = 2
+        totalDriftCount: 200, // totalDrift density * 0.5 = 1
+      }));
+      // hardcoded density (2) > totalDrift density * 0.5 (1)
+      // so uses hardcoded density = 2
+      // valueDiscipline = round(60 * (1 - 2/3)) = round(60 * 0.333) = 20
+      expect(result.pillars.valueDiscipline.score).toBe(20);
     });
   });
 
@@ -414,6 +531,78 @@ describe('calculateHealthScorePillar', () => {
         unusedTokenCount: 0,
       }));
       expect(result.suggestions).toHaveLength(0);
+    });
+  });
+
+  describe('rich suggestions', () => {
+    it('includes specific color in suggestion when topHardcodedColor provided', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 20,
+        topHardcodedColor: { value: '#ff6b6b', count: 8 },
+      }));
+      expect(result.suggestions.some(s => s.includes('#ff6b6b') && s.includes('8'))).toBe(true);
+    });
+
+    it('includes worst file in suggestion when provided', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 20,
+        worstFile: { path: 'src/components/Card.tsx', issueCount: 15 },
+      }));
+      expect(result.suggestions.some(s => s.includes('Card.tsx') && s.includes('15'))).toBe(true);
+    });
+
+    it('includes both color and file in same suggestion', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 20,
+        topHardcodedColor: { value: '#ff6b6b', count: 8 },
+        worstFile: { path: 'src/components/Card.tsx', issueCount: 15 },
+      }));
+      const suggestion = result.suggestions.find(s => s.includes('#ff6b6b'));
+      expect(suggestion).toBeDefined();
+      expect(suggestion).toContain('Card.tsx');
+      expect(suggestion).toContain('15');
+    });
+
+    it('falls back to generic suggestion when no rich context', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 20,
+      }));
+      expect(result.suggestions.some(s => s.includes('hardcoded values across your components'))).toBe(true);
+    });
+
+    it('suggests spacing consolidation when many unique values', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        uniqueSpacingValues: 25,
+      }));
+      expect(result.suggestions.some(s => s.includes('25 unique spacing'))).toBe(true);
+    });
+
+    it('does not add spacing suggestion when few values', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        uniqueSpacingValues: 5,
+      }));
+      expect(result.suggestions.every(s => !s.includes('spacing'))).toBe(true);
+    });
+
+    it('does not add spacing suggestion when undefined', () => {
+      const result = calculateHealthScorePillar(makeMetrics({}));
+      expect(result.suggestions.every(s => !s.includes('spacing'))).toBe(true);
+    });
+
+    it('appends worst file to generic suggestion when no color context', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 10,
+        hardcodedValueCount: 20,
+        worstFile: { path: 'src/App.tsx', issueCount: 12 },
+      }));
+      const suggestion = result.suggestions.find(s => s.includes('hardcoded values'));
+      expect(suggestion).toBeDefined();
+      expect(suggestion).toContain('App.tsx');
+      expect(suggestion).toContain('12 issues');
     });
   });
 });

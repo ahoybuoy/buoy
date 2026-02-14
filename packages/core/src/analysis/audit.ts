@@ -59,6 +59,14 @@ export interface HealthMetrics {
   hasUtilityFramework: boolean;
   /** Whether a design system library (MUI, Chakra, shadcn, etc.) is detected */
   hasDesignSystemLibrary: boolean;
+  /** Total drift signals of ALL types (hardcoded-value, naming-inconsistency, repeated-pattern, etc.) */
+  totalDriftCount?: number;
+  /** Most common hardcoded color (for suggestions) */
+  topHardcodedColor?: { value: string; count: number };
+  /** File with the most drift issues */
+  worstFile?: { path: string; issueCount: number };
+  /** Total unique spacing values found */
+  uniqueSpacingValues?: number;
 }
 
 export interface HealthPillar {
@@ -294,38 +302,73 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   const suggestions: string[] = [];
 
   // Pillar 1: Value Discipline (0-60)
-  const density = metrics.hardcodedValueCount / Math.max(metrics.componentCount, 1);
+  // Primary: hardcoded value density
+  // Secondary: total drift density (penalizes other drift types)
+  const hardcodedDensity = metrics.hardcodedValueCount / Math.max(metrics.componentCount, 1);
+  const totalDriftDensity = (metrics.totalDriftCount ?? metrics.hardcodedValueCount) / Math.max(metrics.componentCount, 1);
+  // Use the worse of the two densities (but weight totalDrift lower since it includes info-level)
+  const density = Math.max(hardcodedDensity, totalDriftDensity * 0.5);
   const valueDisciplineScore = Math.round(60 * clamp(1 - density / 3, 0, 1));
 
   if (density > 0.5) {
-    suggestions.push(
-      `${metrics.hardcodedValueCount} hardcoded values across your components — extract to design tokens`
-    );
+    let suggestion = `${metrics.hardcodedValueCount} hardcoded values across your components — extract to design tokens`;
+    if (metrics.topHardcodedColor) {
+      suggestion = `${metrics.hardcodedValueCount} hardcoded values found (most common: ${metrics.topHardcodedColor.value} used ${metrics.topHardcodedColor.count}\u00d7). Create a color token file`;
+    }
+    if (metrics.worstFile) {
+      suggestion += `. Start with ${metrics.worstFile.path} (${metrics.worstFile.issueCount} issues)`;
+    }
+    suggestions.push(suggestion);
   }
 
   // Pillar 2: Token Health (0-20)
-  let tokenHealthScore: number;
+  // Four sub-factors, each 0-5 points:
+  //   1. Utility framework (0-5): Has Tailwind, CSS-in-JS, etc.
+  //   2. Design system library (0-5): Has MUI, Chakra, Mantine, etc.
+  //   3. Token definition coverage (0-5): Has tokens across categories
+  //   4. Token usage ratio (0-5): What fraction of defined tokens are used
+
+  // Sub-factor 1: Utility framework (0-5)
+  const utilityPoints = metrics.hasUtilityFramework ? 5 : 0;
+
+  // Sub-factor 2: Design system library (0-5)
+  const libraryPoints = metrics.hasDesignSystemLibrary ? 5 : 0;
+
+  // Sub-factor 3: Token definition coverage (0-5)
+  // More tokens = more structured. Cap at 20 tokens for full credit.
+  const tokenCoveragePoints = metrics.tokenCount > 0
+    ? Math.round(5 * clamp(metrics.tokenCount / 20, 0, 1))
+    : 0;
+
+  // Sub-factor 4: Token usage ratio (0-5)
+  // What fraction of tokens are actually used? All used = 5, all unused = 0.
+  let tokenUsagePoints: number;
   if (metrics.tokenCount > 0) {
     const usedTokens = metrics.tokenCount - metrics.unusedTokenCount;
-    tokenHealthScore = Math.round(20 * clamp(usedTokens / metrics.tokenCount, 0, 1));
-    if (metrics.unusedTokenCount > 0) {
-      suggestions.push(
-        `${metrics.unusedTokenCount} tokens defined but unused — wire them into components`
-      );
-    }
+    tokenUsagePoints = Math.round(5 * clamp(usedTokens / metrics.tokenCount, 0, 1));
   } else if (metrics.hasUtilityFramework || metrics.hasDesignSystemLibrary) {
-    // Utility framework or design system library acts as token system
-    tokenHealthScore = density < 0.5 ? 15 : density < 1.0 ? 10 : 5;
+    // No explicit tokens but has a framework/library — give partial credit
+    // because the framework handles tokenization internally
+    tokenUsagePoints = density < 0.5 ? 5 : density < 1.0 ? 3 : 1;
   } else if (density < 0.1) {
     // No explicit system but very few hardcoded values = implied system
-    tokenHealthScore = 10;
+    tokenUsagePoints = 3;
   } else {
-    tokenHealthScore = 0;
-    if (metrics.componentCount > 0) {
-      suggestions.push(
-        'No design token system detected — add tokens or a utility framework'
-      );
-    }
+    tokenUsagePoints = 0;
+  }
+
+  const tokenHealthScore = utilityPoints + libraryPoints + tokenCoveragePoints + tokenUsagePoints;
+
+  // Token health suggestions
+  if (metrics.tokenCount > 0 && metrics.unusedTokenCount > 0) {
+    suggestions.push(
+      `${metrics.unusedTokenCount} tokens defined but unused — wire them into components`
+    );
+  }
+  if (tokenHealthScore < 10 && metrics.componentCount > 0) {
+    suggestions.push(
+      'No design token system detected — add tokens or a utility framework'
+    );
   }
 
   // Pillar 3: Consistency (0-10)
@@ -344,6 +387,12 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   if (metrics.criticalCount > 0) {
     suggestions.push(
       `${metrics.criticalCount} critical issue${metrics.criticalCount === 1 ? '' : 's'} (accessibility/contrast) — fix immediately`
+    );
+  }
+
+  if (metrics.uniqueSpacingValues && metrics.uniqueSpacingValues > 10) {
+    suggestions.push(
+      `${metrics.uniqueSpacingValues} unique spacing values — consolidate to an 8px grid`
     );
   }
 
