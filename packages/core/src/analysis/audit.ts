@@ -71,6 +71,8 @@ export interface HealthMetrics {
   semanticMismatchCount?: number;
   /** Number of deprecated-pattern drift signals (technical debt) */
   deprecatedPatternCount?: number;
+  /** Number of files with >2 hardcoded values (severe maintenance burden) */
+  highDensityFileCount?: number;
   /** Most common hardcoded color (for suggestions) */
   topHardcodedColor?: { value: string; count: number };
   /** File with the most drift issues */
@@ -431,7 +433,10 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   // Pillar 4: Critical Issues (0-10)
   // Includes critical severity + deprecated patterns (2 deprecated = 1 critical equivalent)
   const deprecatedCount = metrics.deprecatedPatternCount ?? 0;
-  const effectiveCriticalCount = metrics.criticalCount + Math.ceil(deprecatedCount / 2);
+  const highDensityFiles = metrics.highDensityFileCount ?? 0;
+  const effectiveCriticalCount = metrics.criticalCount
+    + Math.ceil(deprecatedCount / 2)
+    + Math.floor(highDensityFiles / 3);
   const criticalScore = Math.max(0, 10 - effectiveCriticalCount * 3);
 
   if (metrics.criticalCount > 0) {

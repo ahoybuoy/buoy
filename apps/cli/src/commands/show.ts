@@ -1411,6 +1411,18 @@ export function createShowCommand(): Command {
         const detected = await detectFrameworks(process.cwd(), monorepoInfo ?? undefined);
 
         const richContext = computeRichSuggestionContext(drifts);
+
+        // Count files with high hardcoded value density
+        const fileDriftCounts = new Map<string, number>();
+        for (const d of drifts) {
+          if (d.type !== "hardcoded-value") continue;
+          const loc = d.source?.location;
+          if (!loc) continue;
+          const file = loc.split(":")[0];
+          if (file) fileDriftCounts.set(file, (fileDriftCounts.get(file) || 0) + 1);
+        }
+        const highDensityFileCount = [...fileDriftCounts.values()].filter(count => count > 2).length;
+
         const healthMetrics: HealthMetrics = {
           componentCount: scanResult.components.length,
           tokenCount: scanResult.tokens.length,
@@ -1427,6 +1439,7 @@ export function createShowCommand(): Command {
           orphanedComponentCount: drifts.filter(d => d.type === "orphaned-component").length,
           semanticMismatchCount: drifts.filter(d => d.type === "semantic-mismatch").length,
           deprecatedPatternCount: drifts.filter(d => d.type === "deprecated-pattern").length,
+          highDensityFileCount,
           topHardcodedColor: richContext.topHardcodedColor,
           worstFile: richContext.worstFile,
           uniqueSpacingValues: richContext.uniqueSpacingValues,
@@ -1700,6 +1713,17 @@ async function gatherHealthMetrics(
   // Compute rich suggestion context
   const richContext = computeRichSuggestionContext(drifts);
 
+  // Count files with high hardcoded value density
+  const fileDriftCounts = new Map<string, number>();
+  for (const d of drifts) {
+    if (d.type !== "hardcoded-value") continue;
+    const loc = d.source?.location;
+    if (!loc) continue;
+    const file = loc.split(":")[0];
+    if (file) fileDriftCounts.set(file, (fileDriftCounts.get(file) || 0) + 1);
+  }
+  const highDensityFileCount = [...fileDriftCounts.values()].filter(count => count > 2).length;
+
   return {
     componentCount: scanResult.components.length,
     tokenCount: scanResult.tokens.length,
@@ -1715,6 +1739,7 @@ async function gatherHealthMetrics(
     orphanedComponentCount: drifts.filter(d => d.type === "orphaned-component").length,
     semanticMismatchCount: drifts.filter(d => d.type === "semantic-mismatch").length,
     deprecatedPatternCount: drifts.filter(d => d.type === "deprecated-pattern").length,
+    highDensityFileCount,
     topHardcodedColor: richContext.topHardcodedColor,
     worstFile: richContext.worstFile,
     uniqueSpacingValues: richContext.uniqueSpacingValues,
