@@ -183,9 +183,14 @@ const ENTRY_POINT_PATTERNS = [
   /\/app\/.*loading\./,   // Next.js App Router loading.tsx
   /\/app\/.*error\./,     // Next.js App Router error.tsx
   /\/app\/.*not-found\./,  // Next.js App Router not-found.tsx
+  /\/app\/.*template\./,  // Next.js App Router template.tsx
   /\/routes?\//,          // Remix/SvelteKit routes
   /\/\+page\./,           // SvelteKit +page.svelte
   /\/\+layout\./,         // SvelteKit +layout.svelte
+  /\/\+error\./,          // SvelteKit +error.svelte
+  /\/\+server\./,         // SvelteKit +server.ts
+  /\/views?\//,           // Vue views directory
+  /\/screens?\//,         // React Native screens
 ];
 
 function isEntryPointComponent(component: Component): boolean {
@@ -299,6 +304,14 @@ export class DriftAnalysisService {
     // Fix 3: Count dynamic imports as usage
     // React.lazy(() => import('./Component')) and next/dynamic patterns
     await this.scanDynamicImports(componentUsageMap);
+
+    // Fix 4: Count Vue/Svelte template component references as usage
+    // <MyComponent /> in .vue and .svelte template blocks
+    await this.scanTemplateComponentUsage(componentUsageMap, componentNames);
+
+    // Fix 5: Count Vue auto-registration patterns as usage
+    // app.component('MyComponent', ...) and Vue.component('MyComponent', ...)
+    await this.scanAutoRegistration(componentUsageMap);
 
     // Fix 1: Exempt entry point components (pages, routes, layouts)
     // These are rendered by the framework router, not imported by other components
@@ -557,6 +570,92 @@ export class DriftAnalysisService {
           if (/^[A-Z]/.test(last)) {
             componentUsageMap.set(last, (componentUsageMap.get(last) || 0) + 1);
           }
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  /**
+   * Scan Vue and Svelte template blocks for component usage.
+   * Vue SFCs reference components in <template> blocks as <MyComponent />,
+   * which aren't detected by JS import scanning.
+   */
+  private async scanTemplateComponentUsage(
+    componentUsageMap: Map<string, number>,
+    knownComponents: string[],
+  ): Promise<void> {
+    if (knownComponents.length === 0) return;
+    const cwd = process.cwd();
+    const templateFiles = await glob('**/*.{vue,svelte}', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
+      nodir: true,
+      maxDepth: 8,
+    });
+
+    const knownSet = new Set(knownComponents);
+    // Also build a kebab-case lookup for Vue (MyComponent -> my-component)
+    const kebabMap = new Map<string, string>();
+    for (const name of knownComponents) {
+      const kebab = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+      kebabMap.set(kebab, name);
+    }
+
+    for (const file of templateFiles.slice(0, 300)) {
+      try {
+        const content = await readFile(resolve(cwd, file), 'utf-8');
+
+        // Match PascalCase component tags: <MyComponent or <MyComponent>
+        const pascalPattern = /<([A-Z][a-zA-Z0-9]*)\s*/g;
+        let match: RegExpExecArray | null;
+        while ((match = pascalPattern.exec(content)) !== null) {
+          const name = match[1]!;
+          if (knownSet.has(name)) {
+            componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+          }
+        }
+
+        // Match kebab-case component tags in Vue: <my-component or <my-component>
+        const kebabPattern = /<([a-z][a-z0-9]*(?:-[a-z0-9]+)+)[\s>/]/g;
+        while ((match = kebabPattern.exec(content)) !== null) {
+          const kebab = match[1]!;
+          const pascal = kebabMap.get(kebab);
+          if (pascal) {
+            componentUsageMap.set(pascal, (componentUsageMap.get(pascal) || 0) + 1);
+          }
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  /**
+   * Scan for Vue auto-registration patterns.
+   * Detects app.component('Name', ...) and Vue.component('Name', ...) calls.
+   */
+  private async scanAutoRegistration(componentUsageMap: Map<string, number>): Promise<void> {
+    const cwd = process.cwd();
+    const sourceFiles = await glob('**/*.{ts,js,tsx,jsx}', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
+      nodir: true,
+      maxDepth: 4,
+    });
+
+    for (const file of sourceFiles.slice(0, 100)) {
+      try {
+        const content = await readFile(resolve(cwd, file), 'utf-8');
+        if (!content.includes('.component(')) continue;
+
+        // Match: app.component('Name', ...) or Vue.component('Name', ...)
+        const pattern = /\.component\(\s*['"]([A-Z][a-zA-Z0-9]*)['"]/g;
+        let match: RegExpExecArray | null;
+        while ((match = pattern.exec(content)) !== null) {
+          const name = match[1]!;
+          componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
         }
       } catch {
         // ignore unreadable files

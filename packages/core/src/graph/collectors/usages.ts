@@ -187,8 +187,8 @@ export async function collectUsages(
       true
     );
 
-    // Collect component usages (JSX files only)
-    if (file.endsWith('.tsx') || file.endsWith('.jsx') || file.endsWith('.vue')) {
+    // Collect component usages (JSX/template files)
+    if (file.endsWith('.tsx') || file.endsWith('.jsx') || file.endsWith('.vue') || file.endsWith('.svelte')) {
       collectComponentUsages(content, lines, file, componentUsages, options.knownComponents);
     }
   }

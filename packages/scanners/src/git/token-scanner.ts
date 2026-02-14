@@ -18,7 +18,7 @@ import type {
 import { createTokenId } from "@buoy-design/core";
 import { glob } from "glob";
 import { readFile } from "fs/promises";
-import { relative, extname } from "path";
+import { relative, extname, basename } from "path";
 
 export interface TokenScannerConfig extends ScannerConfig {
   files?: string[];
@@ -125,9 +125,21 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       }
     }
 
-    // Process files in parallel
+    // Separate tailwind config files from regular files for specialized parsing
+    const tailwindConfigFiles: string[] = [];
+    const regularFiles: string[] = [];
+    for (const file of filesToProcess) {
+      const base = basename(file);
+      if (/^tailwind\.config\.(ts|js|mjs|cjs)$/.test(base)) {
+        tailwindConfigFiles.push(file);
+      } else {
+        regularFiles.push(file);
+      }
+    }
+
+    // Process regular files in parallel
     const results = await parallelProcess(
-      filesToProcess,
+      regularFiles,
       async (file) => {
         const ext = extname(file);
         let tokens: DesignToken[] = [];
@@ -135,7 +147,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           tokens = await this.parseJsonTokenFile(file);
         } else if (ext === ".css" || ext === ".scss") {
           tokens = await this.parseCssVariables(file);
-        } else if (ext === ".ts" || ext === ".tsx") {
+        } else if (ext === ".ts" || ext === ".tsx" || ext === ".js" || ext === ".mjs" || ext === ".cjs") {
           tokens = await this.parseTypeScriptUnionTypes(file);
         }
         // Store in cache
@@ -158,7 +170,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     for (let i = 0; i < results.length; i++) {
       const result = results[i]!;
       if (result.status === "rejected") {
-        const file = filesToProcess[i]!;
+        const file = regularFiles[i]!;
         const ext = extname(file);
         const message =
           result.reason instanceof Error
@@ -175,6 +187,31 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           `[buoy:token-scanner] Failed to parse ${relPath}: ${message}`
         );
         errors.push({ file, message, code });
+      }
+    }
+
+    // Parse tailwind config files using the dedicated config parser
+    // This extracts theme.extend values (colors, spacing, fonts, etc.) as tokens
+    if (tailwindConfigFiles.length > 0) {
+      try {
+        const { TailwindConfigParser } = await import("../tailwind/config-parser.js");
+        const parser = new TailwindConfigParser(this.config.projectRoot);
+        const parsed = await parser.parse();
+        if (parsed && parsed.tokens.length > 0) {
+          addTokens(parsed.tokens);
+          scannedFiles.add(parsed.configPath);
+        }
+      } catch {
+        // TailwindConfigParser failed — fall back to generic TS parsing
+        for (const file of tailwindConfigFiles) {
+          try {
+            const tokens = await this.parseTypeScriptUnionTypes(file);
+            addTokens(tokens);
+            scannedFiles.add(file);
+          } catch {
+            // ignore
+          }
+        }
       }
     }
 

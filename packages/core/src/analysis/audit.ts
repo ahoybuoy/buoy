@@ -404,18 +404,30 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
     );
   }
 
-  // Dead code suggestions
+  // Dead code suggestions (threshold-based to reduce noise)
   const unusedComponentCount = metrics.unusedComponentCount ?? 0;
   const repeatedPatternCount = metrics.repeatedPatternCount ?? 0;
-  if (unusedComponentCount > 0) {
-    suggestions.push(
-      `${unusedComponentCount} unused component${unusedComponentCount === 1 ? '' : 's'} — remove or document for future use`
-    );
+  if (unusedComponentCount > 10) {
+    if (unusedComponentCount > 50) {
+      suggestions.push(
+        `${unusedComponentCount} unused components detected — consider a cleanup sprint to remove dead code`
+      );
+    } else {
+      suggestions.push(
+        `${unusedComponentCount} unused components — review and remove dead code`
+      );
+    }
   }
-  if (repeatedPatternCount > 0) {
-    suggestions.push(
-      `${repeatedPatternCount} repeated pattern${repeatedPatternCount === 1 ? '' : 's'} — extract to shared components`
-    );
+  if (repeatedPatternCount > 5) {
+    if (repeatedPatternCount > 20) {
+      suggestions.push(
+        `${repeatedPatternCount} repeated patterns — significant duplication, extract to a shared component library`
+      );
+    } else {
+      suggestions.push(
+        `${repeatedPatternCount} repeated patterns — extract to shared components`
+      );
+    }
   }
 
   // Pillar 2: Token Health (0-20)
@@ -456,19 +468,27 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
 
   const tokenHealthScore = utilityPoints + libraryPoints + tokenCoveragePoints + tokenUsagePoints;
 
-  // Token health suggestions
-  if (metrics.tokenCount > 0 && metrics.unusedTokenCount > 0) {
-    suggestions.push(
-      `${metrics.unusedTokenCount} tokens defined but unused — wire them into components`
-    );
+  // Token health suggestions (threshold-based)
+  if (metrics.tokenCount > 0 && metrics.unusedTokenCount > 5) {
+    const unusedPct = Math.round((metrics.unusedTokenCount / metrics.tokenCount) * 100);
+    if (unusedPct > 50) {
+      suggestions.push(
+        `${metrics.unusedTokenCount} of ${metrics.tokenCount} tokens unused (${unusedPct}%) — many tokens may be stale, audit your token definitions`
+      );
+    } else {
+      suggestions.push(
+        `${metrics.unusedTokenCount} tokens defined but unused — wire them into components or remove stale definitions`
+      );
+    }
   }
   if (tokenHealthScore < 10 && metrics.componentCount > 0) {
     if (frameworks.includes('tailwind')) {
       suggestions.push('Tailwind detected but token coverage is low — extend your theme config with custom values');
     } else if (frameworks.includes('mui') || frameworks.includes('chakra') || frameworks.includes('mantine')) {
-      suggestions.push('Design system library detected — use its theming API for consistent values');
+      const lib = frameworks.find(f => ['mui', 'chakra', 'mantine'].includes(f)) ?? 'your library';
+      suggestions.push(`${lib} detected — use its theming API for consistent values across components`);
     } else {
-      suggestions.push('No design token system detected — add CSS custom properties or a utility framework');
+      suggestions.push('No design token system detected — add CSS custom properties or a utility framework like Tailwind');
     }
   }
 
@@ -478,14 +498,19 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   const namingRate = inconsistencyCount / Math.max(metrics.componentCount, 1);
   const consistencyScore = Math.round(10 * clamp(1 - namingRate / 0.25, 0, 1));
 
-  if (inconsistencyCount > 0) {
-    if (namingRate > 0.08) {
+  // Only surface naming inconsistencies above noise threshold
+  if (inconsistencyCount > 3 || (inconsistencyCount > 0 && namingRate > 0.05)) {
+    if (namingRate > 0.15) {
       suggestions.push(
-        `${inconsistencyCount} naming/semantic inconsistencies — standardize prop/component conventions`
+        `${inconsistencyCount} naming/semantic inconsistencies across ${metrics.componentCount} components — establish and document naming conventions`
+      );
+    } else if (namingRate > 0.05) {
+      suggestions.push(
+        `${inconsistencyCount} naming inconsistencies — standardize prop/component conventions`
       );
     } else {
       suggestions.push(
-        `${inconsistencyCount} minor naming inconsistenc${inconsistencyCount === 1 ? 'y' : 'ies'} — consider standardizing conventions`
+        `${inconsistencyCount} minor naming inconsistencies — consider standardizing conventions`
       );
     }
   }
@@ -510,9 +535,9 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
     );
   }
 
-  if (metrics.uniqueSpacingValues && metrics.uniqueSpacingValues > 10) {
+  if (metrics.uniqueSpacingValues && metrics.uniqueSpacingValues > 15) {
     suggestions.push(
-      `${metrics.uniqueSpacingValues} unique spacing values — consolidate to an 8px grid`
+      `${metrics.uniqueSpacingValues} unique spacing values — consolidate to a consistent spacing scale (e.g., 4px/8px grid)`
     );
   }
 
@@ -522,7 +547,60 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   const scaledConsistencyScore = Math.round(consistencyScore * componentScale);
   const scaledCriticalScore = Math.round(criticalScore * componentScale);
 
-  const total = valueDisciplineScore + tokenHealthScore + scaledConsistencyScore + scaledCriticalScore;
+  let total = valueDisciplineScore + tokenHealthScore + scaledConsistencyScore + scaledCriticalScore;
+
+  // Drift density penalty: prevent high-drift repos from scoring "Great"
+  // Apps with many drift signals relative to their size should be capped
+  const totalDrift = metrics.totalDriftCount ?? metrics.hardcodedValueCount;
+  if (totalDrift > 0 && metrics.componentCount > 0) {
+    const driftPerComponent = totalDrift / metrics.componentCount;
+    if (totalDrift > 200) {
+      // >200 drift signals: cap at Good (79)
+      total = Math.min(total, 79);
+    } else if (totalDrift > 100 && driftPerComponent > 0.5) {
+      // >100 drift + high density: cap at 85
+      total = Math.min(total, 85);
+    }
+  }
+
+  // Ensure every scored app gets at least 1 suggestion
+  if (suggestions.length === 0) {
+    if (total === 100) {
+      suggestions.push('Perfect design system health — no issues detected');
+    } else if (total >= 90) {
+      // Find the weakest pillar for aspirational suggestions
+      const vdPct = valueDisciplineScore / 60;
+      const thPct = tokenHealthScore / 20;
+      const coPct = scaledConsistencyScore / 10;
+      const ciPct = scaledCriticalScore / 10;
+      const minPct = Math.min(vdPct, thPct, coPct, ciPct);
+      if (minPct === vdPct && valueDisciplineScore < 60) {
+        suggestions.push(`Score ${total} — to reach 100, reduce the remaining hardcoded values in your components`);
+      } else if (minPct === thPct && tokenHealthScore < 20) {
+        suggestions.push(`Score ${total} — to reach 100, improve token coverage and usage`);
+      } else if (minPct === coPct && scaledConsistencyScore < 10) {
+        suggestions.push(`Score ${total} — to reach 100, address remaining naming inconsistencies`);
+      } else {
+        suggestions.push(`Score ${total} — nearly perfect, review remaining drift signals for final improvements`);
+      }
+    } else {
+      // 80-89: point to the weakest pillar
+      const vdPct = valueDisciplineScore / 60;
+      const thPct = tokenHealthScore / 20;
+      const coPct = metrics.componentCount >= 3 ? scaledConsistencyScore / 10 : 1;
+      const ciPct = metrics.componentCount >= 3 ? scaledCriticalScore / 10 : 1;
+      const minPct = Math.min(vdPct, thPct, coPct, ciPct);
+      if (minPct === vdPct) {
+        suggestions.push(`Your weakest area is Value Discipline (${valueDisciplineScore}/60) — focus on reducing hardcoded values`);
+      } else if (minPct === thPct) {
+        suggestions.push(`Your weakest area is Token Health (${tokenHealthScore}/20) — improve token definitions and usage`);
+      } else if (minPct === coPct) {
+        suggestions.push(`Your weakest area is Consistency (${scaledConsistencyScore}/10) — standardize naming conventions`);
+      } else {
+        suggestions.push(`Your weakest area is Critical Issues (${scaledCriticalScore}/10) — address accessibility and deprecated patterns`);
+      }
+    }
+  }
 
   return {
     score: total,

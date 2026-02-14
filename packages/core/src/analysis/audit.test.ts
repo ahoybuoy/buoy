@@ -527,12 +527,14 @@ describe('calculateHealthScorePillar', () => {
       expect(result.suggestions.some(s => s.includes('token system'))).toBe(true);
     });
 
-    it('no suggestions for a perfect project', () => {
+    it('provides aspirational suggestion for near-perfect project', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         tokenCount: 50,
         unusedTokenCount: 0,
       }));
-      expect(result.suggestions).toHaveLength(0);
+      // Score is 90 (no utility framework or DS library), so gets aspirational suggestion
+      expect(result.suggestions).toHaveLength(1);
+      expect(result.suggestions[0]).toContain('to reach 100');
     });
   });
 
@@ -708,7 +710,7 @@ describe('calculateHealthScorePillar', () => {
         hardcodedValueCount: 30,
         detectedFrameworkNames: ['react', 'mui'],
       }));
-      expect(result.suggestions.some(s => s.includes('Design system library detected'))).toBe(true);
+      expect(result.suggestions.some(s => s.includes('mui detected'))).toBe(true);
     });
 
     it('token health: generic suggestion when no framework', () => {
@@ -896,26 +898,26 @@ describe('calculateHealthScorePillar', () => {
     it('provides gentle consistency suggestion for few inconsistencies', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 100,
-        namingInconsistencyCount: 2,
+        namingInconsistencyCount: 6, // rate 0.06 > 0.05 threshold
       }));
-      expect(result.suggestions.some(s => s.includes('minor naming'))).toBe(true);
+      expect(result.suggestions.some(s => s.includes('naming inconsistencies'))).toBe(true);
     });
 
     it('suggests removing unused components', () => {
       const result = calculateHealthScorePillar(makeMetrics({
-        unusedComponentCount: 10,
+        unusedComponentCount: 15,
       }));
-      expect(result.suggestions.some(s => s.includes('unused component'))).toBe(true);
+      expect(result.suggestions.some(s => s.includes('unused components'))).toBe(true);
     });
 
     it('suggests extracting repeated patterns', () => {
       const result = calculateHealthScorePillar(makeMetrics({
-        repeatedPatternCount: 5,
+        repeatedPatternCount: 8,
       }));
-      expect(result.suggestions.some(s => s.includes('repeated pattern'))).toBe(true);
+      expect(result.suggestions.some(s => s.includes('repeated patterns'))).toBe(true);
     });
 
-    it('still has no suggestions for truly perfect project', () => {
+    it('provides congratulatory suggestion for truly perfect project', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 50,
         tokenCount: 50,
@@ -923,7 +925,8 @@ describe('calculateHealthScorePillar', () => {
         hasUtilityFramework: true,
         hasDesignSystemLibrary: true,
       }));
-      expect(result.suggestions).toHaveLength(0);
+      expect(result.suggestions).toHaveLength(1);
+      expect(result.suggestions[0]).toContain('Perfect design system health');
     });
   });
 });
