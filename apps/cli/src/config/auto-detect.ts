@@ -21,7 +21,7 @@ const NESTED_FRONTEND_DIRS = ['frontend', 'client', 'web', 'ui', 'app', 'dashboa
 /**
  * Detect if this is a monorepo and return workspace patterns.
  */
-async function detectMonorepo(projectRoot: string): Promise<MonorepoInfo | null> {
+export async function detectMonorepo(projectRoot: string): Promise<MonorepoInfo | null> {
   // Check for pnpm-workspace.yaml
   const pnpmWorkspacePath = resolve(projectRoot, 'pnpm-workspace.yaml');
   if (existsSync(pnpmWorkspacePath)) {

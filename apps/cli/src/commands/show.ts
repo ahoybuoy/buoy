@@ -5,7 +5,7 @@ import { writeFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { loadConfig, getConfigPath } from "../config/loader.js";
-import { buildAutoConfig } from "../config/auto-detect.js";
+import { buildAutoConfig, detectMonorepo } from "../config/auto-detect.js";
 import {
   spinner,
   error,
@@ -43,6 +43,7 @@ const DS_LIBRARY_NAMES = [
   "mui", "chakra", "mantine", "ant-design", "radix",
   "headlessui", "fluentui", "nextui", "primereact",
   "ariakit", "vuetify", "element-plus", "naive-ui", "bootstrap",
+  "shadcn",
 ];
 
 // Utility/styling framework names
@@ -1406,7 +1407,8 @@ export function createShowCommand(): Command {
         // Calculate health using 4-pillar system
         spin.text = "Calculating health score...";
         const drifts = driftResult.drifts;
-        const detected = await detectFrameworks(process.cwd());
+        const monorepoInfo = await detectMonorepo(process.cwd());
+        const detected = await detectFrameworks(process.cwd(), monorepoInfo ?? undefined);
 
         const richContext = computeRichSuggestionContext(drifts);
         const healthMetrics: HealthMetrics = {
@@ -1689,7 +1691,8 @@ async function gatherHealthMetrics(
   const criticalCount = drifts.filter(d => d.severity === "critical").length;
 
   // Detect framework context
-  const detected = await detectFrameworks(cwd);
+  const monorepoInfo = await detectMonorepo(cwd);
+  const detected = await detectFrameworks(cwd, monorepoInfo ?? undefined);
   const hasUtilityFramework = detected.some(f => UTILITY_FRAMEWORK_NAMES.includes(f.name))
     || detected.some(f => DS_WITH_STYLING.includes(f.name));
   const hasDesignSystemLibrary = detected.some(f => DS_LIBRARY_NAMES.includes(f.name));

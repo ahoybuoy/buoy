@@ -213,6 +213,60 @@ export async function detectFrameworks(projectRoot: string, monorepoInfo?: Monor
     }
   }
 
+  // Special case: Tailwind v4 uses @import "tailwindcss" in CSS instead of package.json
+  if (!detected.some(d => d.name === 'tailwind')) {
+    const cssFiles = await glob('**/*.css', {
+      cwd: projectRoot,
+      nodir: true,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
+      maxDepth: 4,
+    });
+
+    for (const file of cssFiles.slice(0, 20)) {
+      try {
+        const content = await readFile(resolve(projectRoot, file), 'utf-8');
+        if (content.includes('@import "tailwindcss"') || content.includes("@import 'tailwindcss'") || /@theme\s+(inline\s+)?{/.test(content)) {
+          detected.push({
+            name: 'tailwind',
+            scanner: 'tailwind',
+            confidence: 'high',
+            evidence: `Found Tailwind v4 in ${file}`,
+            matchedFiles: [file],
+          });
+          break;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Special case: shadcn/ui uses vendored components in components/ui/
+  if (!detected.some(d => d.name === 'shadcn')) {
+    const shadcnFiles = await glob('**/components/ui/button.tsx', {
+      cwd: projectRoot,
+      nodir: true,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      maxDepth: 5,
+    });
+
+    if (shadcnFiles.length > 0) {
+      try {
+        const content = await readFile(resolve(projectRoot, shadcnFiles[0]!), 'utf-8');
+        if (content.includes('@radix-ui') || content.includes('class-variance-authority') || content.includes('cva')) {
+          detected.push({
+            name: 'shadcn',
+            confidence: 'high',
+            evidence: `Found shadcn/ui components in ${shadcnFiles[0]}`,
+            matchedFiles: shadcnFiles.slice(0, 5),
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   // Deduplicate by scanner or plugin name, keeping highest confidence
   const byKey = new Map<string, DetectedFramework>();
   for (const d of detected) {
