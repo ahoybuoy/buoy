@@ -74,6 +74,17 @@ function isVendoredShadcnFile(filePath: string): boolean {
   return VENDORED_SHADCN_FILES.has(match[1]!);
 }
 
+function isComponentFile(filePath: string): boolean {
+  const componentExts = ['.tsx', '.jsx', '.vue', '.svelte'];
+  return componentExts.some(ext => filePath.endsWith(ext));
+}
+
+function isLikelyGeneratedFile(filePath: string, issueCount: number): boolean {
+  const filename = filePath.split('/').pop() || '';
+  if (issueCount > 50 && (filename.startsWith('icon') || filename.includes('icons'))) return true;
+  return false;
+}
+
 export function createShowCommand(): Command {
   const cmd = new Command("show")
     .description("Show design system information")
@@ -1644,11 +1655,11 @@ function computeRichSuggestionContext(drifts: DriftSignal[]): {
   const userFileCounts = new Map<string, number>();
   for (const d of drifts) {
     if (d.type !== "hardcoded-value") {
-      // Non-hardcoded-value drifts: count normally
+      // Non-hardcoded-value drifts: count only component files
       const loc = d.source?.location;
       if (!loc) continue;
       const file = loc.split(":")[0];
-      if (file) userFileCounts.set(file, (userFileCounts.get(file) || 0) + 1);
+      if (file && isComponentFile(file)) userFileCounts.set(file, (userFileCounts.get(file) || 0) + 1);
       continue;
     }
     const loc = d.source?.location;
@@ -1658,12 +1669,14 @@ function computeRichSuggestionContext(drifts: DriftSignal[]): {
 
     if (isVendoredShadcnFile(file)) {
       vendoredDriftCount++;
-    } else {
+    } else if (isComponentFile(file)) {
       userFileCounts.set(file, (userFileCounts.get(file) || 0) + 1);
     }
   }
 
-  const worstFileEntry = [...userFileCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const worstFileEntry = [...userFileCounts.entries()]
+    .filter(([file, count]) => !isLikelyGeneratedFile(file, count))
+    .sort((a, b) => b[1] - a[1])[0];
   const worstFile = worstFileEntry
     ? { path: worstFileEntry[0], issueCount: worstFileEntry[1] }
     : undefined;
