@@ -493,6 +493,36 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
     }
   }
 
+  // Search ALL CSS files for :root with CSS variables (catches monorepo sub-packages)
+  const allCssFiles = await glob('**/*.css', {
+    cwd: projectRoot,
+    nodir: true,
+    ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.min.css'],
+    maxDepth: 6,
+  });
+
+  for (const file of allCssFiles) {
+    if (found.includes(file)) continue;
+    try {
+      const content = await readFile(resolve(projectRoot, file), 'utf-8');
+      // Check for :root with CSS custom properties (at least 3 to filter noise)
+      if (/:root\s*{/.test(content)) {
+        const varMatches = content.match(/--[\w-]+\s*:/g);
+        if (varMatches && varMatches.length >= 3) {
+          found.push(file);
+        }
+      }
+      // Check for @theme blocks (Tailwind v4) - may not have been caught above
+      if (/@theme\s+(inline\s+)?{/.test(content)) {
+        if (!found.includes(file)) {
+          found.push(file);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   // Deduplicate
   return [...new Set(found)];
 }
