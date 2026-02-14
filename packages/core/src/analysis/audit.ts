@@ -73,6 +73,8 @@ export interface HealthMetrics {
   deprecatedPatternCount?: number;
   /** Number of files with >2 hardcoded values (severe maintenance burden) */
   highDensityFileCount?: number;
+  /** Number of drift signals from vendored/template components (e.g., shadcn/ui) */
+  vendoredDriftCount?: number;
   /** Most common hardcoded color (for suggestions) */
   topHardcodedColor?: { value: string; count: number };
   /** File with the most drift issues */
@@ -317,7 +319,8 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   // Primary: hardcoded value density
   // Secondary: dead code density (unused/orphaned components, repeated patterns)
   // Tertiary: total drift density as backstop
-  const hardcodedDensity = metrics.hardcodedValueCount / Math.max(metrics.componentCount, 1);
+  const userHardcodedCount = metrics.hardcodedValueCount - (metrics.vendoredDriftCount ?? 0);
+  const hardcodedDensity = Math.max(0, userHardcodedCount) / Math.max(metrics.componentCount, 1);
   const deadCodeCount = (metrics.unusedComponentCount ?? 0)
     + (metrics.orphanedComponentCount ?? 0)
     + (metrics.repeatedPatternCount ?? 0);
@@ -346,6 +349,12 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
       suggestion = `Good foundation. ${metrics.hardcodedValueCount} hardcoded value${metrics.hardcodedValueCount === 1 ? '' : 's'} could be extracted to design tokens`;
     }
     suggestions.push(suggestion);
+  }
+
+  if ((metrics.vendoredDriftCount ?? 0) > 0) {
+    suggestions.push(
+      `${metrics.vendoredDriftCount} additional hardcoded values in vendored components (shadcn/ui templates) — these are from the library, not your code`
+    );
   }
 
   // Dead code suggestions

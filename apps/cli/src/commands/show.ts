@@ -54,6 +54,26 @@ const UTILITY_FRAMEWORK_NAMES = [
 // DS libraries that include their own styling systems
 const DS_WITH_STYLING = ["chakra", "mantine", "mui"];
 
+// Known vendored shadcn/ui component filenames
+const VENDORED_SHADCN_FILES = new Set([
+  'dropdown-menu', 'sidebar', 'menubar', 'select', 'sheet',
+  'dialog', 'popover', 'tooltip', 'accordion', 'alert-dialog',
+  'command', 'context-menu', 'navigation-menu', 'hover-card',
+  'radio-group', 'toggle-group', 'tabs', 'scroll-area',
+  'separator', 'slider', 'switch', 'textarea', 'toast',
+  'toaster', 'sonner', 'carousel', 'chart', 'drawer',
+  'input-otp', 'resizable', 'pagination', 'breadcrumb',
+  'collapsible', 'aspect-ratio', 'avatar', 'badge',
+  'calendar', 'card', 'checkbox', 'form', 'input', 'label',
+  'progress', 'skeleton', 'table', 'toggle', 'button',
+]);
+
+function isVendoredShadcnFile(filePath: string): boolean {
+  const match = filePath.match(/components\/ui\/([^/.]+)\.(tsx|jsx)$/);
+  if (!match) return false;
+  return VENDORED_SHADCN_FILES.has(match[1]!);
+}
+
 export function createShowCommand(): Command {
   const cmd = new Command("show")
     .description("Show design system information")
@@ -1440,6 +1460,7 @@ export function createShowCommand(): Command {
           semanticMismatchCount: drifts.filter(d => d.type === "semantic-mismatch").length,
           deprecatedPatternCount: drifts.filter(d => d.type === "deprecated-pattern").length,
           highDensityFileCount,
+          vendoredDriftCount: richContext.vendoredDriftCount,
           topHardcodedColor: richContext.topHardcodedColor,
           worstFile: richContext.worstFile,
           uniqueSpacingValues: richContext.uniqueSpacingValues,
@@ -1591,6 +1612,7 @@ function getSetupStatus(cwd: string): Record<string, unknown> {
  */
 function computeRichSuggestionContext(drifts: DriftSignal[]): {
   topHardcodedColor?: { value: string; count: number };
+  vendoredDriftCount: number;
   worstFile?: { path: string; issueCount: number };
   uniqueSpacingValues?: number;
 } {
@@ -1617,15 +1639,31 @@ function computeRichSuggestionContext(drifts: DriftSignal[]): {
     ? { value: topColorEntry[0], count: topColorEntry[1] }
     : undefined;
 
-  // Find file with most drift issues
-  const fileCounts = new Map<string, number>();
+  // Find file with most drift issues, separating vendored shadcn files
+  let vendoredDriftCount = 0;
+  const userFileCounts = new Map<string, number>();
   for (const d of drifts) {
+    if (d.type !== "hardcoded-value") {
+      // Non-hardcoded-value drifts: count normally
+      const loc = d.source?.location;
+      if (!loc) continue;
+      const file = loc.split(":")[0];
+      if (file) userFileCounts.set(file, (userFileCounts.get(file) || 0) + 1);
+      continue;
+    }
     const loc = d.source?.location;
     if (!loc) continue;
     const file = loc.split(":")[0];
-    if (file) fileCounts.set(file, (fileCounts.get(file) || 0) + 1);
+    if (!file) continue;
+
+    if (isVendoredShadcnFile(file)) {
+      vendoredDriftCount++;
+    } else {
+      userFileCounts.set(file, (userFileCounts.get(file) || 0) + 1);
+    }
   }
-  const worstFileEntry = [...fileCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+
+  const worstFileEntry = [...userFileCounts.entries()].sort((a, b) => b[1] - a[1])[0];
   const worstFile = worstFileEntry
     ? { path: worstFileEntry[0], issueCount: worstFileEntry[1] }
     : undefined;
@@ -1646,7 +1684,7 @@ function computeRichSuggestionContext(drifts: DriftSignal[]): {
   }
   const uniqueSpacingValues = spacingValues.size > 0 ? spacingValues.size : undefined;
 
-  return { topHardcodedColor, worstFile, uniqueSpacingValues };
+  return { topHardcodedColor, worstFile, uniqueSpacingValues, vendoredDriftCount };
 }
 
 function getSummary(drifts: DriftSignal[]): {
@@ -1740,6 +1778,7 @@ async function gatherHealthMetrics(
     semanticMismatchCount: drifts.filter(d => d.type === "semantic-mismatch").length,
     deprecatedPatternCount: drifts.filter(d => d.type === "deprecated-pattern").length,
     highDensityFileCount,
+    vendoredDriftCount: richContext.vendoredDriftCount,
     topHardcodedColor: richContext.topHardcodedColor,
     worstFile: richContext.worstFile,
     uniqueSpacingValues: richContext.uniqueSpacingValues,
