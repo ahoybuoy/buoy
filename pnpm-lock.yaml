@@ -88,6 +88,12 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/ahoybuoy:
+    dependencies:
+      '@buoy-design/cli':
+        specifier: workspace:*
+        version: link:../../apps/cli
+
   packages/core:
     dependencies:
       glob:
