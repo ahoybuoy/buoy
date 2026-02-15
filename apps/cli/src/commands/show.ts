@@ -69,9 +69,15 @@ const VENDORED_SHADCN_FILES = new Set([
 ]);
 
 function isVendoredShadcnFile(filePath: string): boolean {
-  const match = filePath.match(/components\/ui\/([^/.]+)\.(tsx|jsx)$/);
-  if (!match) return false;
-  return VENDORED_SHADCN_FILES.has(match[1]!);
+  // Extract basename without extension
+  const basename = (filePath.split('/').pop() || '').replace(/\.(tsx|jsx|ts|js)$/, '');
+  if (!VENDORED_SHADCN_FILES.has(basename)) return false;
+
+  // Match on any UI-related directory path (not just components/ui/)
+  // Catches: src/ui/, src/primitives/, src/ds/components/, src/libs/ui/,
+  // registry/new-york/ui/, packages/ui/src/components/, etc.
+  return /\/(ui|primitives|registry|ds)\b/.test(filePath)
+    || /\/components\//.test(filePath);
 }
 
 function isComponentFile(filePath: string): boolean {

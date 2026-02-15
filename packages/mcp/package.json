@@ -1,6 +1,6 @@
 {
   "name": "@buoy-design/mcp",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "description": "MCP server for Buoy design system context",
   "type": "module",
   "license": "MIT",

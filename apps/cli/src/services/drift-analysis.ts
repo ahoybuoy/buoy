@@ -191,6 +191,7 @@ const ENTRY_POINT_PATTERNS = [
   /\/\+server\./,         // SvelteKit +server.ts
   /\/views?\//,           // Vue views directory
   /\/screens?\//,         // React Native screens
+  /\.astro$/,             // Astro page/layout components are auto-routed
 ];
 
 function isEntryPointComponent(component: Component): boolean {
@@ -320,6 +321,13 @@ export class DriftAnalysisService {
     // Fix 7: Count Storybook story file imports as usage
     // Button.stories.tsx importing { Button } means Button is documented/tested
     await this.scanStoryFileUsages(componentUsageMap);
+
+    // Fix 8: Count Lit/Web Component registrations as usage
+    await this.scanWebComponentRegistrations(componentUsageMap);
+
+    // Fix 9: Treat Nuxt components/ dir as auto-imported
+    const componentNameSet = new Set(componentNames);
+    await this.scanNuxtAutoImports(componentUsageMap, componentNameSet);
 
     // Fix 1: Exempt entry point components (pages, routes, layouts)
     // These are rendered by the framework router, not imported by other components
@@ -769,6 +777,63 @@ export class DriftAnalysisService {
       } catch {
         // ignore unreadable files
       }
+    }
+  }
+
+  /**
+   * Scan for Lit and Web Component registration patterns.
+   * customElements.define('my-button', MyButton) and @customElement('my-button')
+   * mean the component is registered and used by the browser.
+   */
+  private async scanWebComponentRegistrations(componentUsageMap: Map<string, number>): Promise<void> {
+    const cwd = process.cwd();
+    const files = await glob('**/*.{ts,js}', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/*.d.ts', '**/*.spec.*', '**/*.test.*'],
+      nodir: true,
+      maxDepth: 8,
+    });
+
+    for (const file of files.slice(0, 500)) {
+      try {
+        const content = await readFile(resolve(cwd, file), 'utf-8');
+
+        // Match customElements.define('tag-name', ClassName)
+        const definePattern = /customElements\.define\s*\(\s*['"][^'"]+['"]\s*,\s*([A-Z][a-zA-Z0-9]*)/g;
+        let match: RegExpExecArray | null;
+        while ((match = definePattern.exec(content)) !== null) {
+          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+        }
+
+        // Match @customElement('tag-name') decorator
+        const decoratorPattern = /@customElement\s*\(\s*['"][^'"]+['"]\s*\)/g;
+        if (decoratorPattern.test(content)) {
+          // The class following this decorator is registered
+          const classPattern = /class\s+([A-Z][a-zA-Z0-9]*)\s+extends/g;
+          while ((match = classPattern.exec(content)) !== null) {
+            componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          }
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  /**
+   * In Nuxt 3, components in the components/ directory are auto-imported globally.
+   * If we detect Nuxt (nuxt.config.ts exists), mark all components in components/ as used.
+   */
+  private async scanNuxtAutoImports(componentUsageMap: Map<string, number>, componentNames: Set<string>): Promise<void> {
+    const cwd = process.cwd();
+    // Check for Nuxt config
+    const nuxtConfigs = await glob('nuxt.config.{ts,js,mjs}', { cwd, nodir: true });
+    if (nuxtConfigs.length === 0) return;
+
+    // In Nuxt, all components in components/ are auto-imported
+    for (const name of componentNames) {
+      // Mark as used (they're available globally via auto-import)
+      componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
     }
   }
 

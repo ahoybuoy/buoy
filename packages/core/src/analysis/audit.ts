@@ -354,7 +354,12 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
     hardcodedDensity + deadCodeDensity * 0.3,
     totalDriftDensity * 0.5,
   );
-  const valueDisciplineScore = Math.round(60 * clamp(1 - density / 2, 0, 1));
+  // Treat near-zero density as perfect: repos with <0.1 hardcoded values per component
+  // are effectively clean (e.g., 193 components with 12 hardcoded values = 0.06/comp)
+  const effectiveDensity = density < 0.1 ? 0 : density;
+  // Continuous scoring (no rounding) — round only the final total for more granular scores
+  const valueDisciplineRaw = 60 * clamp(1 - effectiveDensity / 2, 0, 1);
+  const valueDisciplineScore = Math.round(valueDisciplineRaw);
 
   if (metrics.hardcodedValueCount > 0) {
     const hasTailwind = frameworks.includes('tailwind');
@@ -504,7 +509,7 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   // Includes naming-inconsistency + semantic-mismatch signals
   const inconsistencyCount = metrics.namingInconsistencyCount + (metrics.semanticMismatchCount ?? 0);
   const namingRate = inconsistencyCount / Math.max(metrics.componentCount, 1);
-  const consistencyScore = Math.round(10 * clamp(1 - namingRate / 0.25, 0, 1));
+  const consistencyRaw = 10 * clamp(1 - namingRate / 0.25, 0, 1);
 
   // Only surface naming inconsistencies above noise threshold
   if (inconsistencyCount > 3 || (inconsistencyCount > 0 && namingRate > 0.05)) {
@@ -530,7 +535,8 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   const effectiveCriticalCount = metrics.criticalCount
     + Math.ceil(deprecatedCount / 2)
     + Math.floor(highDensityFiles / 3);
-  const criticalScore = Math.max(0, 10 - effectiveCriticalCount * 3);
+  // Use 2-point steps for finer granularity (was 3-point)
+  const criticalRaw = Math.max(0, 10 - effectiveCriticalCount * 2);
 
   if (metrics.criticalCount > 0) {
     suggestions.push(
@@ -552,10 +558,14 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   // Scale consistency and criticalIssues for repos with very few components
   // Prevents trivially maxing these pillars when there's nothing to evaluate
   const componentScale = Math.min(metrics.componentCount / 3, 1);
-  const scaledConsistencyScore = Math.round(consistencyScore * componentScale);
-  const scaledCriticalScore = Math.round(criticalScore * componentScale);
+  // Use raw (unrounded) values for total calculation to produce more distinct scores
+  const scaledConsistencyRaw = consistencyRaw * componentScale;
+  const scaledCriticalRaw = criticalRaw * componentScale;
+  const scaledConsistencyScore = Math.round(scaledConsistencyRaw);
+  const scaledCriticalScore = Math.round(scaledCriticalRaw);
 
-  let total = valueDisciplineScore + tokenHealthScore + scaledConsistencyScore + scaledCriticalScore;
+  // Total uses raw values, rounded once at the end for maximum granularity
+  let total = Math.round(valueDisciplineRaw + tokenHealthScore + scaledConsistencyRaw + scaledCriticalRaw);
 
   // Drift density penalty: prevent high-drift repos from scoring "Great"
   // Apps with many drift signals relative to their size should be capped

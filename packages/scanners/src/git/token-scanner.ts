@@ -275,6 +275,15 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       "**/spacing.js",
       "**/typography.ts",
       "**/typography.js",
+      // CSS-in-JS theme files (MUI, Mantine, Emotion, styled-components)
+      "**/theme.ts",
+      "**/theme.js",
+      "**/theme/index.ts",
+      "**/theme/index.js",
+      "**/createTheme.ts",
+      "**/createTheme.js",
+      "**/palette.ts",
+      "**/palette.js",
     ]);
     return [...new Set([...jsonFiles, ...cssFiles, ...tsFiles])];
   }
@@ -1021,6 +1030,10 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       tokens.push(...tailwindTokens);
     }
 
+    // Extract MUI/Mantine/CSS-in-JS createTheme() tokens
+    const themeTokens = this.extractCreateThemeTokens(content, relativePath);
+    tokens.push(...themeTokens);
+
     return tokens;
   }
 
@@ -1315,49 +1328,125 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       zIndex: "other",
     };
 
+    // Strategy: find each `key: {` pattern in the file and brace-match.
+    // Since this only runs on tailwind.config files, any colors:{}, spacing:{},
+    // etc. is a valid token source with negligible false positive risk.
+    const seen = new Set<string>();
+
     for (const [themeKey, category] of Object.entries(themeCategories)) {
-      // Match both theme.extend.KEY and theme.KEY patterns
-      // Pattern: theme: { extend: { KEY: { ... } } } or theme: { KEY: { ... } }
-      const patterns = [
-        // theme.extend.KEY: { ... }
-        new RegExp(`(?:extend\\s*:\\s*\\{[^}]*?)${themeKey}\\s*:\\s*\\{`, "gs"),
-        // theme.KEY: { ... } (direct, not nested in extend)
-        new RegExp(`theme\\s*:\\s*\\{[^}]*?${themeKey}\\s*:\\s*\\{`, "gs"),
-      ];
+      // Match KEY: { anywhere in the file (handles nested braces correctly)
+      const pattern = new RegExp(`\\b${themeKey}\\s*:\\s*\\{`, "g");
+      pattern.lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        // Find the opening brace
+        const braceStart = match.index + match[0].length - 1;
 
-      for (const pattern of patterns) {
-        pattern.lastIndex = 0;
-        let match;
-        while ((match = pattern.exec(content)) !== null) {
-          // Find the opening brace of the category object
-          const braceStart = content.lastIndexOf("{", match.index + match[0].length - 1);
-          if (braceStart === -1) continue;
+        // Brace-match to find the full object
+        let depth = 1;
+        let i = braceStart + 1;
+        while (i < content.length && depth > 0) {
+          if (content[i] === "{") depth++;
+          if (content[i] === "}") depth--;
+          i++;
+        }
+        if (depth !== 0) continue;
 
-          // Brace-match to find the full object
-          let depth = 1;
-          let i = braceStart + 1;
-          while (i < content.length && depth > 0) {
-            if (content[i] === "{") depth++;
-            if (content[i] === "}") depth--;
-            i++;
+        const objectStr = content.slice(braceStart, i);
+        // Skip tiny objects (e.g., `colors: {}` or single-entry objects with no values)
+        if (objectStr.length < 5) continue;
+        // Dedup by content
+        if (seen.has(objectStr)) continue;
+        seen.add(objectStr);
+
+        const lineNumber = content.slice(0, braceStart).split("\n").length;
+
+        const parsedTokens = this.parseTokenObjectString(
+          objectStr,
+          category,
+          relativePath,
+          lineNumber,
+          `tailwind.${themeKey}`,
+        );
+        tokens.push(...parsedTokens);
+      }
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Extract tokens from CSS-in-JS theme creation patterns.
+   *
+   * Handles:
+   * - MUI: createTheme({ palette: { primary: { main: '#1976d2' } } })
+   * - Mantine: createTheme({ colors: { brand: [...] } })
+   * - extendTheme({ ... })
+   */
+  private extractCreateThemeTokens(
+    content: string,
+    relativePath: string,
+  ): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Match createTheme({ ... }) or extendTheme({ ... })
+    const themeCallPattern = /(?:createTheme|extendTheme|createMuiTheme)\s*\(\s*\{/g;
+    let match;
+    while ((match = themeCallPattern.exec(content)) !== null) {
+      const braceStart = match.index + match[0].length - 1;
+
+      // Brace-match to find the full theme object
+      let depth = 1;
+      let i = braceStart + 1;
+      while (i < content.length && depth > 0) {
+        if (content[i] === "{") depth++;
+        if (content[i] === "}") depth--;
+        i++;
+      }
+      if (depth !== 0) continue;
+
+      const themeObj = content.slice(braceStart, i);
+      const lineNumber = content.slice(0, braceStart).split("\n").length;
+
+      // Extract known theme keys within the theme object
+      const themeKeys: Record<string, string> = {
+        palette: "color",
+        colors: "color",
+        spacing: "spacing",
+        typography: "typography",
+        shadows: "shadow",
+        shape: "dimension",
+        fontSizes: "typography",
+        radius: "dimension",
+      };
+
+      for (const [key, category] of Object.entries(themeKeys)) {
+        const keyPattern = new RegExp(`\\b${key}\\s*:\\s*\\{`, "g");
+        keyPattern.lastIndex = 0;
+        let keyMatch;
+        while ((keyMatch = keyPattern.exec(themeObj)) !== null) {
+          const kBraceStart = keyMatch.index + keyMatch[0].length - 1;
+          let kDepth = 1;
+          let ki = kBraceStart + 1;
+          while (ki < themeObj.length && kDepth > 0) {
+            if (themeObj[ki] === "{") kDepth++;
+            if (themeObj[ki] === "}") kDepth--;
+            ki++;
           }
-          if (depth !== 0) continue;
+          if (kDepth !== 0) continue;
 
-          const objectStr = content.slice(braceStart, i);
-          const lineNumber = content.slice(0, braceStart).split("\n").length;
+          const keyObj = themeObj.slice(kBraceStart, ki);
+          if (keyObj.length < 5) continue;
 
-          // Use existing parsing infrastructure
-          const parsedTokens = this.parseTokenObjectString(
-            objectStr,
+          const parsed = this.parseTokenObjectString(
+            keyObj,
             category,
             relativePath,
             lineNumber,
-            `tailwind.${themeKey}`,
+            `theme.${key}`,
           );
-          tokens.push(...parsedTokens);
-
-          // Only take the first match per pattern to avoid duplicates
-          break;
+          tokens.push(...parsed);
+          break; // One match per key
         }
       }
     }

@@ -463,12 +463,12 @@ export class ScanOrchestrator {
     // Wrap scanner.scan() with a timeout to prevent hangs
     let scanResult: any;
     try {
-      scanResult = await withScannerTimeout(scanner.scan(), 60_000, definition.source);
+      scanResult = await withScannerTimeout(scanner.scan(), 90_000, definition.source);
     } catch (err) {
       if (err instanceof Error && err.message.includes("timed out")) {
         result.errors.push({
           source,
-          message: `Scanner "${definition.source}" timed out after 60s — skipped`,
+          message: `Scanner "${definition.source}" timed out after 90s — skipped`,
         });
         return result;
       }

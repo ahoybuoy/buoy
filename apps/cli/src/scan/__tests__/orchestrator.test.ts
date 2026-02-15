@@ -535,11 +535,11 @@ describe("ScanOrchestrator", () => {
 
       // Use a shorter timeout for testing by checking that the error handling works
       const orchestrator = new ScanOrchestrator(config);
-      // The timeout is 60s which is too long for a test, so we just verify
+      // The timeout is 90s which is too long for a test, so we just verify
       // the error handling by making the scanner reject with a timeout error
       mockScanners.ReactComponentScanner = class {
         async scan() {
-          throw new Error('Scanner "react" timed out after 60000ms');
+          throw new Error('Scanner "react" timed out after 90000ms');
         }
       } as any;
 

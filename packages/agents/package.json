@@ -1,6 +1,6 @@
 {
   "name": "@buoy-design/agents",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "description": "AI agents for design system analysis, history review, and contribution generation",
   "type": "module",
   "license": "MIT",

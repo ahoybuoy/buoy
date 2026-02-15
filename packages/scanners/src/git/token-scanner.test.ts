@@ -2706,5 +2706,98 @@ type SizeType = 'sm' | 'lg';
       const typographyTokens = result.items.filter((t) => t.category === "typography");
       expect(typographyTokens.length).toBeGreaterThanOrEqual(2);
     });
+
+    it("should extract colors from Tailwind config with multiple theme.extend entries", async () => {
+      vol.fromJSON({
+        "/project/tailwind.config.ts": `
+          import type { Config } from 'tailwindcss';
+
+          const config: Config = {
+            content: ['./src/**/*.{ts,tsx}'],
+            theme: {
+              extend: {
+                colors: {
+                  primary: '#3b82f6',
+                  secondary: '#64748b',
+                  accent: '#f59e0b',
+                },
+                spacing: {
+                  '18': '4.5rem',
+                  '88': '22rem',
+                },
+                borderRadius: {
+                  '4xl': '2rem',
+                },
+              },
+            },
+            plugins: [],
+          };
+
+          export default config;
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tailwind.config.ts"],
+      });
+
+      const result = await scanner.scan();
+      // Should find colors, spacing, and borderRadius tokens
+      const colorTokens = result.items.filter((t) => t.category === "color");
+      const spacingTokens = result.items.filter((t) => t.category === "spacing");
+      expect(colorTokens.length).toBeGreaterThanOrEqual(3);
+      expect(spacingTokens.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe("CSS-in-JS theme token extraction", () => {
+    it("should extract tokens from MUI createTheme()", async () => {
+      vol.fromJSON({
+        "/project/theme.ts": `
+          import { createTheme } from '@mui/material/styles';
+
+          export const theme = createTheme({
+            palette: {
+              primary: { main: '#1976d2', light: '#42a5f5' },
+              secondary: { main: '#9c27b0' },
+            },
+            spacing: { sm: '8px', md: '16px' },
+          });
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["theme.ts"],
+      });
+
+      const result = await scanner.scan();
+      const colorTokens = result.items.filter((t) => t.category === "color");
+      expect(colorTokens.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("should extract tokens from Mantine createTheme()", async () => {
+      vol.fromJSON({
+        "/project/theme.ts": `
+          import { createTheme } from '@mantine/core';
+
+          export const theme = createTheme({
+            colors: {
+              brand: ['#f0f0ff', '#d0d0ff', '#a0a0ff', '#7070ff', '#4040ff', '#1010ff', '#0000dd', '#0000aa', '#000088', '#000066'],
+            },
+            fontSizes: { xs: '0.75rem', sm: '0.875rem', md: '1rem' },
+          });
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["theme.ts"],
+      });
+
+      const result = await scanner.scan();
+      expect(result.items.length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

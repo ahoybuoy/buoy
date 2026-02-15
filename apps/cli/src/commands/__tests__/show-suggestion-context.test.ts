@@ -22,9 +22,10 @@ const VENDORED_SHADCN_FILES = new Set([
 ]);
 
 function isVendoredShadcnFile(filePath: string): boolean {
-  const match = filePath.match(/components\/ui\/([^/.]+)\.(tsx|jsx)$/);
-  if (!match) return false;
-  return VENDORED_SHADCN_FILES.has(match[1]!);
+  const basename = (filePath.split('/').pop() || '').replace(/\.(tsx|jsx|ts|js)$/, '');
+  if (!VENDORED_SHADCN_FILES.has(basename)) return false;
+  return /\/(ui|primitives|registry|ds)\b/.test(filePath)
+    || /\/components\//.test(filePath);
 }
 
 function isComponentFile(filePath: string): boolean {
@@ -122,5 +123,56 @@ describe("computeRichSuggestionContext vendored filtering", () => {
     ];
     const worst = computeWorstFile(drifts);
     expect(worst).toBeUndefined();
+  });
+
+  it("should exclude vendored files in non-standard paths (src/ui/)", () => {
+    const drifts = [
+      makeDrift("hardcoded-value", "src/ui/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "src/ui/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "src/ui/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "src/components/MyButton.tsx"),
+    ];
+    const worst = computeWorstFile(drifts);
+    expect(worst?.path).toBe("src/components/MyButton.tsx");
+  });
+
+  it("should exclude vendored files in primitives/ paths", () => {
+    const drifts = [
+      makeDrift("hardcoded-value", "apps/readest-app/src/components/primitives/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "apps/readest-app/src/components/primitives/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "src/components/MyCard.tsx"),
+    ];
+    const worst = computeWorstFile(drifts);
+    expect(worst?.path).toBe("src/components/MyCard.tsx");
+  });
+
+  it("should exclude vendored files in deep monorepo paths", () => {
+    const drifts = [
+      makeDrift("hardcoded-value", "packages/playground-ui/src/ds/components/DropdownMenu/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "packages/playground-ui/src/ds/components/DropdownMenu/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "src/components/UserCard.tsx"),
+    ];
+    const worst = computeWorstFile(drifts);
+    expect(worst?.path).toBe("src/components/UserCard.tsx");
+  });
+
+  it("should exclude vendored files in registry paths", () => {
+    const drifts = [
+      makeDrift("hardcoded-value", "apps/www/registry/new-york/ui/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "apps/www/registry/new-york/ui/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "src/components/Header.tsx"),
+    ];
+    const worst = computeWorstFile(drifts);
+    expect(worst?.path).toBe("src/components/Header.tsx");
+  });
+
+  it("should exclude vendored files in libs/ui paths", () => {
+    const drifts = [
+      makeDrift("hardcoded-value", "src/libs/ui/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "src/libs/ui/dropdown-menu.tsx"),
+      makeDrift("hardcoded-value", "src/components/Footer.tsx"),
+    ];
+    const worst = computeWorstFile(drifts);
+    expect(worst?.path).toBe("src/components/Footer.tsx");
   });
 });

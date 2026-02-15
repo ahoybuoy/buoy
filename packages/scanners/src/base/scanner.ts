@@ -554,8 +554,16 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
       });
     }
 
+    // Sort by path depth (shallow first) so the most important files are scanned
+    // when we hit the file cap
+    files.sort((a, b) => {
+      const depthA = a.split('/').length;
+      const depthB = b.split('/').length;
+      return depthA - depthB;
+    });
+
     // Hard cap on files per scanner to prevent hangs on massive repos
-    const MAX_FILES_PER_SCANNER = 5_000;
+    const MAX_FILES_PER_SCANNER = 3_000;
     let filesToProcess = files;
     if (files.length > MAX_FILES_PER_SCANNER) {
       filesToProcess = files.slice(0, MAX_FILES_PER_SCANNER);

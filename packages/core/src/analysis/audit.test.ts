@@ -237,6 +237,28 @@ describe('calculateHealthScorePillar', () => {
       }));
       expect(result.pillars.valueDiscipline.score).toBe(15);
     });
+
+    it('scores 60 when density is near-zero (<0.1 per component)', () => {
+      // 193 components, 12 hardcoded = 0.06 density — effectively perfect
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 193,
+        hardcodedValueCount: 12,
+      }));
+      expect(result.pillars.valueDiscipline.score).toBe(60);
+    });
+
+    it('allows score 100 for excellent repos with tokens', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 193,
+        hardcodedValueCount: 12,     // density 0.06 → treated as 0
+        tokenCount: 50,
+        unusedTokenCount: 0,
+        hasUtilityFramework: true,
+        hasDesignSystemLibrary: true,
+      }));
+      // vd=60, th=20, co=10, ci=10 = 100
+      expect(result.score).toBe(100);
+    });
   });
 
   describe('Pillar 2: Token Health (0-20)', () => {
@@ -415,13 +437,13 @@ describe('calculateHealthScorePillar', () => {
       expect(result.pillars.criticalIssues.score).toBe(10);
     });
 
-    it('deducts 3 per critical issue', () => {
+    it('deducts 2 per critical issue', () => {
       const result = calculateHealthScorePillar(makeMetrics({ criticalCount: 1 }));
-      expect(result.pillars.criticalIssues.score).toBe(7);
+      expect(result.pillars.criticalIssues.score).toBe(8);
     });
 
-    it('scores 0 when 4+ criticals', () => {
-      const result = calculateHealthScorePillar(makeMetrics({ criticalCount: 4 }));
+    it('scores 0 when 5+ criticals', () => {
+      const result = calculateHealthScorePillar(makeMetrics({ criticalCount: 5 }));
       expect(result.pillars.criticalIssues.score).toBe(0);
     });
   });
@@ -860,12 +882,12 @@ describe('calculateHealthScorePillar', () => {
 
     it('counts 2 deprecated patterns as 1 critical equivalent', () => {
       // 2 deprecated = ceil(2/2) = 1 critical equivalent
-      // effectiveCriticalCount = 0 + 1 = 1 → score = 10 - 3 = 7
+      // effectiveCriticalCount = 0 + 1 = 1 → score = 10 - 2 = 8
       const result = calculateHealthScorePillar(makeMetrics({
         criticalCount: 0,
         deprecatedPatternCount: 2,
       }));
-      expect(result.pillars.criticalIssues.score).toBe(7);
+      expect(result.pillars.criticalIssues.score).toBe(8);
     });
 
     it('combines semantic-mismatch with naming-inconsistency for consistency score', () => {
