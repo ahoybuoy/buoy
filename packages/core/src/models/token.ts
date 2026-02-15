@@ -110,6 +110,7 @@ export const TokenCategorySchema = z.enum([
   'border',
   'sizing',
   'motion',
+  'zIndex',
   'other',
 ]);
 

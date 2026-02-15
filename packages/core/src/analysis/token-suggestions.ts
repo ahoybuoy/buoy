@@ -62,6 +62,7 @@ export class TokenSuggestionService {
     hardcodedValue: string,
     tokens: DesignToken[],
     maxSuggestions: number = TOKEN_SUGGESTION_CONFIG.maxSuggestions,
+    options?: { categoryFilter?: string },
   ): TokenSuggestion[] {
     const suggestions: TokenSuggestion[] = [];
     const normalizedInput = this.normalizeSpacing(hardcodedValue);
@@ -69,13 +70,29 @@ export class TokenSuggestionService {
     if (normalizedInput === null) return suggestions;
 
     for (const token of tokens) {
-      if (token.value.type !== "spacing") continue;
+      // Skip tokens that don't match the category filter when provided
+      if (options?.categoryFilter && token.category !== options.categoryFilter) continue;
 
-      const tokenValue = token.value.value;
-      const tokenUnit = token.value.unit;
+      let tokenPx: number | null = null;
+      let displayValue: string;
+
+      if (token.value.type === "spacing") {
+        const tokenValue = token.value.value;
+        const tokenUnit = token.value.unit;
+        tokenPx = this.toPx(tokenValue, tokenUnit);
+        displayValue = `${tokenValue}${tokenUnit}`;
+      } else if (token.value.type === "raw") {
+        // Try to parse raw values as spacing (handles rem/px/em values
+        // from tokens that weren't categorized as spacing)
+        const parsed = this.normalizeSpacing(token.value.value);
+        if (parsed === null) continue;
+        tokenPx = parsed;
+        displayValue = token.value.value;
+      } else {
+        continue;
+      }
 
       // Convert to comparable units (px)
-      const tokenPx = this.toPx(tokenValue, tokenUnit);
       const similarity =
         1 -
         Math.abs(normalizedInput - tokenPx) /
@@ -86,7 +103,7 @@ export class TokenSuggestionService {
         suggestions.push({
           hardcodedValue,
           suggestedToken: token.name,
-          tokenValue: `${tokenValue}${tokenUnit}`,
+          tokenValue: displayValue,
           confidence: similarity,
         });
       }
@@ -120,8 +137,19 @@ export class TokenSuggestionService {
 
       if (hv.type === "color") {
         tokenSuggestions = this.findColorTokenSuggestions(hv.value, tokens);
-      } else if (hv.type === "spacing" || hv.type === "fontSize") {
-        tokenSuggestions = this.findSpacingTokenSuggestions(hv.value, tokens);
+      } else if (hv.type === "fontSize") {
+        // For font sizes, prefer typography tokens over spacing tokens
+        tokenSuggestions = this.findSpacingTokenSuggestions(hv.value, tokens, undefined, { categoryFilter: "typography" });
+        if (tokenSuggestions.length === 0) {
+          // No typography tokens match — don't fall back to spacing tokens
+          // since suggesting --spacing-3-5 for a 14px font-size is misleading
+        }
+      } else if (hv.type === "spacing") {
+        tokenSuggestions = this.findSpacingTokenSuggestions(hv.value, tokens, undefined, { categoryFilter: "spacing" });
+        if (tokenSuggestions.length === 0) {
+          // Fall back to any sizing/dimension tokens
+          tokenSuggestions = this.findSpacingTokenSuggestions(hv.value, tokens);
+        }
       }
 
       if (tokenSuggestions.length > 0) {

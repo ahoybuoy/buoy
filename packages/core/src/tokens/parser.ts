@@ -270,8 +270,11 @@ function mapTypeToCategory(type: string | undefined, name: string, rawValue: unk
     fontWeight: 'typography',
     fontSize: 'typography',
     typography: 'typography',
+    lineHeight: 'typography',
+    letterSpacing: 'typography',
     shadow: 'shadow',
     border: 'border',
+    zIndex: 'zIndex',
     number: 'other',
     string: 'other',
   };

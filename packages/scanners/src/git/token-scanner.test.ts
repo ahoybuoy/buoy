@@ -2800,4 +2800,78 @@ type SizeType = 'sm' | 'lg';
       expect(result.items.length).toBeGreaterThanOrEqual(1);
     });
   });
+
+  describe("token categorization bug fixes", () => {
+    it("categorizes spacing tokens with 'space' prefix (not just 'spacing')", async () => {
+      vol.fromJSON({
+        "/project/tokens.css": `
+          :root {
+            --space-4: 1rem;
+            --space-8: 2rem;
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens.css"],
+      });
+
+      const result = await scanner.scan();
+      const spaceToken = result.items.find((t) => t.name === "--space-4");
+      expect(spaceToken).toBeDefined();
+      expect(spaceToken?.category).toBe("spacing");
+    });
+
+    it("categorizes z-index tokens as zIndex", async () => {
+      vol.fromJSON({
+        "/project/tokens.css": `
+          :root {
+            --z-modal: 1400;
+            --z-index-dropdown: 1000;
+            --zindex-tooltip: 1500;
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens.css"],
+      });
+
+      const result = await scanner.scan();
+      const zModal = result.items.find((t) => t.name === "--z-modal");
+      const zDropdown = result.items.find((t) => t.name === "--z-index-dropdown");
+      const zTooltip = result.items.find((t) => t.name === "--zindex-tooltip");
+
+      expect(zModal?.category).toBe("zIndex");
+      expect(zDropdown?.category).toBe("zIndex");
+      expect(zTooltip?.category).toBe("zIndex");
+    });
+
+    it("categorizes spacing tokens with rem values correctly", async () => {
+      vol.fromJSON({
+        "/project/tokens.css": `
+          :root {
+            --spacing-4: 1rem;
+            --spacing-8: 2rem;
+          }
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens.css"],
+      });
+
+      const result = await scanner.scan();
+      const spacing4 = result.items.find((t) => t.name === "--spacing-4");
+      expect(spacing4?.category).toBe("spacing");
+      expect(spacing4?.value.type).toBe("spacing");
+      if (spacing4?.value.type === "spacing") {
+        expect(spacing4.value.value).toBe(1);
+        expect(spacing4.value.unit).toBe("rem");
+      }
+    });
+  });
 });

@@ -472,8 +472,8 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       easing: "motion",
       animations: "motion",
       animation: "motion",
-      "z-index": "other",
-      zindex: "other",
+      "z-index": "zIndex",
+      zindex: "zIndex",
       cursor: "other",
       cursors: "other",
       blurs: "other",
@@ -812,6 +812,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     }
     if (
       nameLower.includes("spacing") ||
+      nameLower.includes("space") ||
       nameLower.includes("gap") ||
       nameLower.includes("margin") ||
       nameLower.includes("padding")
@@ -821,7 +822,11 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     if (
       nameLower.includes("font") ||
       nameLower.includes("text") ||
-      nameLower.includes("typography")
+      nameLower.includes("typography") ||
+      nameLower.includes("line-height") ||
+      nameLower.includes("lineheight") ||
+      nameLower.includes("letter-spacing") ||
+      nameLower.includes("letterspacing")
     ) {
       return "typography";
     }
@@ -844,6 +849,13 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       nameLower.includes("timing")
     ) {
       return "motion";
+    }
+    if (
+      nameLower.includes("z-index") ||
+      nameLower.includes("zindex") ||
+      nameLower.startsWith("z-")
+    ) {
+      return "zIndex";
     }
 
     // Infer from value
@@ -875,10 +887,20 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       colours: "color",
       spacing: "spacing",
       space: "spacing",
+      dimension: "spacing",
       sizes: "sizing",
       typography: "typography",
       font: "typography",
       fonts: "typography",
+      fontsize: "typography",
+      fontsizes: "typography",
+      fontweight: "typography",
+      fontweights: "typography",
+      fontfamily: "typography",
+      lineheight: "typography",
+      lineheights: "typography",
+      letterspacing: "typography",
+      letterspacings: "typography",
       shadow: "shadow",
       shadows: "shadow",
       boxshadow: "shadow",
@@ -894,6 +916,8 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       duration: "motion",
       durations: "motion",
       easings: "motion",
+      zindex: "zIndex",
+      "z-index": "zIndex",
     };
 
     return mapping[lower] || "other";
@@ -1325,7 +1349,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       screens: "dimension",
       lineHeight: "typography",
       letterSpacing: "typography",
-      zIndex: "other",
+      zIndex: "zIndex",
     };
 
     // Strategy: find each `key: {` pattern in the file and brace-match.
@@ -2213,7 +2237,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     )
       return "motion";
     if (nameLower.includes("breakpoint")) return "sizing";
-    if (nameLower.includes("zindex") || nameLower === "z") return "other";
+    if (nameLower.includes("zindex") || nameLower.includes("z-index") || nameLower === "z") return "zIndex";
     // Blur tokens
     if (nameLower.includes("blur")) return "other";
     // Aspect ratio tokens

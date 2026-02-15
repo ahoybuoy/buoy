@@ -365,7 +365,7 @@ describe("TokenSuggestionService", () => {
       expect(suggestions.get("8px")![0]!.suggestedToken).toBe("spacing-2");
     });
 
-    it("generates suggestions for fontSize values", () => {
+    it("does not match fontSize values to spacing tokens", () => {
       const hardcodedValues = [
         {
           type: "fontSize",
@@ -380,7 +380,40 @@ describe("TokenSuggestionService", () => {
         tokens,
       );
 
+      // fontSize should NOT match spacing tokens (bug fix: typography/spacing separation)
+      expect(suggestions.has("8px")).toBe(false);
+    });
+
+    it("matches fontSize values to typography tokens", () => {
+      const typographyTokens: DesignToken[] = [
+        ...tokens,
+        {
+          id: "token:font-size-xs",
+          name: "--font-size-xs",
+          category: "typography",
+          value: { type: "spacing", value: 8, unit: "px" },
+          source: { type: "css", path: "tokens.css" },
+          metadata: {},
+          scannedAt: new Date(),
+        },
+      ];
+
+      const hardcodedValues = [
+        {
+          type: "fontSize",
+          value: "8px",
+          property: "fontSize",
+          location: "Button.tsx:15",
+        },
+      ];
+
+      const suggestions = service.generateTokenSuggestions(
+        hardcodedValues,
+        typographyTokens,
+      );
+
       expect(suggestions.has("8px")).toBe(true);
+      expect(suggestions.get("8px")![0]!.suggestedToken).toBe("--font-size-xs");
     });
 
     it("skips values with no matching tokens", () => {
@@ -554,6 +587,64 @@ describe("TokenSuggestionService", () => {
         const suggestions = service.findSpacingTokenSuggestions("8px", tokens);
         expect(suggestions[0]!.suggestedToken).toBe("spacing-a");
         expect(suggestions[1]!.suggestedToken).toBe("spacing-z");
+      });
+    });
+
+    describe("rem ↔ px conversion with raw token values", () => {
+      it("matches px input against tokens with raw rem values", () => {
+        const tokens: DesignToken[] = [
+          {
+            id: "token:spacing-4",
+            name: "--spacing-4",
+            category: "other",
+            value: { type: "raw", value: "1rem" },
+            source: { type: "css", path: "tokens.css" },
+            metadata: {},
+            scannedAt: new Date(),
+          },
+        ];
+
+        // 16px should match 1rem (1 * 16 = 16px)
+        const suggestions = service.findSpacingTokenSuggestions("16px", tokens);
+        expect(suggestions).toHaveLength(1);
+        expect(suggestions[0]!.suggestedToken).toBe("--spacing-4");
+        expect(suggestions[0]!.confidence).toBe(1);
+      });
+
+      it("matches rem input against tokens with raw px values", () => {
+        const tokens: DesignToken[] = [
+          {
+            id: "token:spacing-4",
+            name: "--spacing-4",
+            category: "spacing",
+            value: { type: "raw", value: "16px" },
+            source: { type: "css", path: "tokens.css" },
+            metadata: {},
+            scannedAt: new Date(),
+          },
+        ];
+
+        // 1rem = 16px should match 16px
+        const suggestions = service.findSpacingTokenSuggestions("1rem", tokens);
+        expect(suggestions).toHaveLength(1);
+        expect(suggestions[0]!.suggestedToken).toBe("--spacing-4");
+      });
+
+      it("skips raw values that are not valid spacing", () => {
+        const tokens: DesignToken[] = [
+          {
+            id: "token:z-modal",
+            name: "--z-modal",
+            category: "zIndex",
+            value: { type: "raw", value: "auto" },
+            source: { type: "css", path: "tokens.css" },
+            metadata: {},
+            scannedAt: new Date(),
+          },
+        ];
+
+        const suggestions = service.findSpacingTokenSuggestions("16px", tokens);
+        expect(suggestions).toHaveLength(0);
       });
     });
   });
