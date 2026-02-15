@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.18] - 2026-02-15
+
+### Fixed
+- Token categorization — spacing tokens with `space` prefix (not just `spacing`) now categorized correctly
+- Token categorization — z-index tokens (`--z-modal`, `--zindex-*`) get proper `zIndex` category instead of `other`
+- Token categorization — DTCG `dimension` type and typography sub-types (`lineHeight`, `letterSpacing`) mapped correctly
+- rem ↔ px conversion in suggestion builder — tokens stored as raw values (e.g., `1rem`) now match drift signals in px (e.g., `16px`)
+- Typography values no longer matched to spacing tokens — `14px` font-size won't suggest `--spacing-3-5`
+
+### Added
+- `zIndex` added to `TokenCategorySchema` as a first-class token category
+
 ## [0.3.17] - 2026-02-15
 
 ### Added
@@ -243,7 +255,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions integration
 - Figma plugin support
 
-[Unreleased]: https://github.com/ahoybuoy/buoy/compare/v0.3.16...HEAD
+[Unreleased]: https://github.com/ahoybuoy/buoy/compare/v0.3.18...HEAD
+[0.3.18]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.18
+[0.3.17]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.17
 [0.3.16]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.16
 [0.3.15]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.15
 [0.3.14]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.14

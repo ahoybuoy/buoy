@@ -55,7 +55,10 @@ docs/internal/
 # Test fixtures
 test-fixture/
 .worktrees/
+
+# Internal docs and skills (local only)
 docs/
+skills/
 
 # Local notes and generated files
 BUOY_1000_IDEAS.md
