@@ -715,6 +715,18 @@ export function formatDriftTree(drifts: DriftSignal[], fileCount: number = 0): s
 
     lines.push(config.color.bold(`${config.label} (${typeDrifts.length})`));
 
+    // Sort by file occurrence — files with most issues shown first
+    const fileCounts = new Map<string, number>();
+    for (const d of typeDrifts) {
+      const file = (d.source.location || d.source.entityName).split(':')[0] ?? '';
+      fileCounts.set(file, (fileCounts.get(file) ?? 0) + 1);
+    }
+    typeDrifts.sort((a, b) => {
+      const fileA = (a.source.location || a.source.entityName).split(':')[0] ?? '';
+      const fileB = (b.source.location || b.source.entityName).split(':')[0] ?? '';
+      return (fileCounts.get(fileB) ?? 0) - (fileCounts.get(fileA) ?? 0);
+    });
+
     // Show up to 5 items per category
     const shown = typeDrifts.slice(0, 5);
     const remaining = typeDrifts.length - shown.length;
@@ -735,20 +747,32 @@ export function formatDriftTree(drifts: DriftSignal[], fileCount: number = 0): s
       let issueText = '';
 
       if (drift.type === 'hardcoded-value') {
-        // Extract the actual values and show concise suggestion
+        const tokenSuggs = drift.details?.tokenSuggestions as string[] | undefined;
         const colorMatch = drift.message.match(/#[0-9a-fA-F]{3,8}/g);
         const sizeMatches = drift.message.match(/\d+px/g);
 
-        if (colorMatch && colorMatch.length > 0) {
-          // Show color value with token suggestion
+        const firstSugg = tokenSuggs?.[0];
+        if (firstSugg) {
+          // Parse: "value → tokenName (N% match)"
+          const suggMatch = firstSugg.match(/^(.+?)\s*→\s*(.+?)\s*\((\d+)%/);
+          if (suggMatch) {
+            const value = suggMatch[1] ?? '';
+            const tokenName = suggMatch[2] ?? '';
+            const confidence = suggMatch[3] ?? '';
+            const displayValue = colorMatch?.[0]
+              ? chalk.hex(colorMatch[0])(value.trim())
+              : chalk.dim(value.trim());
+            issueText = `${displayValue} → ${chalk.cyan(tokenName.trim())} ${chalk.dim(`(${confidence}%)`)}`;
+          } else {
+            issueText = chalk.cyan(firstSugg);
+          }
+        } else if (colorMatch && colorMatch.length > 0) {
           const colorVal = colorMatch[0];
           issueText = `${chalk.hex(colorVal)(colorVal)} → ${chalk.cyan('use var(--color-*)')}`;
         } else if (sizeMatches && sizeMatches.length > 0) {
-          // Show size value with token suggestion
           const sizeVal = sizeMatches[0];
           issueText = `${chalk.dim(sizeVal)} → ${chalk.cyan('use var(--spacing-*)')}`;
         } else {
-          // Generic hardcoded value
           issueText = chalk.dim('hardcoded value detected');
         }
       } else if (drift.type === 'accessibility-conflict') {
@@ -784,6 +808,12 @@ export function formatDriftTree(drifts: DriftSignal[], fileCount: number = 0): s
 
     if (remaining > 0) {
       lines.push(chalk.dim('└─ ... and ' + remaining + ' more'));
+    }
+
+    const topFile = [...fileCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (topFile && topFile[1] >= 3) {
+      const shortName = topFile[0].length > 25 ? '...' + topFile[0].slice(-22) : topFile[0];
+      lines.push(chalk.dim(`   Fix ${shortName} first (${topFile[1]} issues)`));
     }
 
     lines.push('');

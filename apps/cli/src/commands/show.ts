@@ -26,6 +26,7 @@ import {
 } from "../output/formatters.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
+import { saveHistory, getLastScore } from "../services/scan-history.js";
 import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
 import type { DriftSignal, Severity } from "@buoy-design/core";
 import { formatUpgradeHint } from "../utils/upgrade-hints.js";
@@ -397,6 +398,7 @@ export function createShowCommand(): Command {
                 type: g.representative.type,
                 message: g.representative.message,
                 location: g.representative.source.location,
+                tokenSuggestions: g.representative.details?.tokenSuggestions || undefined,
               },
             })),
             ungrouped: aggregated.ungrouped.map(d => ({
@@ -405,6 +407,7 @@ export function createShowCommand(): Command {
               severity: d.severity,
               message: d.message,
               location: d.source.location,
+              tokenSuggestions: d.details?.tokenSuggestions || undefined,
             })),
             summary: {
               totalSignals: aggregated.totalSignals,
@@ -511,6 +514,15 @@ export function createShowCommand(): Command {
         spin.stop();
 
         const result = calculateHealthScorePillar(healthMetrics);
+
+        // Save to local history for trend tracking
+        saveHistory(process.cwd(), {
+          timestamp: new Date().toISOString(),
+          score: result.score,
+          tier: result.tier,
+          driftCount: healthMetrics.totalDriftCount ?? 0,
+          componentCount: healthMetrics.componentCount,
+        });
 
         if (json) {
           console.log(JSON.stringify({
@@ -1835,6 +1847,19 @@ function printPillarHealthReport(result: HealthScoreResult): void {
     chalk.red;
 
   console.log(`  Health Score: ${scoreColor.bold(`${result.score}/100`)} (${result.tier})`);
+
+  const lastScore = getLastScore(process.cwd());
+  if (lastScore !== null && result.score !== null) {
+    const delta = result.score - lastScore;
+    if (delta > 0) {
+      console.log(`  ${chalk.green(`▲ +${delta}`)} from last scan`);
+    } else if (delta < 0) {
+      console.log(`  ${chalk.red(`▼ ${delta}`)} from last scan`);
+    } else {
+      console.log(`  ${chalk.dim('= no change')} from last scan`);
+    }
+  }
+
   newline();
 
   // Pillar breakdown with progress bars

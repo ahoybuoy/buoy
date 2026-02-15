@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.17] - 2026-02-15
+
+### Added
+- Token suggestions surfaced in CLI drift output — shows actual matched token name and confidence (e.g., `--color-primary (92%)`) instead of generic `use var(--color-*)`
+- `tokenSuggestions` field included in JSON drift output for AI agent consumption
+- Prioritized drift output — files with most issues shown first, "Fix X first" hint for files with 3+ issues
+- Config presets (`strict`, `relaxed`, `default`) — one-line config for common drift policies
+- `failOn` and `exclude` fields added to drift config schema
+- Local scan history with health score trends — shows delta (`▲ +5`, `▼ -3`) from last scan
+
 ## [0.3.16] - 2026-02-15
 
 ### Fixed

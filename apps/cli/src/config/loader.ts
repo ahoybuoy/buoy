@@ -63,6 +63,39 @@ export interface LoadConfigResult {
   configPath: string | null;
 }
 
+/**
+ * Apply preset defaults to config. User-specified values take precedence.
+ */
+function applyPreset(config: BuoyConfig): BuoyConfig {
+  if (!config.preset || config.preset === 'default') return config;
+
+  if (config.preset === 'strict') {
+    return {
+      ...config,
+      drift: {
+        ...config.drift,
+        failOn: config.drift?.failOn ?? 'warning',
+      },
+    };
+  }
+
+  if (config.preset === 'relaxed') {
+    const existingExclude = config.drift?.exclude ?? [];
+    const relaxedExclude = ['missing-documentation', 'naming-inconsistency']
+      .filter(t => !existingExclude.includes(t));
+    return {
+      ...config,
+      drift: {
+        ...config.drift,
+        failOn: config.drift?.failOn ?? 'critical',
+        exclude: [...existingExclude, ...relaxedExclude],
+      },
+    };
+  }
+
+  return config;
+}
+
 export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfigResult> {
   // Find config file
   let configPath: string | null = null;
@@ -110,6 +143,9 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
       const raw = mod.default || mod;
       userConfig = BuoyConfigSchema.parse(raw);
     }
+
+    // Apply preset defaults (user-specified values take precedence)
+    userConfig = applyPreset(userConfig);
 
     // Merge auto-detected framework sources with user config
     // This ensures partial configs still get framework detection

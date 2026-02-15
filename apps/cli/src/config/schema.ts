@@ -153,6 +153,10 @@ export const DriftConfigSchema = z.object({
   severity: z.record(z.enum(['info', 'warning', 'critical'])).default({}),
   aggregation: AggregationConfigSchema.default({}),
   types: z.record(DriftTypeConfigSchema).default({}),
+  /** Severity threshold for exit code 1 in drift check */
+  failOn: z.enum(['info', 'warning', 'critical', 'none']).optional(),
+  /** Drift types to exclude from scanning */
+  exclude: z.array(z.string()).optional(),
 });
 
 // Claude config
@@ -187,6 +191,7 @@ export const ExperimentalConfigSchema = z.object({
 // Main config schema
 export const BuoyConfigSchema = z.object({
   project: ProjectConfigSchema,
+  preset: z.enum(['strict', 'relaxed', 'default']).optional(),
   sources: SourcesConfigSchema.default({}),
   drift: DriftConfigSchema.default({}),
   claude: ClaudeConfigSchema.default({}),
