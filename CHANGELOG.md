@@ -7,6 +7,128 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.16] - 2026-02-15
+
+### Fixed
+- Vendored shadcn file detection now matches filename + any UI-related directory (not just `components/ui/`)
+- Score 100 now reachable — density < 0.1 treated as 0 for clean repos
+- Tailwind config token extraction rewritten with brace-matching (regex failed on nested configs)
+- Score gaps reduced — continuous raw scoring for valueDiscipline/consistency, finer critical steps
+- Scanner timeout increased 60s → 90s, file cap lowered 5000 → 3000 with depth-first sorting
+- Unused component false positives reduced — added Lit `customElements.define`, Nuxt auto-imports, Astro entry points
+- Added `createTheme()`/`extendTheme()` token extraction for MUI and Mantine
+
+### Removed
+- Removed `@buoy-design/agents` package (deprecated on npm)
+- Removed `@buoy-design/db` package (deprecated on npm)
+- Removed `@buoy-design/mcp` package (deprecated on npm)
+- Removed `ahoybuoy` wrapper package (deprecated on npm)
+- Removed `@buoy-design/figma-widget` package (was never published)
+
+## [0.3.15] - 2026-02-14
+
+### Fixed
+- Vendored shadcn files excluded from worstFile for all drift types (not just hardcoded-value)
+- Token extraction from Tailwind `theme.extend` config objects
+- Per-scanner 60s timeout to prevent CLI hangs on massive repos
+- 5,000 file cap per scanner to prevent memory exhaustion
+- tokenHealth scoring made continuous (was binary 0/5 for utility/library detection)
+- Unused component false positives reduced — NgModule declarations, Storybook story imports, Angular template selectors
+- Drift density penalty tightened: >200 drift capped at 69, >100 graduated 74-84, >50 + high density capped at 89
+
+## [0.3.14] - 2026-02-14
+
+### Fixed
+- Reverted TailwindConfigParser in token scanner (caused hangs on large repos due to `glob('**/*.css')`)
+
+## [0.3.12] - 2026-02-13
+
+### Added
+- Drift density caps — prevent high-drift repos from scoring "Great"
+- Tailwind config token parsing for `theme.extend` colors and spacing
+
+### Fixed
+- Reduced false-positive drift signals in vendored/generated files
+
+## [0.3.11] - 2026-02-13
+
+### Added
+- Tiered, framework-aware health suggestions with specific values and file paths
+- Suggestions for all repos with drift signals, scaled by severity
+
+### Fixed
+- Design system library detection wired into health scoring
+- Token name prefix normalization when checking usage
+- Health score threshold recalibration for better tier distribution
+- Monorepo detection in health scoring, Tailwind v4 and shadcn detection
+- Recursive CSS file scanning for token definitions in monorepo sub-packages
+- criticalIssues pillar expanded to include high-density hardcoded files
+- Vendored shadcn drift separated from user code in health scoring
+- Null score returned for repos with no UI surface (0 components, 0 tokens, 0 drift)
+- CSS and generated files excluded from worst-file ranking
+- Drift total consistency between health and drift commands
+- Reduced false-positive unused components (entry points, barrel re-exports, dynamic imports)
+- Scaled consistency/critical pillars for low-component repos, making Terrible tier reachable
+
+## [0.3.9] - 2026-02-13
+
+### Added
+- **4-Pillar Health Score System** — Value Discipline (0-60), Token Health (0-20), Consistency (0-10), Critical Issues (0-10)
+
+## [0.3.8] - 2026-02-12
+
+### Fixed
+- Missing-documentation signals gated on adoption rate to reduce noise
+
+## [0.3.7] - 2026-02-12
+
+### Fixed
+- Resolved all 10 open GitHub issues
+
+## [0.3.6] - 2026-02-12
+
+### Changed
+- `show` command now mirrors dock tools (tokens compare, tokens import, graph learn)
+- Removed `begin` command (replaced by `buoy dock`)
+
+## [0.3.5] - 2026-02-12
+
+### Fixed
+- Updated all command references to new CLI structure in hooks and docs
+
+## [0.3.4] - 2026-02-12
+
+### Changed
+- **CLI consolidation** — reduced from 17 to 6 top-level commands (`show`, `drift`, `dock`, `ahoy`, `graph`, `compare`)
+
+## [0.3.3] - 2026-02-12
+
+### Fixed
+- Workspace protocol leak in published packages
+
+## [0.3.2] - 2026-02-12
+
+### Added
+- Cross-source comparison for orphaned and divergence detection
+- Source classifier for code vs canonical token partitioning
+- Canonical glob patterns in token source config
+- Unused-component and unused-token detection via `collectUsages`
+- Missing-documentation detection in `analyzeComponents`
+- Framework-sprawl detection via ProjectDetector
+- Accessibility-conflict and color-contrast drift detection
+- Repeated-pattern detection promoted from experimental to always-on
+
+### Fixed
+- Wired up 6 missing commands (compare, graph, history)
+
+## [0.3.0] - 2026-02-10
+
+### Added
+- **12 new drift signal types** — z-index, sizing-value, inline-style, arbitrary-value, radius, shadow, opacity, motion, border-width, line-height, letter-spacing, breakpoint
+- Value-level and file-level extractors for all new signal types
+- Types-only export path for Worker environments
+- New drift types wired into CLI cloud client and signal mapper
+
 ## [0.2.26] - 2026-01-26
 
 ### Fixed
@@ -111,6 +233,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions integration
 - Figma plugin support
 
+[Unreleased]: https://github.com/ahoybuoy/buoy/compare/v0.3.16...HEAD
+[0.3.16]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.16
+[0.3.15]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.15
+[0.3.14]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.14
+[0.3.12]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.12
+[0.3.11]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.11
+[0.3.9]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.9
+[0.3.8]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.8
+[0.3.7]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.7
+[0.3.6]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.6
+[0.3.5]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.5
+[0.3.4]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.4
+[0.3.3]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.3
+[0.3.2]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.2
+[0.3.0]: https://github.com/ahoybuoy/buoy/releases/tag/v0.3.0
 [0.2.26]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.26
 [0.2.25]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.25
 [0.2.23]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.23
