@@ -220,12 +220,11 @@ function filterTokensByType(
     case 'hardcoded-color':
       return tokens.filter((t) => t.category === 'color');
     case 'hardcoded-spacing':
-    case 'hardcoded-radius':
       return tokens.filter((t) => t.category === 'spacing');
+    case 'hardcoded-radius':
+      return tokens.filter((t) => t.category === 'border' || t.category === 'spacing');
     case 'hardcoded-font-size':
-      return tokens.filter(
-        (t) => t.category === 'typography' || t.category === 'sizing'
-      );
+      return tokens.filter((t) => t.category === 'typography');
     default:
       return [];
   }

@@ -194,7 +194,6 @@ describe("scoreSpacingConfidence", () => {
 
     expect(result.score).toBe(0);
     expect(result.level).toBe("low");
-    expect(result.reason).toContain("not a spacing");
   });
 
   it("returns 0 for unparseable values", () => {

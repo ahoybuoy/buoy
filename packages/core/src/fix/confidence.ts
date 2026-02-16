@@ -91,16 +91,23 @@ export function scoreSpacingConfidence(
   original: string,
   token: DesignToken
 ): ConfidenceResult {
-  if (token.value.type !== 'spacing') {
-    return { level: 'low', score: 0, reason: 'Token is not a spacing value' };
-  }
-
   const originalPx = parseSpacingToPx(original);
   if (originalPx === null) {
     return { level: 'low', score: 0, reason: 'Could not parse original spacing' };
   }
 
-  const tokenPx = convertToPx(token.value.value, token.value.unit);
+  let tokenPx: number | null = null;
+
+  if (token.value.type === 'spacing') {
+    tokenPx = convertToPx(token.value.value, token.value.unit);
+  } else if (token.value.type === 'raw') {
+    // Parse raw token values like "1rem", "16px", "0.5rem"
+    tokenPx = parseSpacingToPx(token.value.value);
+  }
+
+  if (tokenPx === null) {
+    return { level: 'low', score: 0, reason: 'Could not parse token value' };
+  }
 
   // Exact match
   if (originalPx === tokenPx) {

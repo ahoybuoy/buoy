@@ -234,7 +234,11 @@ export class DriftAnalysisService {
       onProgress,
     });
 
-    // Step 2: Run semantic diff analysis
+    // Step 2: Scan tokens (before analysis, so suggestions can be generated)
+    onProgress?.("Scanning tokens...");
+    const { tokens: scannedTokens } = await orchestrator.scanTokens({ onProgress });
+
+    // Step 2.1: Run semantic diff analysis
     onProgress?.("Analyzing drift...");
     const { SemanticDiffEngine } = await import("@buoy-design/core/analysis");
     const engine = new SemanticDiffEngine();
@@ -243,6 +247,7 @@ export class DriftAnalysisService {
       checkNaming: true,
       checkDocumentation: true,
       checkAccessibility: true,
+      availableTokens: scannedTokens,
     });
 
     let drifts: DriftSignal[] = applySeverityOverrides(
@@ -250,7 +255,7 @@ export class DriftAnalysisService {
       this.config.drift.severity,
     );
 
-    // Step 2.1: Check framework sprawl
+    // Step 2.2: Check framework sprawl
     onProgress?.("Checking for framework sprawl...");
     const { ProjectDetector } = await import("../detect/project-detector.js");
     const detector = new ProjectDetector(process.cwd());
@@ -267,10 +272,9 @@ export class DriftAnalysisService {
       }
     }
 
-    // Step 2.2: Scan for unused components and tokens
+    // Step 2.3: Scan for unused components and tokens
     onProgress?.("Scanning for unused components and tokens...");
     const { collectUsages } = await import("@buoy-design/core");
-    const { tokens: scannedTokens } = await orchestrator.scanTokens({ onProgress });
 
     const componentNames = components.map((c) => c.name);
     const tokenNames = scannedTokens.map((t) => t.name);
@@ -351,7 +355,7 @@ export class DriftAnalysisService {
       onProgress?.(`Found ${unusedTokenDrifts.length} unused tokens`);
     }
 
-    // Step 2.3: Cross-source comparison (orphaned-component, orphaned-token, value-divergence)
+    // Step 2.4: Cross-source comparison (orphaned-component, orphaned-token, value-divergence)
     const { classifyComponents, classifyTokens } = await import("./source-classifier.js");
     const canonicalPatterns = this.config.sources.tokens?.canonical ?? [];
     const classifiedComponents = classifyComponents(components);
@@ -385,7 +389,7 @@ export class DriftAnalysisService {
       }
     }
 
-    // Step 2.5: Run Tailwind arbitrary value detection if tailwind is configured
+    // Step 2.5: Run Tailwind arbitrary value detection
     if (this.config.sources.tailwind?.enabled) {
       onProgress?.("Scanning for Tailwind arbitrary values...");
       const tailwindScanner = new TailwindScanner({

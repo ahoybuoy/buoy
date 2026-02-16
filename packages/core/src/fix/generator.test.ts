@@ -5,6 +5,7 @@ import type {
   DesignToken,
   ColorValue,
   SpacingValue,
+  RawValue,
 } from "../models/index.js";
 
 // Helper to create a mock drift signal
@@ -142,6 +143,108 @@ describe("generateFixes", () => {
       expect(fixes).toHaveLength(1);
       // Within 2px should still be high confidence
       expect(["high", "medium"]).toContain(fixes[0]!.confidence);
+    });
+
+    it("matches spacing drift to spacing tokens only, not border tokens", () => {
+      const drifts = [createMockDrift("hardcoded-spacing", "8px")];
+      const borderToken: DesignToken = {
+        id: "token:--border-radius-md",
+        name: "--border-radius-md",
+        category: "border",
+        value: { type: "spacing", value: 8, unit: "px" } as SpacingValue,
+        source: { type: "css", file: "tokens.css", line: 1 },
+        metadata: {},
+      };
+      const spacingToken = createSpacingToken("--spacing-2", 8);
+
+      const fixes = generateFixes(drifts, [borderToken, spacingToken]);
+
+      // Should match spacing token, not border token
+      expect(fixes).toHaveLength(1);
+      expect(fixes[0]!.tokenName).toBe("--spacing-2");
+    });
+
+    it("matches raw token values with rem units", () => {
+      const drifts = [createMockDrift("hardcoded-spacing", "16px")];
+      const rawToken: DesignToken = {
+        id: "token:--spacing-4",
+        name: "--spacing-4",
+        category: "spacing",
+        value: { type: "raw", value: "1rem" } as RawValue,
+        source: { type: "css", file: "tokens.css", line: 1 },
+        metadata: {},
+      };
+
+      const fixes = generateFixes(drifts, [rawToken]);
+
+      expect(fixes).toHaveLength(1);
+      expect(fixes[0]!.confidence).toBe("exact");
+      expect(fixes[0]!.tokenName).toBe("--spacing-4");
+    });
+  });
+
+  describe("radius fixes", () => {
+    it("matches radius drift to border category tokens", () => {
+      const drifts = [createMockDrift("hardcoded-radius", "8px")];
+      const borderToken: DesignToken = {
+        id: "token:--radius-md",
+        name: "--radius-md",
+        category: "border",
+        value: { type: "spacing", value: 8, unit: "px" } as SpacingValue,
+        source: { type: "css", file: "tokens.css", line: 1 },
+        metadata: {},
+      };
+
+      const fixes = generateFixes(drifts, [borderToken]);
+
+      expect(fixes).toHaveLength(1);
+      expect(fixes[0]!.tokenName).toBe("--radius-md");
+    });
+
+    it("does not match radius drift to typography tokens", () => {
+      const drifts = [createMockDrift("hardcoded-radius", "14px")];
+      const typographyToken: DesignToken = {
+        id: "token:--font-size-sm",
+        name: "--font-size-sm",
+        category: "typography",
+        value: { type: "spacing", value: 14, unit: "px" } as SpacingValue,
+        source: { type: "css", file: "tokens.css", line: 1 },
+        metadata: {},
+      };
+
+      const fixes = generateFixes(drifts, [typographyToken]);
+
+      expect(fixes).toHaveLength(0);
+    });
+  });
+
+  describe("font-size fixes", () => {
+    it("matches font-size drift to typography tokens only", () => {
+      const drifts = [createMockDrift("hardcoded-font-size", "14px")];
+      const spacingToken = createSpacingToken("--spacing-3-5", 14);
+      const typographyToken: DesignToken = {
+        id: "token:--font-size-sm",
+        name: "--font-size-sm",
+        category: "typography",
+        value: { type: "spacing", value: 14, unit: "px" } as SpacingValue,
+        source: { type: "css", file: "tokens.css", line: 1 },
+        metadata: {},
+      };
+
+      const fixes = generateFixes(drifts, [spacingToken, typographyToken]);
+
+      // Should match typography token, not spacing token
+      expect(fixes).toHaveLength(1);
+      expect(fixes[0]!.tokenName).toBe("--font-size-sm");
+    });
+
+    it("does not match font-size to spacing tokens", () => {
+      const drifts = [createMockDrift("hardcoded-font-size", "16px")];
+      const spacingToken = createSpacingToken("--spacing-4", 16);
+
+      const fixes = generateFixes(drifts, [spacingToken]);
+
+      expect(fixes).toHaveLength(0);
     });
   });
 
