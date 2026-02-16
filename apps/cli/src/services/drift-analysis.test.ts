@@ -4,6 +4,7 @@ import type { DriftSignal } from "@buoy-design/core";
 
 function createDrift(overrides: {
   type?: string;
+  severity?: "info" | "warning" | "critical";
   entityType?: "component" | "token";
   entityName?: string;
   location?: string;
@@ -13,7 +14,7 @@ function createDrift(overrides: {
   return {
     id: `drift:${overrides.type ?? "hardcoded-value"}:${overrides.entityName ?? "Button"}`,
     type: (overrides.type ?? "hardcoded-value") as DriftSignal["type"],
-    severity: "warning",
+    severity: overrides.severity ?? "warning",
     source: {
       entityType: overrides.entityType ?? "component",
       entityId: overrides.entityName ?? "Button",
@@ -266,5 +267,49 @@ describe("applyIgnoreRules", () => {
     const result = applyIgnoreRules(drifts, rules);
     expect(result).toHaveLength(1);
     expect(result[0].source.location).toBe("src/components/Button.tsx:10");
+  });
+
+  // === SEVERITY FILTERING (new) ===
+
+  it("filters drifts by severity", () => {
+    const drifts = [
+      createDrift({ severity: "info" }),
+      createDrift({ severity: "warning" }),
+      createDrift({ severity: "critical" }),
+    ];
+    const rules = [{ severity: "info" }];
+
+    const result = applyIgnoreRules(drifts, rules);
+    expect(result).toHaveLength(2);
+    expect(result.map(d => d.severity)).toEqual(["warning", "critical"]);
+  });
+
+  it("combines severity + file as AND", () => {
+    const drifts = [
+      createDrift({ severity: "info", location: "src/tests/Button.test.tsx" }),
+      createDrift({ severity: "warning", location: "src/tests/Card.test.tsx" }),
+      createDrift({ severity: "info", location: "src/components/Button.tsx" }),
+    ];
+    const rules = [{ severity: "info", file: "src/tests/**" }];
+
+    const result = applyIgnoreRules(drifts, rules);
+    expect(result).toHaveLength(2);
+    // Keeps the warning in tests and the info NOT in tests
+    expect(result.map(d => d.severity)).toContain("warning");
+    expect(result.map(d => d.source.location)).toContain("src/components/Button.tsx");
+  });
+
+  it("combines severity + type as AND", () => {
+    const drifts = [
+      createDrift({ severity: "info", type: "naming-inconsistency" }),
+      createDrift({ severity: "info", type: "hardcoded-value" }),
+      createDrift({ severity: "warning", type: "naming-inconsistency" }),
+    ];
+    const rules = [{ severity: "info", type: "naming-inconsistency" }];
+
+    const result = applyIgnoreRules(drifts, rules);
+    expect(result).toHaveLength(2);
+    expect(result.map(d => d.type)).toContain("hardcoded-value");
+    expect(result.map(d => d.severity)).toContain("warning");
   });
 });

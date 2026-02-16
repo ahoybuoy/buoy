@@ -137,13 +137,14 @@ function ruleMatches(
   rule: BuoyConfig["drift"]["ignore"][number],
   onWarning?: (message: string) => void,
 ): boolean {
-  const { type, file, component, token, value, reason: _reason } = rule;
+  const { type, severity, file, component, token, value, reason: _reason } = rule;
 
   // Rule with no filter dimensions does nothing
-  if (!type && !file && !component && !token && !value) return false;
+  if (!type && !severity && !file && !component && !token && !value) return false;
 
   // All specified dimensions must match (AND logic)
   if (type && d.type !== type) return false;
+  if (severity && d.severity !== severity) return false;
 
   if (file) {
     // Strip line numbers from location (e.g., "Button.tsx:42" → "Button.tsx")

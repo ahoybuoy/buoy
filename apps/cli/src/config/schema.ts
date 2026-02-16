@@ -125,6 +125,7 @@ export const SourcesConfigSchema = z.object({
 // Drift ignore rule — all filter fields optional, multiple = AND
 export const DriftIgnoreSchema = z.object({
   type: z.string().optional(),
+  severity: z.enum(['info', 'warning', 'critical']).optional(),
   file: z.string().optional(),
   component: z.string().optional(),
   token: z.string().optional(),
