@@ -122,10 +122,13 @@ export const SourcesConfigSchema = z.object({
   tokens: TokenConfigSchema.optional(),
 });
 
-// Drift ignore pattern
+// Drift ignore rule — all filter fields optional, multiple = AND
 export const DriftIgnoreSchema = z.object({
-  type: z.string(),
-  pattern: z.string().optional(),
+  type: z.string().optional(),
+  file: z.string().optional(),
+  component: z.string().optional(),
+  token: z.string().optional(),
+  value: z.string().optional(),
   reason: z.string().optional(),
 });
 

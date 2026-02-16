@@ -23,6 +23,7 @@ import {
   type ClassOccurrence,
 } from "@buoy-design/core";
 import { glob } from "glob";
+import { minimatch } from "minimatch";
 import { readFile } from "fs/promises";
 import { resolve } from "path";
 
@@ -110,33 +111,77 @@ export function sortDriftsBySeverity(drifts: DriftSignal[]): DriftSignal[] {
 }
 
 /**
- * Apply ignore rules from config to filter out matching drifts
+ * Apply ignore rules from config to filter out matching drifts.
+ * Each rule can filter by type, file (glob), component (regex),
+ * token (regex), and/or value (regex). Multiple fields = AND.
+ * Multiple rules = OR (any rule can ignore a drift).
  */
 export function applyIgnoreRules(
   drifts: DriftSignal[],
   ignoreRules: BuoyConfig["drift"]["ignore"],
   onWarning?: (message: string) => void,
 ): DriftSignal[] {
-  let filtered = drifts;
+  if (ignoreRules.length === 0) return drifts;
 
-  for (const rule of ignoreRules) {
-    filtered = filtered.filter((d) => {
-      if (d.type !== rule.type) return true;
-      if (!rule.pattern) return false;
+  return drifts.filter((d) => {
+    // Keep drift if NO rule matches it (rules are OR'd)
+    for (const rule of ignoreRules) {
+      if (ruleMatches(d, rule, onWarning)) return false;
+    }
+    return true;
+  });
+}
 
-      try {
-        const regex = new RegExp(rule.pattern);
-        return !regex.test(d.source.entityName);
-      } catch {
-        onWarning?.(
-          `Invalid regex pattern "${rule.pattern}" in ignore rule, skipping`,
-        );
-        return true;
-      }
-    });
+function ruleMatches(
+  d: DriftSignal,
+  rule: BuoyConfig["drift"]["ignore"][number],
+  onWarning?: (message: string) => void,
+): boolean {
+  const { type, file, component, token, value, reason: _reason } = rule;
+
+  // Rule with no filter dimensions does nothing
+  if (!type && !file && !component && !token && !value) return false;
+
+  // All specified dimensions must match (AND logic)
+  if (type && d.type !== type) return false;
+
+  if (file) {
+    // Strip line numbers from location (e.g., "Button.tsx:42" → "Button.tsx")
+    const loc = d.source.location.replace(/:\d+$/, "");
+    if (!minimatch(loc, file)) return false;
   }
 
-  return filtered;
+  if (component) {
+    if (d.source.entityType !== "component") return false;
+    try {
+      if (!new RegExp(component).test(d.source.entityName)) return false;
+    } catch {
+      onWarning?.(`Invalid regex "${component}" in ignore rule component field, skipping`);
+      return false;
+    }
+  }
+
+  if (token) {
+    if (d.source.entityType !== "token") return false;
+    try {
+      if (!new RegExp(token).test(d.source.entityName)) return false;
+    } catch {
+      onWarning?.(`Invalid regex "${token}" in ignore rule token field, skipping`);
+      return false;
+    }
+  }
+
+  if (value) {
+    const actual = d.details.actual != null ? String(d.details.actual) : "";
+    try {
+      if (!new RegExp(value).test(actual)) return false;
+    } catch {
+      onWarning?.(`Invalid regex "${value}" in ignore rule value field, skipping`);
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
