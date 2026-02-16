@@ -111,6 +111,19 @@ export function sortDriftsBySeverity(drifts: DriftSignal[]): DriftSignal[] {
 }
 
 /**
+ * Shared filter fields used by ignore, promote, and enforce rules.
+ * All fields optional — multiple = AND logic.
+ */
+export interface DriftRuleFilter {
+  type?: string;
+  severity?: string;
+  file?: string;
+  component?: string;
+  token?: string;
+  value?: string;
+}
+
+/**
  * Apply ignore rules from config to filter out matching drifts.
  * Each rule can filter by type, file (glob), component (regex),
  * token (regex), and/or value (regex). Multiple fields = AND.
@@ -132,12 +145,49 @@ export function applyIgnoreRules(
   });
 }
 
+/**
+ * Apply promote rules — elevate severity of matching drifts.
+ * Each rule specifies filter dimensions + `to` (target severity).
+ * Multiple rules = OR (first match wins).
+ */
+export function applyPromoteRules(
+  drifts: DriftSignal[],
+  rules: Array<DriftRuleFilter & { to: Severity; reason: string }>,
+  onWarning?: (message: string) => void,
+): DriftSignal[] {
+  if (rules.length === 0) return drifts;
+
+  return drifts.map((d) => {
+    for (const rule of rules) {
+      if (ruleMatches(d, rule, onWarning)) {
+        return { ...d, severity: rule.to };
+      }
+    }
+    return d;
+  });
+}
+
+/**
+ * Apply enforce rules — always set matching drifts to critical.
+ * Delegates to applyPromoteRules with `to: 'critical'`.
+ */
+export function applyEnforceRules(
+  drifts: DriftSignal[],
+  rules: Array<DriftRuleFilter & { reason: string }>,
+  onWarning?: (message: string) => void,
+): DriftSignal[] {
+  if (rules.length === 0) return drifts;
+
+  const promoteRules = rules.map((rule) => ({ ...rule, to: "critical" as Severity }));
+  return applyPromoteRules(drifts, promoteRules, onWarning);
+}
+
 function ruleMatches(
   d: DriftSignal,
-  rule: BuoyConfig["drift"]["ignore"][number],
+  rule: DriftRuleFilter,
   onWarning?: (message: string) => void,
 ): boolean {
-  const { type, severity, file, component, token, value, reason: _reason } = rule;
+  const { type, severity, file, component, token, value } = rule;
 
   // Rule with no filter dimensions does nothing
   if (!type && !severity && !file && !component && !token && !value) return false;
@@ -532,12 +582,26 @@ export class DriftAnalysisService {
       drifts = filterByType(drifts, filterType);
     }
 
-    // Step 5: Apply ignore rules from config
+    // Step 5: Apply promote rules from config
+    if (this.config.drift.promote && this.config.drift.promote.length > 0) {
+      drifts = applyPromoteRules(drifts, this.config.drift.promote, (msg) => {
+        onProgress?.(`Warning: ${msg}`);
+      });
+    }
+
+    // Step 6: Apply enforce rules from config
+    if (this.config.drift.enforce && this.config.drift.enforce.length > 0) {
+      drifts = applyEnforceRules(drifts, this.config.drift.enforce, (msg) => {
+        onProgress?.(`Warning: ${msg}`);
+      });
+    }
+
+    // Step 7: Apply ignore rules from config
     drifts = applyIgnoreRules(drifts, this.config.drift.ignore, (msg) => {
       onProgress?.(`Warning: ${msg}`);
     });
 
-    // Step 6: Apply ignore list filtering
+    // Step 8: Apply ignore list filtering
     let ignoredCount = 0;
     if (!includeIgnored) {
       const { loadIgnoreList, filterIgnored } =

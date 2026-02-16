@@ -122,15 +122,37 @@ export const SourcesConfigSchema = z.object({
   tokens: TokenConfigSchema.optional(),
 });
 
-// Drift ignore rule — all filter fields optional, multiple = AND
-export const DriftIgnoreSchema = z.object({
+// Shared filter fields for ignore/promote/enforce rules
+const DriftRuleFilterFields = {
   type: z.string().optional(),
   severity: z.enum(['info', 'warning', 'critical']).optional(),
   file: z.string().optional(),
   component: z.string().optional(),
   token: z.string().optional(),
   value: z.string().optional(),
+};
+
+// Drift ignore rule — all filter fields optional, multiple = AND
+export const DriftIgnoreSchema = z.object({
+  ...DriftRuleFilterFields,
   reason: z.string().optional(),
+});
+
+// Drift promote rule — elevate severity of matching drifts
+export const DriftPromoteSchema = z.object({
+  ...DriftRuleFilterFields,
+  to: z.enum(['info', 'warning', 'critical']),
+  reason: z.string(),
+});
+
+// Drift enforce rule — always set matching drifts to critical
+export const DriftEnforceSchema = z.object({
+  type: z.string().optional(),
+  file: z.string().optional(),
+  component: z.string().optional(),
+  token: z.string().optional(),
+  value: z.string().optional(),
+  reason: z.string(),
 });
 
 // Aggregation config for grouping drift signals
@@ -154,6 +176,8 @@ export const DriftTypeConfigSchema = z.object({
 // Drift config
 export const DriftConfigSchema = z.object({
   ignore: z.array(DriftIgnoreSchema).default([]),
+  promote: z.array(DriftPromoteSchema).default([]),
+  enforce: z.array(DriftEnforceSchema).default([]),
   severity: z.record(z.enum(['info', 'warning', 'critical'])).default({}),
   aggregation: AggregationConfigSchema.default({}),
   types: z.record(DriftTypeConfigSchema).default({}),
@@ -187,6 +211,12 @@ export const OutputConfigSchema = z.object({
   colors: z.boolean().default(true),
 });
 
+// Health config — CI gating on health score
+export const HealthConfigSchema = z.object({
+  /** Minimum health score (0-100) — exit code 1 if below */
+  failBelow: z.number().min(0).max(100).optional(),
+});
+
 // Experimental features config (repeatedPatternDetection is now always-on, kept for backwards compat)
 export const ExperimentalConfigSchema = z.object({
   repeatedPatternDetection: z.boolean().optional(),
@@ -198,6 +228,7 @@ export const BuoyConfigSchema = z.object({
   preset: z.enum(['strict', 'relaxed', 'default']).optional(),
   sources: SourcesConfigSchema.default({}),
   drift: DriftConfigSchema.default({}),
+  health: HealthConfigSchema.default({}),
   claude: ClaudeConfigSchema.default({}),
   output: OutputConfigSchema.default({}),
   experimental: ExperimentalConfigSchema.default({}),
@@ -218,6 +249,9 @@ export type TokenConfig = z.infer<typeof TokenConfigSchema>;
 export type TailwindConfig = z.infer<typeof TailwindConfigSchema>;
 export type SourcesConfig = z.infer<typeof SourcesConfigSchema>;
 export type DriftIgnore = z.infer<typeof DriftIgnoreSchema>;
+export type DriftPromote = z.infer<typeof DriftPromoteSchema>;
+export type DriftEnforce = z.infer<typeof DriftEnforceSchema>;
+export type HealthConfig = z.infer<typeof HealthConfigSchema>;
 export type AggregationConfig = z.infer<typeof AggregationConfigSchema>;
 export type DriftTypeConfig = z.infer<typeof DriftTypeConfigSchema>;
 export type DriftConfig = z.infer<typeof DriftConfigSchema>;

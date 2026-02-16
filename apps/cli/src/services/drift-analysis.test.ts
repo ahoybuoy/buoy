@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyIgnoreRules } from "./drift-analysis.js";
+import { applyIgnoreRules, applyPromoteRules, applyEnforceRules } from "./drift-analysis.js";
 import type { DriftSignal } from "@buoy-design/core";
 
 function createDrift(overrides: {
@@ -311,5 +311,139 @@ describe("applyIgnoreRules", () => {
     expect(result).toHaveLength(2);
     expect(result.map(d => d.type)).toContain("hardcoded-value");
     expect(result.map(d => d.severity)).toContain("warning");
+  });
+});
+
+describe("applyPromoteRules", () => {
+  it("promotes matching drifts by file glob", () => {
+    const drifts = [
+      createDrift({ severity: "warning", location: "src/checkout/Cart.tsx" }),
+      createDrift({ severity: "warning", location: "src/components/Button.tsx" }),
+    ];
+    const rules = [{ file: "src/checkout/**", to: "critical" as const, reason: "Checkout is revenue-critical" }];
+
+    const result = applyPromoteRules(drifts, rules);
+    expect(result[0].severity).toBe("critical");
+    expect(result[1].severity).toBe("warning");
+  });
+
+  it("promotes matching drifts by component regex", () => {
+    const drifts = [
+      createDrift({ severity: "info", entityType: "component", entityName: "AccessibleButton" }),
+      createDrift({ severity: "info", entityType: "component", entityName: "Card" }),
+    ];
+    const rules = [{ component: "^Accessible", to: "critical" as const, reason: "A11y components must be strict" }];
+
+    const result = applyPromoteRules(drifts, rules);
+    expect(result[0].severity).toBe("critical");
+    expect(result[1].severity).toBe("info");
+  });
+
+  it("combines type + file as AND for promote", () => {
+    const drifts = [
+      createDrift({ type: "hardcoded-value", severity: "info", location: "src/checkout/Cart.tsx" }),
+      createDrift({ type: "naming-inconsistency", severity: "info", location: "src/checkout/Cart.tsx" }),
+      createDrift({ type: "hardcoded-value", severity: "info", location: "src/other/Foo.tsx" }),
+    ];
+    const rules = [{ type: "hardcoded-value", file: "src/checkout/**", to: "critical" as const, reason: "Checkout hardcoded values are critical" }];
+
+    const result = applyPromoteRules(drifts, rules);
+    expect(result[0].severity).toBe("critical");  // matches both type AND file
+    expect(result[1].severity).toBe("info");       // wrong type
+    expect(result[2].severity).toBe("info");       // wrong file
+  });
+
+  it("applies multiple promote rules (first match wins)", () => {
+    const drifts = [
+      createDrift({ severity: "info", location: "src/checkout/Cart.tsx" }),
+      createDrift({ severity: "info", entityType: "component", entityName: "AccessibleInput" }),
+      createDrift({ severity: "info", location: "src/other/Foo.tsx" }),
+    ];
+    const rules = [
+      { file: "src/checkout/**", to: "critical" as const, reason: "Checkout is revenue-critical" },
+      { component: "^Accessible", to: "warning" as const, reason: "A11y should be warning at minimum" },
+    ];
+
+    const result = applyPromoteRules(drifts, rules);
+    expect(result[0].severity).toBe("critical");
+    expect(result[1].severity).toBe("warning");
+    expect(result[2].severity).toBe("info");
+  });
+
+  it("returns unchanged drifts when rules array is empty", () => {
+    const drifts = [
+      createDrift({ severity: "info" }),
+      createDrift({ severity: "warning" }),
+    ];
+    const result = applyPromoteRules(drifts, []);
+    expect(result[0].severity).toBe("info");
+    expect(result[1].severity).toBe("warning");
+  });
+
+  it("reuses ruleMatches for all filter dimensions", () => {
+    const drifts = [
+      createDrift({ entityType: "token", entityName: "legacy-blue", severity: "info", actual: "#0000ff" }),
+      createDrift({ entityType: "token", entityName: "primary-blue", severity: "info", actual: "#0000ff" }),
+    ];
+    const rules = [{ token: "^legacy-", value: "#0000ff", to: "critical" as const, reason: "Legacy tokens with specific colors are critical" }];
+
+    const result = applyPromoteRules(drifts, rules);
+    expect(result[0].severity).toBe("critical");
+    expect(result[1].severity).toBe("info");
+  });
+});
+
+describe("applyEnforceRules", () => {
+  it("enforces matching drifts to critical", () => {
+    const drifts = [
+      createDrift({ severity: "info", location: "src/components/Button.tsx" }),
+      createDrift({ severity: "warning", location: "src/other/Foo.tsx" }),
+    ];
+    const rules = [{ file: "src/components/**", reason: "Core components must use design tokens" }];
+
+    const result = applyEnforceRules(drifts, rules);
+    expect(result[0].severity).toBe("critical");
+    expect(result[1].severity).toBe("warning");
+  });
+
+  it("combines dimensions as AND for enforce", () => {
+    const drifts = [
+      createDrift({ type: "hardcoded-color" as any, entityType: "component", entityName: "Button", severity: "info" }),
+      createDrift({ type: "hardcoded-value", entityType: "component", entityName: "Button", severity: "info" }),
+      createDrift({ type: "hardcoded-color" as any, entityType: "component", entityName: "Card", severity: "info" }),
+    ];
+    const rules = [{ component: "^Button", type: "hardcoded-color", reason: "Buttons must use color tokens" }];
+
+    const result = applyEnforceRules(drifts, rules);
+    expect(result[0].severity).toBe("critical");   // matches both
+    expect(result[1].severity).toBe("info");        // wrong type
+    expect(result[2].severity).toBe("info");        // wrong component
+  });
+
+  it("applies multiple enforce rules (OR)", () => {
+    const drifts = [
+      createDrift({ severity: "info", location: "src/components/Button.tsx" }),
+      createDrift({ severity: "info", entityType: "component", entityName: "AccessibleInput", location: "src/forms/AccessibleInput.tsx" }),
+      createDrift({ severity: "info", location: "src/other/Foo.tsx" }),
+    ];
+    const rules = [
+      { file: "src/components/**", reason: "Core components" },
+      { component: "^Accessible", reason: "A11y must be strict" },
+    ];
+
+    const result = applyEnforceRules(drifts, rules);
+    expect(result[0].severity).toBe("critical");
+    expect(result[1].severity).toBe("critical");
+    expect(result[2].severity).toBe("info");
+  });
+
+  it("returns unchanged drifts when rules array is empty", () => {
+    const drifts = [
+      createDrift({ severity: "info" }),
+      createDrift({ severity: "warning" }),
+    ];
+    const result = applyEnforceRules(drifts, []);
+    expect(result[0].severity).toBe("info");
+    expect(result[1].severity).toBe("warning");
   });
 });

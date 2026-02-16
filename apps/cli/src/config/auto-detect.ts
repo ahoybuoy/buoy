@@ -286,6 +286,8 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
     sources: {},
     drift: {
       ignore: [],
+      promote: [],
+      enforce: [],
       severity: {},
       aggregation: {
         strategies: ['value', 'suggestion', 'path', 'entity'],
@@ -294,6 +296,7 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
       },
       types: {},
     },
+    health: {},
     claude: { enabled: false, model: 'claude-sonnet-4-20250514' },
     output: { format: 'table', colors: true },
     experimental: {},

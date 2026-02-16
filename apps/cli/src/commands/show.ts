@@ -1731,7 +1731,7 @@ function getSummary(drifts: DriftSignal[]): {
 /**
  * Gather all metrics needed for the 4-pillar health score.
  */
-async function gatherHealthMetrics(
+export async function gatherHealthMetrics(
   config: BuoyConfig,
   spin: { text: string },
   useCache: boolean,

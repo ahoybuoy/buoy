@@ -19,6 +19,8 @@ import {
   type ScanReportInput,
 } from "../cloud/index.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
+import { calculateHealthScorePillar } from "@buoy-design/core";
+import { gatherHealthMetrics } from "./show.js";
 
 export type OutputFormat = "text" | "json" | "ai-feedback";
 
@@ -281,10 +283,27 @@ export function createCheckCommand(): Command {
 
         // Determine exit code using shared utility
         const failOn = options.failOn as Severity | "none";
-        const exitCode = hasDriftsAboveThreshold(drifts, failOn) ? 1 : 0;
+        let exitCode = hasDriftsAboveThreshold(drifts, failOn) ? 1 : 0;
 
         // Summary counts using shared utility
         const summary = calculateDriftSummary(drifts);
+
+        // Health threshold check (health.failBelow)
+        let healthScore: number | null = null;
+        let healthFailed = false;
+        const failBelow = config.health?.failBelow;
+        if (failBelow != null) {
+          log("Calculating health score...");
+          const dummySpinner = { text: "" };
+          const healthMetrics = await gatherHealthMetrics(config, dummySpinner, true);
+          const healthResult = calculateHealthScorePillar(healthMetrics);
+          healthScore = healthResult.score;
+
+          if (healthScore !== null && healthScore < failBelow) {
+            healthFailed = true;
+            exitCode = 1;
+          }
+        }
 
         // Cloud reporting if --report flag is used
         if (options.report) {
@@ -394,24 +413,28 @@ export function createCheckCommand(): Command {
         }
 
         if (format === "json") {
-          console.log(
-            JSON.stringify(
-              {
-                passed: exitCode === 0,
-                drifts: drifts.map((d) => ({
-                  id: d.id,
-                  type: d.type,
-                  severity: d.severity,
-                  message: d.message,
-                  source: d.source,
-                  details: d.details,
-                })),
-                summary,
-              },
-              null,
-              2,
-            ),
-          );
+          const jsonOutput: Record<string, unknown> = {
+            passed: exitCode === 0,
+            drifts: drifts.map((d) => ({
+              id: d.id,
+              type: d.type,
+              severity: d.severity,
+              message: d.message,
+              source: d.source,
+              details: d.details,
+            })),
+            summary,
+          };
+
+          if (failBelow != null) {
+            jsonOutput.health = {
+              score: healthScore,
+              threshold: failBelow,
+              passed: !healthFailed,
+            };
+          }
+
+          console.log(JSON.stringify(jsonOutput, null, 2));
           process.exit(exitCode);
           return;
         }
@@ -457,6 +480,16 @@ export function createCheckCommand(): Command {
 
             console.log("");
             console.log("Run `buoy show drift` for details");
+          }
+
+          // Show health score when threshold is configured
+          if (failBelow != null && healthScore !== null) {
+            console.log("");
+            if (healthFailed) {
+              console.log(`x Health score ${healthScore}/100 is below threshold ${failBelow}`);
+            } else {
+              console.log(`+ Health score ${healthScore}/100 (threshold: ${failBelow})`);
+            }
           }
 
           // Show upgrade hint when check fails
