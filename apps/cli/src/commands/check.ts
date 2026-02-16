@@ -269,7 +269,7 @@ export function createCheckCommand(): Command {
         const service = new DriftAnalysisService(config);
         const result = await service.analyze({
           onProgress: log,
-          includeBaseline: false,
+          includeIgnored: false,
         });
 
         let drifts = result.drifts;

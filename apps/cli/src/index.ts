@@ -23,7 +23,7 @@ export function createCli(): Command {
       `
 Command Groups:
   View               show (components, tokens, drift, health, history, config, skills, agents, context, hooks, commands, graph, plugins, all)
-  Drift Actions      drift (scan, check, fix, baseline)
+  Drift Actions      drift (scan, check, fix, ignore)
   Setup              dock (config, skills, agents, context, hooks, commands, plugins, tokens, graph)
   Cloud              ahoy (login, logout, status, github, gitlab, billing, plans)
 

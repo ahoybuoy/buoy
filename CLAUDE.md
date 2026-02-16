@@ -87,11 +87,11 @@ buoy
 │   ├── scan                # Scan codebase for components/tokens
 │   ├── check               # Pre-commit drift check
 │   ├── fix                 # Suggest/apply fixes
-│   └── baseline            # Accept existing drift
-│       ├── create          # Create baseline (requires --reason)
-│       ├── show            # View current baseline
-│       ├── update          # Add new drift (requires --reason)
-│       └── clear           # Remove baseline
+│   └── ignore              # Ignore existing drift
+│       ├── all             # Ignore all current drift (requires --reason)
+│       ├── show            # View ignored drift signals
+│       ├── add             # Add new drift to ignore list (requires --reason)
+│       └── clear           # Remove ignore list
 ├── begin                   # Interactive wizard
 ├── dock                    # Dock tools into your project
 │   ├── config              # Create .buoy.yaml
@@ -139,8 +139,8 @@ All `show` subcommands output JSON by default.
 | `buoy dock agents` | Set up AI agents with design system |
 | `buoy dock hooks` | Set up git hooks |
 | `buoy drift check` | Fast pre-commit hook drift check |
-| `buoy drift baseline create -r "reason"` | Accept existing drift (reason required) |
-| `buoy drift baseline update -r "reason"` | Add new drift to baseline (reason required) |
+| `buoy drift ignore all -r "reason"` | Ignore all existing drift (reason required) |
+| `buoy drift ignore add -r "reason"` | Add new drift to ignore list (reason required) |
 | `buoy drift fix` | Suggest and apply fixes for drift issues |
 
 ### Zero-Config Mode

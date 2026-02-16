@@ -21,8 +21,8 @@ inputs:
     description: 'Fail the workflow if drift is detected'
     required: false
     default: 'false'
-  baseline:
-    description: 'Path to baseline file for tracking drift'
+  ignore-file:
+    description: 'Path to ignore file for tracking drift'
     required: false
     default: ''
   config:

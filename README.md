@@ -51,11 +51,11 @@ buoy
 │   ├── scan                # Scan codebase for components/tokens
 │   ├── check               # Pre-commit drift check
 │   ├── fix                 # Suggest/apply fixes
-│   └── baseline            # Accept existing drift
-│       ├── create          # Create baseline (requires --reason)
-│       ├── show            # View current baseline
-│       ├── update          # Add new drift (requires --reason)
-│       └── clear           # Remove baseline
+│   └── ignore              # Ignore existing drift
+│       ├── all             # Ignore all current drift (requires --reason)
+│       ├── show            # View ignored drift signals
+│       ├── add             # Add new drift to ignore list (requires --reason)
+│       └── clear           # Remove ignore list
 ├── begin                   # Interactive wizard
 ├── dock                    # Dock tools into your project
 │   ├── config              # Create .buoy.yaml
@@ -190,18 +190,18 @@ buoy drift fix --dry-run          # Preview changes
 buoy drift fix --auto             # Auto-apply safe fixes
 ```
 
-### Accept Existing Drift
+### Ignore Existing Drift
 
-For brownfield projects, baseline existing issues and only flag new ones:
+For brownfield projects, ignore existing issues and only flag new ones:
 
 ```bash
-buoy drift baseline create -r "Legacy code before design system"  # Accept current drift with reason
-buoy drift baseline update -r "Third-party components"            # Add new drift to baseline
-buoy drift baseline show                                          # View baseline with reasons
-buoy drift check                                                  # Only fails on new drift
+buoy drift ignore all -r "Legacy code before design system"     # Ignore all current drift with reason
+buoy drift ignore add -r "Third-party components"               # Add new drift to ignore list
+buoy drift ignore show                                          # View ignored drift with reasons
+buoy drift check                                                # Only fails on new drift
 ```
 
-A reason is required when creating or updating baselines to maintain accountability.
+A reason is required when ignoring drift to maintain accountability.
 
 ## CI Integration
 

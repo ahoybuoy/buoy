@@ -17,23 +17,23 @@ import {
 import { formatJson } from "../output/formatters.js";
 import type { DriftSignal } from "@buoy-design/core";
 
-const BASELINE_DIR = ".buoy";
-const BASELINE_FILE = "baseline.json";
+const IGNORE_DIR = ".buoy";
+const IGNORE_FILE = "ignore.json";
 
-export interface BaselineEntry {
+export interface IgnoreEntry {
   reason: string;
   createdAt: string;
   createdBy?: string;
 }
 
-export interface Baseline {
+export interface IgnoreList {
   version: 1;
   createdAt: string;
   updatedAt: string;
   reason: string;
   driftIds: string[];
   /** Per-drift reasons (drift ID -> entry) */
-  entries?: Record<string, BaselineEntry>;
+  entries?: Record<string, IgnoreEntry>;
   summary: {
     critical: number;
     warning: number;
@@ -43,59 +43,59 @@ export interface Baseline {
 }
 
 /**
- * Get the path to the baseline file
+ * Get the path to the ignore file
  */
-export function getBaselinePath(projectRoot: string = process.cwd()): string {
-  return join(projectRoot, BASELINE_DIR, BASELINE_FILE);
+export function getIgnorePath(projectRoot: string = process.cwd()): string {
+  return join(projectRoot, IGNORE_DIR, IGNORE_FILE);
 }
 
 /**
- * Load existing baseline or return null if none exists
+ * Load existing ignore list or return null if none exists
  */
-export async function loadBaseline(
+export async function loadIgnoreList(
   projectRoot: string = process.cwd(),
-): Promise<Baseline | null> {
-  const baselinePath = getBaselinePath(projectRoot);
+): Promise<IgnoreList | null> {
+  const ignorePath = getIgnorePath(projectRoot);
 
-  if (!existsSync(baselinePath)) {
+  if (!existsSync(ignorePath)) {
     return null;
   }
 
   try {
-    const content = await readFile(baselinePath, "utf-8");
-    const baseline = JSON.parse(content) as Baseline;
-    return baseline;
+    const content = await readFile(ignorePath, "utf-8");
+    const ignoreList = JSON.parse(content) as IgnoreList;
+    return ignoreList;
   } catch {
     return null;
   }
 }
 
 /**
- * Save baseline to disk
+ * Save ignore list to disk
  */
-export async function saveBaseline(
-  baseline: Baseline,
+export async function saveIgnoreList(
+  ignoreList: IgnoreList,
   projectRoot: string = process.cwd(),
 ): Promise<void> {
-  const baselinePath = getBaselinePath(projectRoot);
-  const baselineDir = dirname(baselinePath);
+  const ignorePath = getIgnorePath(projectRoot);
+  const ignoreDir = dirname(ignorePath);
 
   // Ensure directory exists
-  if (!existsSync(baselineDir)) {
-    await mkdir(baselineDir, { recursive: true });
+  if (!existsSync(ignoreDir)) {
+    await mkdir(ignoreDir, { recursive: true });
   }
 
-  await writeFile(baselinePath, JSON.stringify(baseline, null, 2), "utf-8");
+  await writeFile(ignorePath, JSON.stringify(ignoreList, null, 2), "utf-8");
 }
 
 /**
- * Create baseline from current drift signals
+ * Create ignore list from current drift signals
  */
-export function createBaseline(drifts: DriftSignal[], reason: string): Baseline {
+export function createIgnoreList(drifts: DriftSignal[], reason: string): IgnoreList {
   const now = new Date().toISOString();
 
   // Create per-drift entries with the reason
-  const entries: Record<string, BaselineEntry> = {};
+  const entries: Record<string, IgnoreEntry> = {};
   for (const drift of drifts) {
     entries[drift.id] = {
       reason,
@@ -120,42 +120,42 @@ export function createBaseline(drifts: DriftSignal[], reason: string): Baseline 
 }
 
 /**
- * Filter out baselined drifts from results
+ * Filter out ignored drifts from results
  */
-export function filterBaseline(
+export function filterIgnored(
   drifts: DriftSignal[],
-  baseline: Baseline | null,
+  ignoreList: IgnoreList | null,
 ): {
   newDrifts: DriftSignal[];
-  baselinedCount: number;
+  ignoredCount: number;
 } {
-  if (!baseline) {
-    return { newDrifts: drifts, baselinedCount: 0 };
+  if (!ignoreList) {
+    return { newDrifts: drifts, ignoredCount: 0 };
   }
 
-  const baselineSet = new Set(baseline.driftIds);
-  const newDrifts = drifts.filter((d) => !baselineSet.has(d.id));
-  const baselinedCount = drifts.length - newDrifts.length;
+  const ignoreSet = new Set(ignoreList.driftIds);
+  const newDrifts = drifts.filter((d) => !ignoreSet.has(d.id));
+  const ignoredCount = drifts.length - newDrifts.length;
 
-  return { newDrifts, baselinedCount };
+  return { newDrifts, ignoredCount };
 }
 
-export function createBaselineCommand(): Command {
-  const cmd = new Command("baseline").description(
-    "Manage drift baseline for existing projects",
+export function createIgnoreCommand(): Command {
+  const cmd = new Command("ignore").description(
+    "Manage ignored drift signals for existing projects",
   );
 
-  // baseline create
+  // ignore all
   cmd
-    .command("create")
+    .command("all")
     .description(
-      "Create baseline from current drift signals (hides existing issues)",
+      "Ignore all current drift signals (hides existing issues)",
     )
     .option("--json", "Output as JSON")
-    .option("-f, --force", "Overwrite existing baseline without prompting")
+    .option("-f, --force", "Overwrite existing ignore list without prompting")
     .requiredOption(
       "-r, --reason <reason>",
-      "Reason for baselining these drift signals (required)",
+      "Reason for ignoring these drift signals (required)",
     )
     .action(async (options) => {
       if (options.json) {
@@ -166,15 +166,15 @@ export function createBaselineCommand(): Command {
       try {
         const { config } = await loadConfig();
 
-        // Check for existing baseline
-        const existingBaseline = await loadBaseline();
-        if (existingBaseline && !options.force) {
+        // Check for existing ignore list
+        const existing = await loadIgnoreList();
+        if (existing && !options.force) {
           spin.stop();
           warning(
-            `Baseline already exists with ${existingBaseline.summary.total} drifts.`,
+            `Ignore list already exists with ${existing.summary.total} drifts.`,
           );
           info(
-            'Use --force to overwrite, or "buoy drift baseline update" to add new drifts.',
+            'Use --force to overwrite, or "buoy drift ignore add" to add new drift.',
           );
           return;
         }
@@ -217,9 +217,9 @@ export function createBaselineCommand(): Command {
 
         const drifts = diffResult.drifts;
 
-        // Create and save baseline
-        const baseline = createBaseline(drifts, options.reason);
-        await saveBaseline(baseline);
+        // Create and save ignore list
+        const ignoreList = createIgnoreList(drifts, options.reason);
+        await saveIgnoreList(ignoreList);
 
         spin.stop();
 
@@ -227,23 +227,23 @@ export function createBaselineCommand(): Command {
           console.log(
             formatJson({
               action: "created",
-              baseline,
+              ignoreList,
             }),
           );
           return;
         }
 
-        header("Baseline Created");
+        header("Ignore List Created");
         newline();
         keyValue("Reason", options.reason);
-        keyValue("Total drifts baselined", String(baseline.summary.total));
-        keyValue("Critical", String(baseline.summary.critical));
-        keyValue("Warning", String(baseline.summary.warning));
-        keyValue("Info", String(baseline.summary.info));
+        keyValue("Total drifts ignored", String(ignoreList.summary.total));
+        keyValue("Critical", String(ignoreList.summary.critical));
+        keyValue("Warning", String(ignoreList.summary.warning));
+        keyValue("Info", String(ignoreList.summary.info));
         newline();
-        success(`Baseline saved to ${BASELINE_DIR}/${BASELINE_FILE}`);
+        success(`Ignore list saved to ${IGNORE_DIR}/${IGNORE_FILE}`);
         info(
-          "Future drift checks will only show NEW issues not in this baseline.",
+          "Future drift checks will only show NEW issues not in this ignore list.",
         );
         info(
           "Tip: Add .buoy/ to .gitignore or commit it to share with your team.",
@@ -251,15 +251,15 @@ export function createBaselineCommand(): Command {
       } catch (err) {
         spin.stop();
         const message = err instanceof Error ? err.message : String(err);
-        error(`Failed to create baseline: ${message}`);
+        error(`Failed to create ignore list: ${message}`);
         process.exit(1);
       }
     });
 
-  // baseline show
+  // ignore show
   cmd
     .command("show")
-    .description("Show current baseline status")
+    .description("Show currently ignored drift signals")
     .option("--json", "Output as JSON")
     .action(async (options) => {
       if (options.json) {
@@ -267,47 +267,47 @@ export function createBaselineCommand(): Command {
       }
 
       try {
-        const baseline = await loadBaseline();
+        const ignoreList = await loadIgnoreList();
 
         if (options.json) {
-          console.log(formatJson({ baseline }));
+          console.log(formatJson({ ignoreList }));
           return;
         }
 
-        if (!baseline) {
-          info("No baseline exists for this project.");
-          info('Run "buoy drift baseline create" to establish a baseline.');
+        if (!ignoreList) {
+          info("No ignored drifts for this project.");
+          info('Run "buoy drift ignore all" to ignore existing drift.');
           return;
         }
 
-        header("Current Baseline");
+        header("Ignored Drift Signals");
         newline();
-        if (baseline.reason) {
-          keyValue("Reason", baseline.reason);
+        if (ignoreList.reason) {
+          keyValue("Reason", ignoreList.reason);
         }
-        keyValue("Created", baseline.createdAt);
-        keyValue("Updated", baseline.updatedAt);
-        keyValue("Total drifts", String(baseline.summary.total));
-        keyValue("Critical", String(baseline.summary.critical));
-        keyValue("Warning", String(baseline.summary.warning));
-        keyValue("Info", String(baseline.summary.info));
+        keyValue("Created", ignoreList.createdAt);
+        keyValue("Updated", ignoreList.updatedAt);
+        keyValue("Total drifts", String(ignoreList.summary.total));
+        keyValue("Critical", String(ignoreList.summary.critical));
+        keyValue("Warning", String(ignoreList.summary.warning));
+        keyValue("Info", String(ignoreList.summary.info));
         newline();
-        info(`Baseline file: ${getBaselinePath()}`);
+        info(`Ignore file: ${getIgnorePath()}`);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        error(`Failed to read baseline: ${message}`);
+        error(`Failed to read ignore list: ${message}`);
         process.exit(1);
       }
     });
 
-  // baseline update
+  // ignore add
   cmd
-    .command("update")
-    .description("Update baseline to include current drift signals")
+    .command("add")
+    .description("Add current drift signals to the ignore list")
     .option("--json", "Output as JSON")
     .requiredOption(
       "-r, --reason <reason>",
-      "Reason for adding these drift signals to baseline (required)",
+      "Reason for ignoring these drift signals (required)",
     )
     .action(async (options) => {
       if (options.json) {
@@ -317,7 +317,7 @@ export function createBaselineCommand(): Command {
 
       try {
         const { config } = await loadConfig();
-        const existingBaseline = await loadBaseline();
+        const existing = await loadIgnoreList();
 
         spin.text = "Scanning for current drift...";
 
@@ -357,62 +357,62 @@ export function createBaselineCommand(): Command {
 
         const drifts = diffResult.drifts;
 
-        // Create updated baseline, preserving existing entries
-        const baseline = createBaseline(drifts, options.reason);
-        if (existingBaseline) {
-          baseline.createdAt = existingBaseline.createdAt;
+        // Create updated ignore list, preserving existing entries
+        const ignoreList = createIgnoreList(drifts, options.reason);
+        if (existing) {
+          ignoreList.createdAt = existing.createdAt;
           // Preserve existing per-drift entries, only add new ones with the new reason
-          if (existingBaseline.entries) {
-            for (const [id, entry] of Object.entries(existingBaseline.entries)) {
-              if (baseline.entries && !baseline.entries[id]) {
+          if (existing.entries) {
+            for (const [id, entry] of Object.entries(existing.entries)) {
+              if (ignoreList.entries && !ignoreList.entries[id]) {
                 // This drift was removed, don't preserve
-              } else if (baseline.entries && existingBaseline.driftIds.includes(id)) {
+              } else if (ignoreList.entries && existing.driftIds.includes(id)) {
                 // Preserve original entry for existing drifts
-                baseline.entries[id] = entry;
+                ignoreList.entries[id] = entry;
               }
             }
           }
         }
-        await saveBaseline(baseline);
+        await saveIgnoreList(ignoreList);
 
         spin.stop();
 
-        const added = existingBaseline
-          ? baseline.summary.total - existingBaseline.summary.total
-          : baseline.summary.total;
+        const added = existing
+          ? ignoreList.summary.total - existing.summary.total
+          : ignoreList.summary.total;
 
         if (options.json) {
           console.log(
             formatJson({
               action: "updated",
-              baseline,
+              ignoreList,
               added,
             }),
           );
           return;
         }
 
-        header("Baseline Updated");
+        header("Ignore List Updated");
         newline();
         keyValue("Reason for new entries", options.reason);
-        keyValue("Total drifts", String(baseline.summary.total));
-        if (existingBaseline) {
-          keyValue("Added to baseline", String(Math.max(0, added)));
+        keyValue("Total drifts", String(ignoreList.summary.total));
+        if (existing) {
+          keyValue("Added to ignore list", String(Math.max(0, added)));
         }
         newline();
-        success("Baseline updated successfully.");
+        success("Ignore list updated successfully.");
       } catch (err) {
         spin.stop();
         const message = err instanceof Error ? err.message : String(err);
-        error(`Failed to update baseline: ${message}`);
+        error(`Failed to update ignore list: ${message}`);
         process.exit(1);
       }
     });
 
-  // baseline clear
+  // ignore clear
   cmd
     .command("clear")
-    .description("Remove baseline (show all drift signals again)")
+    .description("Remove ignore list (show all drift signals again)")
     .option("--json", "Output as JSON")
     .action(async (options) => {
       if (options.json) {
@@ -421,28 +421,28 @@ export function createBaselineCommand(): Command {
 
       try {
         const { unlink } = await import("fs/promises");
-        const baselinePath = getBaselinePath();
+        const ignorePath = getIgnorePath();
 
-        if (!existsSync(baselinePath)) {
+        if (!existsSync(ignorePath)) {
           if (options.json) {
             console.log(formatJson({ action: "cleared", existed: false }));
             return;
           }
-          info("No baseline exists.");
+          info("No ignore list exists.");
           return;
         }
 
-        await unlink(baselinePath);
+        await unlink(ignorePath);
 
         if (options.json) {
           console.log(formatJson({ action: "cleared", existed: true }));
           return;
         }
 
-        success("Baseline cleared. All drift signals will now be shown.");
+        success("Ignore list cleared. All drift signals will now be shown.");
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        error(`Failed to clear baseline: ${message}`);
+        error(`Failed to clear ignore list: ${message}`);
         process.exit(1);
       }
     });

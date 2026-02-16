@@ -1,6 +1,6 @@
 {
   "name": "ahoybuoy",
-  "version": "0.3.19",
+  "version": "0.3.20",
   "description": "Catch design drift before it ships",
   "type": "module",
   "license": "MIT",

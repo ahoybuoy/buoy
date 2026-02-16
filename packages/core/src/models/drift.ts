@@ -147,7 +147,7 @@ export function createDriftId(
 /**
  * Create a content-based drift ID that's stable across refactors.
  * Uses the drift content (type, entity name, values) rather than file paths.
- * This means renaming a file won't break the baseline.
+ * This means renaming a file won't break the ignore list.
  */
 export function createStableDriftId(
   type: DriftType,

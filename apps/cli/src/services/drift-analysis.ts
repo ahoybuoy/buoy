@@ -6,7 +6,7 @@
  * 1. Scanning components via ScanOrchestrator
  * 2. Running SemanticDiffEngine analysis
  * 3. Applying ignore rules from config
- * 4. Filtering against baseline
+ * 4. Filtering against ignore list
  */
 
 import type { DriftSignal, Severity, Component } from "@buoy-design/core";
@@ -29,8 +29,8 @@ import { resolve } from "path";
 export interface DriftAnalysisOptions {
   /** Callback for progress updates */
   onProgress?: (message: string) => void;
-  /** Include baselined drifts (default: false) */
-  includeBaseline?: boolean;
+  /** Include ignored drifts (default: false) */
+  includeIgnored?: boolean;
   /** Filter by minimum severity */
   minSeverity?: Severity;
   /** Filter by drift type */
@@ -50,8 +50,8 @@ export interface DriftAnalysisResult {
   drifts: DriftSignal[];
   /** Components that were scanned */
   components: Component[];
-  /** Number of drifts filtered out by baseline */
-  baselinedCount: number;
+  /** Number of drifts filtered out by ignore list */
+  ignoredCount: number;
   /** Summary counts by severity */
   summary: {
     total: number;
@@ -216,7 +216,7 @@ export class DriftAnalysisService {
   ): Promise<DriftAnalysisResult> {
     const {
       onProgress,
-      includeBaseline,
+      includeIgnored,
       minSeverity,
       filterType,
       cache,
@@ -491,25 +491,25 @@ export class DriftAnalysisService {
       onProgress?.(`Warning: ${msg}`);
     });
 
-    // Step 6: Apply baseline filtering
-    let baselinedCount = 0;
-    if (!includeBaseline) {
-      const { loadBaseline, filterBaseline } =
-        await import("../commands/baseline.js");
-      const baseline = await loadBaseline();
-      const filtered = filterBaseline(drifts, baseline);
+    // Step 6: Apply ignore list filtering
+    let ignoredCount = 0;
+    if (!includeIgnored) {
+      const { loadIgnoreList, filterIgnored } =
+        await import("../commands/ignore.js");
+      const ignoreList = await loadIgnoreList();
+      const filtered = filterIgnored(drifts, ignoreList);
       drifts = filtered.newDrifts;
-      baselinedCount = filtered.baselinedCount;
+      ignoredCount = filtered.ignoredCount;
 
-      if (baselinedCount > 0) {
-        onProgress?.(`Filtered out ${baselinedCount} baselined drift signals.`);
+      if (ignoredCount > 0) {
+        onProgress?.(`Filtered out ${ignoredCount} ignored drift signals.`);
       }
     }
 
     return {
       drifts,
       components,
-      baselinedCount,
+      ignoredCount,
       summary: calculateDriftSummary(drifts),
     };
   }

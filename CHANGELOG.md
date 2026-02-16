@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.20] - 2026-02-15
+
+### Breaking Changes
+- **`buoy drift baseline` renamed to `buoy drift ignore`** — clearer intent, matches `.gitignore` convention
+  - `baseline create` → `ignore all`
+  - `baseline update` → `ignore add`
+  - `baseline show` → `ignore show`
+  - `baseline clear` → `ignore clear`
+  - `.buoy/baseline.json` → `.buoy/ignore.json`
+  - `--include-baseline` flag → `--include-ignored`
+
+### Fixed
+- Fix generator: radius drift now matches `border` category tokens (was incorrectly matching `spacing`)
+- Fix generator: font-size drift matches `typography` tokens only (no longer falls through to `spacing`)
+- Fix confidence: raw token values (e.g., `1rem`) now parsed and matched to px drift signals
+- Token suggestions now appear in `buoy show drift` output (previously only in `buoy drift fix`)
+
 ## [0.3.18] - 2026-02-15
 
 ### Fixed

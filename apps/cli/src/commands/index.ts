@@ -6,10 +6,10 @@ export { createAhoyCommand } from "./ahoy.js";
 // Re-exports for internal use (subcommands within groups)
 export { createCheckCommand } from "./check.js";
 export {
-  createBaselineCommand,
-  loadBaseline,
-  filterBaseline,
-} from "./baseline.js";
+  createIgnoreCommand,
+  loadIgnoreList,
+  filterIgnored,
+} from "./ignore.js";
 export { createFixCommand } from "./fix.js";
 export { createTokensCommand } from "./tokens.js";
 export { createScanCommand } from "./scan.js";

@@ -298,7 +298,7 @@ export function createShowCommand(): Command {
     .addOption(new Option("-S, --severity <level>", "Filter by minimum severity").choices(["info", "warning", "critical"]))
     .option("-t, --type <type>", "Filter by drift type")
     .option("-v, --verbose", "Verbose output with full details")
-    .option("--include-baseline", "Include baselined drifts (show all)")
+    .option("--include-ignored", "Include ignored drifts (show all)")
     .option("--clear-cache", "Clear cache before scanning")
     .action(async (options, command) => {
       const parentOpts = command.parent?.opts() || {};
@@ -320,7 +320,7 @@ export function createShowCommand(): Command {
             const service = new DriftAnalysisService(config);
             return service.analyze({
               onProgress: (msg) => { spin.text = msg; },
-              includeBaseline: options.includeBaseline ?? false,
+              includeIgnored: options.includeIgnored ?? false,
               minSeverity: options.severity as Severity | undefined,
               filterType: options.type,
               cache,
@@ -334,7 +334,7 @@ export function createShowCommand(): Command {
 
         const drifts = result.drifts;
         const sourceComponents = result.components;
-        const baselinedCount = result.baselinedCount;
+        const ignoredCount = result.ignoredCount;
 
         spin.stop();
 
@@ -420,7 +420,7 @@ export function createShowCommand(): Command {
                 info: result.drifts.filter((d: DriftSignal) => d.severity === "info").length,
               },
             },
-            baselinedCount,
+            ignoredCount,
           };
 
           console.log(JSON.stringify(output, null, 2));
@@ -440,8 +440,8 @@ export function createShowCommand(): Command {
           keyValue("Critical", String(summary.critical));
           keyValue("Warning", String(summary.warning));
           keyValue("Info", String(summary.info));
-          if (baselinedCount > 0) {
-            keyValue("Baselined (hidden)", String(baselinedCount));
+          if (ignoredCount > 0) {
+            keyValue("Ignored (hidden)", String(ignoredCount));
           }
           newline();
           console.log(formatDriftList(drifts));
@@ -1443,7 +1443,7 @@ export function createShowCommand(): Command {
             const service = new DriftAnalysisService(config);
             const driftResult = await service.analyze({
               onProgress: (msg) => { spin.text = msg; },
-              includeBaseline: false,
+              includeIgnored: false,
               cache,
             });
 
@@ -1753,7 +1753,7 @@ async function gatherHealthMetrics(
       const service = new DriftAnalysisService(config);
       const driftResult = await service.analyze({
         onProgress: (msg) => { spin.text = msg; },
-        includeBaseline: false,
+        includeIgnored: false,
         cache,
       });
 
