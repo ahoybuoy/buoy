@@ -434,6 +434,22 @@ export class DriftAnalysisService {
     const componentNameSet = new Set(componentNames);
     await this.scanNuxtAutoImports(componentUsageMap, componentNameSet);
 
+    // Fix 10: Count test file imports as usage
+    // Components imported in .test.tsx/.spec.tsx are actively maintained
+    await this.scanTestFileUsages(componentUsageMap);
+
+    // Fix 11: Count HOC/wrapper patterns as usage
+    // forwardRef(Component), memo(Component), styled(Component), withXxx(Component)
+    await this.scanHOCWrapperUsages(componentUsageMap);
+
+    // Fix 12: Component library detection — if package.json exports components,
+    // all exported components are the product's public API
+    await this.scanPackageExports(componentUsageMap);
+
+    // Fix 13: Detect components passed as values (props, object properties, arguments)
+    // e.g. transition={DialogTransition} or { toolbarAccount: AccountPopover }
+    await this.scanComponentAsValueUsages(componentUsageMap, componentNames);
+
     // Fix 1: Exempt entry point components (pages, routes, layouts)
     // These are rendered by the framework router, not imported by other components
     const nonEntryPointComponents = components.filter(c => !isEntryPointComponent(c));
@@ -642,7 +658,7 @@ export class DriftAnalysisService {
       maxDepth: 6,
     });
 
-    for (const barrelFile of barrelFiles.slice(0, 50)) {
+    for (const barrelFile of barrelFiles.slice(0, 200)) {
       try {
         const content = await readFile(resolve(cwd, barrelFile), 'utf-8');
 
@@ -960,6 +976,254 @@ export class DriftAnalysisService {
     for (const name of componentNames) {
       // Mark as used (they're available globally via auto-import)
       componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+    }
+  }
+
+  /**
+   * Scan test files for component imports.
+   * Components imported in .test.tsx/.spec.tsx are actively maintained/tested.
+   */
+  private async scanTestFileUsages(componentUsageMap: Map<string, number>): Promise<void> {
+    const cwd = process.cwd();
+    const testFiles = await glob('**/*.{test,spec}.{ts,tsx,js,jsx}', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      nodir: true,
+      maxDepth: 8,
+    });
+
+    for (const file of testFiles.slice(0, 300)) {
+      try {
+        const content = await readFile(resolve(cwd, file), 'utf-8');
+
+        // Match named imports: import { Button, Card } from '...'
+        const importPattern = /import\s*\{\s*([^}]+)\s*\}\s*from/g;
+        let match: RegExpExecArray | null;
+        while ((match = importPattern.exec(content)) !== null) {
+          const names = match[1]!.split(',').map(n => {
+            const parts = n.trim().split(/\s+as\s+/);
+            return (parts[0] || '').trim();
+          }).filter(n => n && /^[A-Z]/.test(n));
+
+          for (const name of names) {
+            componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+          }
+        }
+
+        // Match default imports: import Button from '...'
+        const defaultImportPattern = /import\s+([A-Z][a-zA-Z0-9]*)\s+from/g;
+        while ((match = defaultImportPattern.exec(content)) !== null) {
+          const name = match[1]!;
+          componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  /**
+   * Scan for HOC and wrapper patterns that count as component usage.
+   * Detects forwardRef(Component), memo(Component), styled(Component),
+   * withXxx(Component), Object.assign(Component, { ... }), and
+   * compound component patterns like Component.Sub = SubComponent.
+   */
+  private async scanHOCWrapperUsages(componentUsageMap: Map<string, number>): Promise<void> {
+    const cwd = process.cwd();
+    const sourceFiles = await glob('**/*.{ts,tsx,js,jsx}', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.d.ts'],
+      nodir: true,
+      maxDepth: 8,
+    });
+
+    for (const file of sourceFiles.slice(0, 500)) {
+      try {
+        const content = await readFile(resolve(cwd, file), 'utf-8');
+
+        // forwardRef(Component) / React.forwardRef(Component)
+        const forwardRefPattern = /(?:React\.)?forwardRef\s*[(<]\s*(?:function\s+)?([A-Z][a-zA-Z0-9]*)/g;
+        let match: RegExpExecArray | null;
+        while ((match = forwardRefPattern.exec(content)) !== null) {
+          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+        }
+
+        // Also: const X = forwardRef(...) — the wrapped result is the component
+        const forwardRefAssignPattern = /const\s+([A-Z][a-zA-Z0-9]*)\s*=\s*(?:React\.)?forwardRef/g;
+        while ((match = forwardRefAssignPattern.exec(content)) !== null) {
+          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+        }
+
+        // memo(Component) / React.memo(Component)
+        const memoPattern = /(?:React\.)?memo\(\s*([A-Z][a-zA-Z0-9]*)\s*[,)]/g;
+        while ((match = memoPattern.exec(content)) !== null) {
+          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+        }
+
+        // styled(Component) / styled.div / emotion patterns
+        const styledPattern = /styled\(\s*([A-Z][a-zA-Z0-9]*)\s*\)/g;
+        while ((match = styledPattern.exec(content)) !== null) {
+          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+        }
+
+        // withXxx(Component) — HOC patterns
+        const hocPattern = /with[A-Z][a-zA-Z]*\(\s*([A-Z][a-zA-Z0-9]*)\s*[,)]/g;
+        while ((match = hocPattern.exec(content)) !== null) {
+          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+        }
+
+        // Object.assign(Component, { Sub1, Sub2 }) — compound component pattern
+        const assignPattern = /Object\.assign\(\s*([A-Z][a-zA-Z0-9]*)\s*,\s*\{([^}]+)\}/g;
+        while ((match = assignPattern.exec(content)) !== null) {
+          // The base component is used
+          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          // Each assigned sub-component is used
+          const subs = match[2]!.match(/\b([A-Z][a-zA-Z0-9]*)\b/g);
+          if (subs) {
+            for (const sub of subs) {
+              componentUsageMap.set(sub, (componentUsageMap.get(sub) || 0) + 1);
+            }
+          }
+        }
+
+        // Component.Sub = SubComponent — compound component property assignment
+        const compoundPattern = /([A-Z][a-zA-Z0-9]*)\.([A-Z][a-zA-Z0-9]*)\s*=\s*([A-Z][a-zA-Z0-9]*)/g;
+        while ((match = compoundPattern.exec(content)) !== null) {
+          // Both the parent and the assigned component are used
+          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          componentUsageMap.set(match[3]!, (componentUsageMap.get(match[3]!) || 0) + 1);
+        }
+
+        // React.createElement(Component, ...) — non-JSX rendering
+        const createElementPattern = /React\.createElement\(\s*([A-Z][a-zA-Z0-9]*)/g;
+        while ((match = createElementPattern.exec(content)) !== null) {
+          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  /**
+   * Detect component libraries and mark all exported components as used.
+   * If package.json has a "main" or "exports" field pointing to a barrel file,
+   * all components re-exported from that barrel are the product's public API.
+   */
+  private async scanPackageExports(componentUsageMap: Map<string, number>): Promise<void> {
+    const cwd = process.cwd();
+    try {
+      const pkgContent = await readFile(resolve(cwd, 'package.json'), 'utf-8');
+      const pkg = JSON.parse(pkgContent);
+
+      // Detect if this is a component library by checking for:
+      // - exports field with ./ entries
+      // - main/module pointing to index file
+      // - "react" or "vue" in peerDependencies (library pattern)
+      const hasPeerReact = pkg.peerDependencies?.react || pkg.peerDependencies?.vue;
+      const hasExports = pkg.exports && typeof pkg.exports === 'object';
+      const mainEntry = pkg.main || pkg.module || '';
+      const isLibraryPattern = hasPeerReact && (hasExports || mainEntry);
+
+      if (!isLibraryPattern) return;
+
+      // Scan the root barrel file(s) for exports — these are the public API
+      const rootBarrels = await glob('src/index.{ts,tsx,js,jsx}', { cwd, nodir: true });
+
+      for (const barrel of rootBarrels) {
+        try {
+          const content = await readFile(resolve(cwd, barrel), 'utf-8');
+
+          // Named exports: export { Button, Card } from '...'
+          const namedPattern = /export\s*\{\s*([^}]+)\s*\}\s*from/g;
+          let match: RegExpExecArray | null;
+          while ((match = namedPattern.exec(content)) !== null) {
+            const names = match[1]!.split(',').map(n => {
+              const parts = n.trim().split(/\s+as\s+/);
+              return (parts[1] || parts[0] || '').trim();
+            }).filter(n => n && /^[A-Z]/.test(n));
+
+            for (const name of names) {
+              componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+            }
+          }
+
+          // Default re-exports: export { default as Button } from '...'
+          const defaultPattern = /export\s*\{\s*default\s+as\s+([A-Z][a-zA-Z0-9]*)\s*\}\s*from/g;
+          while ((match = defaultPattern.exec(content)) !== null) {
+            componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          }
+
+          // Wildcard re-exports: export * from './Button'
+          const wildcardPattern = /export\s*\*\s*from\s*['"]\.\/([^'"]+)['"]/g;
+          while ((match = wildcardPattern.exec(content)) !== null) {
+            const moduleName = match[1]!;
+            const segments = moduleName.split('/');
+            const last = segments[segments.length - 1] || '';
+            if (/^[A-Z]/.test(last)) {
+              componentUsageMap.set(last, (componentUsageMap.get(last) || 0) + 1);
+            }
+          }
+
+          // Direct exports: export const Button = ... or export function Button
+          const directExportPattern = /export\s+(?:const|function|class)\s+([A-Z][a-zA-Z0-9]*)/g;
+          while ((match = directExportPattern.exec(content)) !== null) {
+            componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // No package.json or not parseable — not a library
+    }
+  }
+
+  /**
+   * Scan for components passed as values — JSX prop values, object property values,
+   * and array elements. Catches patterns like:
+   *   transition={DialogTransition}
+   *   { toolbarAccount: AccountPopover }
+   *   [DialogTransition, BackdropTransition]
+   */
+  private async scanComponentAsValueUsages(
+    componentUsageMap: Map<string, number>,
+    knownComponents: string[],
+  ): Promise<void> {
+    if (knownComponents.length === 0) return;
+    const cwd = process.cwd();
+    const sourceFiles = await glob('**/*.{tsx,jsx,ts,js}', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.d.ts'],
+      nodir: true,
+      maxDepth: 8,
+    });
+
+    // Build a Set for O(1) lookup
+    const knownSet = new Set(knownComponents);
+
+    for (const file of sourceFiles.slice(0, 500)) {
+      try {
+        const content = await readFile(resolve(cwd, file), 'utf-8');
+
+        // Match component names used as values in these contexts:
+        // 1. JSX prop value:  ={ComponentName}  or ={ComponentName}
+        // 2. Object property: : ComponentName, or : ComponentName}
+        // 3. Ternary with component: ? ComponentName : or : ComponentName}
+        // 4. Array element: [ComponentName, or , ComponentName]
+        //
+        // We look for PascalCase identifiers preceded by value-assignment contexts
+        const valuePattern = /(?:[=:?]\s*|,\s*|\[\s*)([A-Z][a-zA-Z0-9]*)\b/g;
+        let match: RegExpExecArray | null;
+        while ((match = valuePattern.exec(content)) !== null) {
+          const name = match[1]!;
+          if (knownSet.has(name)) {
+            componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+          }
+        }
+      } catch {
+        // ignore unreadable files
+      }
     }
   }
 
