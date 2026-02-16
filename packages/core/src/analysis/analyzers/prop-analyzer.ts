@@ -10,6 +10,30 @@ import type { Component } from "../../models/index.js";
 import { NAMING_CONFIG } from "../config.js";
 
 /**
+ * React type equivalents — these are the same type expressed differently
+ */
+const REACT_TYPE_EQUIVALENTS: Record<string, string> = {
+  "ReactElement": "ReactNode",
+  "JSX.Element": "ReactNode",
+  "React.ReactNode": "ReactNode",
+  "React.ReactElement": "ReactNode",
+};
+
+function normalizeType(type: string): string {
+  return REACT_TYPE_EQUIVALENTS[type] ?? type;
+}
+
+/**
+ * Utility type wrappers from TypeScript — inference artifacts, not design drift
+ */
+const UTILITY_TYPE_PATTERN = /^(Awaited|ReturnType|Partial|Pick|Omit|Record|Extract|Exclude|Required|Readonly)</;
+
+/**
+ * Props that intentionally have type variation across components
+ */
+const FLEXIBLE_PROPS = new Set(["children", "classname", "style", "ref", "key", "as", "component"]);
+
+/**
  * Usage statistics for a prop type
  */
 export interface PropTypeUsage {
@@ -47,7 +71,8 @@ export function buildPropTypeMap(components: Component[]): Map<string, PropTypeU
         map.set(normalizedName, { types: new Map(), total: 0 });
       }
       const usage = map.get(normalizedName)!;
-      const typeCount = usage.types.get(prop.type) || {
+      const normalizedType = normalizeType(prop.type);
+      const typeCount = usage.types.get(normalizedType) || {
         count: 0,
         examples: [],
       };
@@ -55,7 +80,7 @@ export function buildPropTypeMap(components: Component[]): Map<string, PropTypeU
       if (typeCount.examples.length < 3) {
         typeCount.examples.push(comp.name);
       }
-      usage.types.set(prop.type, typeCount);
+      usage.types.set(normalizedType, typeCount);
       usage.total++;
     }
   }
@@ -70,8 +95,15 @@ export function checkPropTypeConsistency(
   prop: { name: string; type: string },
   propTypeMap: Map<string, PropTypeUsage>,
 ): PropTypeConflict | null {
-  const usage = propTypeMap.get(prop.name.toLowerCase());
-  if (!usage || usage.total < 3) return null; // Not enough data
+  const normalizedName = prop.name.toLowerCase();
+
+  // Fix 1.4: Skip inherently flexible props — intentional type variation
+  if (FLEXIBLE_PROPS.has(normalizedName) || normalizedName.startsWith("data-") || normalizedName.startsWith("aria-")) {
+    return null;
+  }
+
+  const usage = propTypeMap.get(normalizedName);
+  if (!usage || usage.total < 5) return null; // Fix 1.5: Raised from 3 to reduce small-sample noise
 
   // Find dominant type
   let dominantType = "";
@@ -83,8 +115,16 @@ export function checkPropTypeConsistency(
     }
   }
 
+  const normalizedPropType = normalizeType(prop.type);
+
+  // Fix 1.1: Skip unknown comparisons — no meaningful comparison possible
+  if (normalizedPropType === "unknown" || dominantType === "unknown") return null;
+
+  // Fix 1.3: Skip utility type wrappers — TypeScript inference artifacts
+  if (UTILITY_TYPE_PATTERN.test(normalizedPropType) || UTILITY_TYPE_PATTERN.test(dominantType)) return null;
+
   // Only flag if this prop's type differs and dominant exceeds threshold
-  if (prop.type === dominantType) return null;
+  if (normalizedPropType === dominantType) return null;
   if (
     dominantCount / usage.total <
     NAMING_CONFIG.establishedConventionThreshold

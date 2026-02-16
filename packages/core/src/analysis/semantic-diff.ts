@@ -449,7 +449,19 @@ export class SemanticDiffEngine {
   ): DriftSignal[] {
     const drifts: DriftSignal[] = [];
 
+    // Root component patterns — these are typically rendered at the top level
+    // or by framework internals, not imported by other components
+    const ROOT_COMPONENT_PATTERNS = [
+      /^(App|Root)$/,          // App roots
+      /Provider$/,             // Context providers: ThemeProvider, AuthProvider
+      /^ErrorBoundary$/,       // Error boundaries
+      /^Layout$/,              // Layout components
+    ];
+
     for (const component of components) {
+      // Skip root components that are inherently top-level
+      if (ROOT_COMPONENT_PATTERNS.some(p => p.test(component.name))) continue;
+
       const usageCount = usageMap.get(component.id) || usageMap.get(component.name) || 0;
       if (usageCount === 0) {
         drifts.push({

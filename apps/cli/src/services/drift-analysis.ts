@@ -288,6 +288,11 @@ const ENTRY_POINT_PATTERNS = [
   /\/views?\//,           // Vue views directory
   /\/screens?\//,         // React Native screens
   /\.astro$/,             // Astro page/layout components are auto-routed
+  /\/(app|main|index)\.(tsx|jsx)$/,  // App root / main entry / index component files
+  /\/_app\./,             // Next.js custom App
+  /\/_document\./,        // Next.js custom Document
+  /\/root\./,             // Remix root
+  /\/entry\./,            // Entry files
 ];
 
 function isEntryPointComponent(component: Component): boolean {
@@ -654,6 +659,13 @@ export class DriftAnalysisService {
           for (const name of names) {
             componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
           }
+        }
+
+        // Check for default re-exports: export { default as Button } from './Button'
+        const defaultReExportPattern = /export\s*\{\s*default\s+as\s+([A-Z][a-zA-Z0-9]*)\s*\}\s*from/g;
+        while ((match = defaultReExportPattern.exec(content)) !== null) {
+          const name = match[1]!;
+          componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
         }
 
         // Check for wildcard re-exports: export * from './Button'
