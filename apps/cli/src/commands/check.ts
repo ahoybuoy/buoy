@@ -1,5 +1,6 @@
 // apps/cli/src/commands/check.ts
 import { Command } from "commander";
+import chalk from "chalk";
 import { loadConfig, getConfigPath } from "../config/loader.js";
 import { buildAutoConfig } from "../config/auto-detect.js";
 import type { BuoyConfig } from "../config/schema.js";
@@ -21,6 +22,12 @@ import {
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { calculateHealthScorePillar } from "@buoy-design/core";
 import { gatherHealthMetrics } from "./show.js";
+import {
+  summaryBox,
+  separator,
+  highlight,
+  driftSeverityIcon,
+} from "../output/visuals.js";
 
 export type OutputFormat = "text" | "json" | "ai-feedback";
 
@@ -441,54 +448,75 @@ export function createCheckCommand(): Command {
 
         // Default text format
         if (!options.quiet) {
+          // Use real health score if available, otherwise estimate from drift density
+          const componentCount = result.components?.length ?? 0;
+          const displayScore = healthScore ?? (
+            componentCount > 0
+              ? Math.max(0, Math.min(100, Math.round(100 - (drifts.length / componentCount) * 100)))
+              : calculateMaturityScore(0, drifts.length)
+          );
+
+          // Show the framed summary box
+          console.log("");
+          console.log(summaryBox({
+            score: displayScore,
+            components: componentCount,
+            tokens: 0,
+            drifts: summary,
+          }));
+          console.log("");
+
           if (exitCode === 0) {
             if (summary.total === 0) {
-              console.log("+ No drift detected");
+              console.log(highlight.success("\u2714") + " No drift detected");
             } else {
               console.log(
-                `+ Check passed (${summary.total} drift${summary.total !== 1 ? "s" : ""} below threshold)`,
+                highlight.success("\u2714") +
+                  ` Check passed (${summary.total} drift${summary.total !== 1 ? "s" : ""} below threshold)`,
               );
             }
           } else {
-            console.log("x Drift detected");
+            console.log(highlight.error("\u2717") + " Drift detected");
             console.log("");
-            console.log(`  Critical: ${summary.critical}`);
-            console.log(`  Warning:  ${summary.warning}`);
-            console.log(`  Info:     ${summary.info}`);
+            console.log(`  ${driftSeverityIcon.critical} Critical: ${summary.critical}`);
+            console.log(`  ${driftSeverityIcon.warning} Warning:  ${summary.warning}`);
+            console.log(`  ${chalk.blue("i")} Info:     ${summary.info}`);
 
             if (options.verbose) {
               console.log("");
-              console.log("Issues:");
+              console.log(separator());
               for (const drift of drifts.slice(0, 10)) {
-                const sev =
-                  drift.severity === "critical"
-                    ? "!"
-                    : drift.severity === "warning"
-                      ? "~"
-                      : "i";
+                const icon =
+                  driftSeverityIcon[drift.severity as keyof typeof driftSeverityIcon] ??
+                  chalk.blue("i");
                 const loc = drift.source.location
-                  ? ` (${drift.source.location})`
+                  ? highlight.dim(` (${drift.source.location})`)
                   : "";
                 console.log(
-                  `  [${sev}] ${drift.source.entityName}: ${drift.message}${loc}`,
+                  `  ${icon} ${drift.source.entityName}: ${drift.message}${loc}`,
                 );
               }
               if (drifts.length > 10) {
-                console.log(`  ... and ${drifts.length - 10} more`);
+                console.log(highlight.dim(`  ... and ${drifts.length - 10} more`));
               }
             }
 
             console.log("");
-            console.log("Run `buoy show drift` for details");
+            console.log(
+              highlight.info("i") +
+                " Run " +
+                highlight.info("`buoy show drift`") +
+                " for details",
+            );
           }
 
           // Show health score when threshold is configured
           if (failBelow != null && healthScore !== null) {
             console.log("");
             if (healthFailed) {
-              console.log(`x Health score ${healthScore}/100 is below threshold ${failBelow}`);
+              console.log(highlight.error("\u2717") + ` Health score ${healthScore}/100 is below threshold ${failBelow}`);
             } else {
-              console.log(`+ Health score ${healthScore}/100 (threshold: ${failBelow})`);
+              console.log(highlight.success("\u2714") + ` Health score ${healthScore}/100 (threshold: ${failBelow})`);
             }
           }
 
