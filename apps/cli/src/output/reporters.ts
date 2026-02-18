@@ -1,5 +1,12 @@
 import chalk from "chalk";
 import ora, { Ora } from "ora";
+import {
+  highlight,
+  summaryBox,
+  getScoreThreshold,
+  separator as _separator,
+  type SummaryBoxData,
+} from './visuals.js';
 
 // Output configuration for JSON mode
 // When set to true, all non-JSON output is suppressed or redirected to stderr
@@ -29,17 +36,17 @@ export function spinner(text: string): Ora {
 
 // Success message
 export function success(message: string): void {
-  output(chalk.green("✓") + " " + message);
+  output(highlight.success("\u2714") + " " + message);
 }
 
 // Warning message
 export function warning(message: string): void {
-  output(chalk.yellow("!") + " " + message);
+  output(highlight.warn("\u26A0") + " " + message);
 }
 
 // Error message
 export function error(message: string): void {
-  output(chalk.red("✗") + " " + message);
+  output(highlight.error("\u2717") + " " + message);
 }
 
 // Info message
@@ -68,7 +75,7 @@ export function newline(): void {
 
 // Divider
 export function divider(): void {
-  output(chalk.dim("─".repeat(50)));
+  output(_separator(50));
 }
 
 // List item
@@ -94,7 +101,7 @@ export function progress(current: number, total: number, label: string): void {
   const percent = total > 0 ? Math.round((current / total) * 100) : 100;
   const filled = Math.round(percent / 5);
   const empty = 20 - filled;
-  const bar = chalk.green("█".repeat(filled)) + chalk.dim("░".repeat(empty));
+  const bar = highlight.success("\u2588".repeat(filled)) + highlight.dim("\u2591".repeat(empty));
   process.stderr.write(`\r${bar} ${percent}% ${label}`);
   if (current === total) {
     process.stderr.write("\n");
@@ -193,30 +200,44 @@ export function coverageGrid(stats: CoverageStats): void {
  */
 export function healthBadge(score: number): string {
   const rounded = Math.round(score);
-  const color =
-    rounded >= 90 ? chalk.green :
-    rounded >= 70 ? chalk.yellow :
-    rounded >= 50 ? chalk.hex('#FFA500') : // orange
-    chalk.red;
-
-  const label =
-    rounded >= 90 ? 'Excellent' :
-    rounded >= 70 ? 'Good' :
-    rounded >= 50 ? 'Fair' :
-    'Needs Work';
-
-  return `${color('■')} ${color.bold(String(rounded))}% ${chalk.dim(`(${label})`)}`;
+  const { color, label } = getScoreThreshold(rounded);
+  return `${color('\u25A0')} ${color.bold(String(rounded))}% ${highlight.dim(`(${label})`)}`;
 }
 
 /**
- * Display health score prominently
+ * Display health score prominently using the summary box
  */
-export function displayHealthScore(score: number, components: number, drifts: number): void {
+export function displayHealthScore(
+  score: number,
+  components: number,
+  drifts: number,
+  tokens?: number,
+  driftBreakdown?: { critical: number; warning: number; info: number },
+): void {
+  const data: SummaryBoxData = {
+    score,
+    components,
+    tokens: tokens ?? 0,
+    drifts: driftBreakdown
+      ? { ...driftBreakdown, total: driftBreakdown.critical + driftBreakdown.warning + driftBreakdown.info }
+      : { critical: 0, warning: 0, info: drifts, total: drifts },
+  };
   output('');
-  output(chalk.bold('Design System Health'));
-  output('');
-  output(`  Score: ${healthBadge(score)}`);
-  output(`  Components: ${chalk.cyan(String(components))}`);
-  output(`  Drift Issues: ${drifts > 0 ? chalk.yellow(String(drifts)) : chalk.green('0')}`);
+  output(summaryBox(data));
   output('');
 }
+
+// Re-export visual primitives for convenience
+export {
+  highlight,
+  scoreBar,
+  scoreGauge,
+  summaryBox,
+  buoyMascot,
+  getScoreThreshold,
+  separator,
+  colorizeByScore,
+  severityIcon,
+  driftSeverityIcon,
+} from './visuals.js';
+export type { SummaryBoxData, ScoreThreshold } from './visuals.js';

@@ -3,6 +3,7 @@
 
 import chalk from 'chalk';
 import type { DriftSignal } from '@buoy-design/core';
+import { highlight } from './visuals.js';
 
 // ============================================================================
 // Type Definitions
@@ -107,13 +108,13 @@ function sectionEnd(width: number = 78): string {
 function progressBar(percent: number, width: number = 20): string {
   const filled = Math.round((percent / 100) * width);
   const empty = width - filled;
-  return chalk.green('█'.repeat(filled)) + chalk.dim('░'.repeat(empty));
+  return highlight.success('\u2588'.repeat(filled)) + highlight.dim('\u2591'.repeat(empty));
 }
 
 function healthDots(percent: number): string {
   const filled = Math.round(percent / 20);
   const empty = 5 - filled;
-  return chalk.green('●'.repeat(filled)) + chalk.dim('○'.repeat(empty));
+  return highlight.success('\u25CF'.repeat(filled)) + highlight.dim('\u25CB'.repeat(empty));
 }
 
 function trendArrow(trend: 'improving' | 'stable' | 'declining' | number): string {

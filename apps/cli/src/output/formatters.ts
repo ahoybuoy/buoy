@@ -18,9 +18,9 @@ export function getSeverityColor(severity: Severity): ChalkInstance {
 export function getSeverityIcon(severity: Severity): string {
   switch (severity) {
     case 'critical':
-      return chalk.red('!');
+      return chalk.red('\u2717');
     case 'warning':
-      return chalk.yellow('~');
+      return chalk.yellow('\u26A0');
     case 'info':
       return chalk.blue('i');
   }
