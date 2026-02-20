@@ -33,6 +33,9 @@ No config needed. Buoy auto-detects your framework and starts working immediatel
 | **Arbitrary spacing**       | `padding: 17px` instead of design scale     |
 | **Tailwind escape hatches** | `p-[13px]` instead of `p-4`                 |
 | **Naming inconsistencies**  | `ButtonNew`, `ButtonV2`, `ButtonOld`        |
+| **Unused components**       | Defined but never imported or rendered      |
+| **Semantic mismatches**     | Same prop typed `string` in one, `number` in another |
+| **Repeated patterns**       | Same Tailwind classes copy-pasted 5+ times  |
 | **Framework sprawl**        | React + Vue + jQuery in same codebase       |
 | **Detached components**     | Instances without main component            |
 
@@ -46,6 +49,14 @@ buoy
 │   ├── drift               # Design system violations
 │   ├── health              # Health score
 │   ├── history             # Scan history
+│   ├── config              # Current .buoy.yaml configuration
+│   ├── skills              # AI agent skill files
+│   ├── agents              # Configured AI agents
+│   ├── context             # Design system context in CLAUDE.md
+│   ├── hooks               # Configured hooks
+│   ├── commands            # Installed slash commands
+│   ├── graph               # Knowledge graph stats
+│   ├── plugins             # Available scanners
 │   └── all                 # Everything combined
 ├── drift                   # Drift detection and fixing
 │   ├── scan                # Scan codebase for components/tokens
@@ -149,6 +160,29 @@ drift:
   severity:
     hardcoded-value: critical
     naming-inconsistency: warning
+
+  # Ignore specific drift (filter by type, file, component, token, value, severity)
+  ignore:
+    - type: hardcoded-value
+      file: "src/legacy/**"
+    - severity: info
+
+  # Promote matching drift to a higher severity
+  promote:
+    - type: hardcoded-value
+      file: "src/components/**"
+      to: critical
+      reason: "Design system components must use tokens"
+
+  # Enforce — always treat matching drift as critical
+  enforce:
+    - type: naming-inconsistency
+      component: "^Button"
+      reason: "Button naming is standardized"
+
+health:
+  # CI gate — exit code 1 if health score falls below threshold
+  failBelow: 70
 ```
 
 ## Drift Detection
@@ -336,8 +370,10 @@ Buoy shows you what's happening without getting in your way. Teams adopt enforce
 
 ```bash
 buoy show drift             # Just show me
-buoy drift check            # Pre-commit check (fails on drift)
-buoy drift check --fail-on critical   # Only fail on critical
+buoy drift check            # Pre-commit check (fails on critical)
+buoy drift check --fail-on warning    # Fail on warning or above
+buoy drift check --fail-on none       # Never fail (report only)
+buoy drift check --staged             # Only check staged files
 ```
 
 ## Development
