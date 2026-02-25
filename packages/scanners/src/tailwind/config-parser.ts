@@ -425,6 +425,10 @@ export class TailwindConfigParser {
   private inferCategoryFromName(
     name: string
   ): 'color' | 'spacing' | 'border' | 'typography' | 'other' {
+    if (name === 'text') {
+      return 'color';
+    }
+
     if (
       name.startsWith('color-') ||
       name.includes('background') ||
@@ -621,6 +625,7 @@ export class TailwindConfigParser {
       'surface',
       'code',
       'selection',
+      'text',
       'chart-',
     ];
 

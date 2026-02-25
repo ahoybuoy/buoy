@@ -299,7 +299,8 @@ function isEntryPointComponent(component: Component): boolean {
   const source = component.source;
   // Only file-based sources (react, vue, svelte) have a path field
   if (source.type === 'figma' || source.type === 'storybook') return false;
-  const location = source.path || '';
+  // Prefix with "/" so regexes match both "app/foo/page.tsx" and "/app/foo/page.tsx"
+  const location = `/${source.path || ''}`;
   return ENTRY_POINT_PATTERNS.some(pattern => pattern.test(location));
 }
 

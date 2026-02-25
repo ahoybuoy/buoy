@@ -944,6 +944,24 @@ describe("SemanticDiffEngine", () => {
       expect(drifts).toHaveLength(1);
       expect(drifts[0]!.type).toBe("unused-token");
     });
+
+    it("matches Tailwind token usage when usage map key omits tw- prefix", () => {
+      const tokens = [
+        createMockToken("tw-surface", "#111111", "css"),
+      ];
+      const usageMap = new Map([["surface", 2]]);
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+      expect(drifts).toHaveLength(0);
+    });
+
+    it("matches Tailwind dark token usage when usage map key omits tw-/dark suffix", () => {
+      const tokens = [
+        createMockToken("tw-surface-dark", "#000000", "css"),
+      ];
+      const usageMap = new Map([["surface", 1]]);
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+      expect(drifts).toHaveLength(0);
+    });
   });
 });
 

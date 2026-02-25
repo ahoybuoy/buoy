@@ -1636,4 +1636,26 @@ describe('TailwindConfigParser', () => {
       expect(result?.theme.fontSize?.['caption']).toBe('0.75rem');
     });
   });
+
+  describe('v4 CSS variable categorization', () => {
+    it('treats --text as a color token (not typography)', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/app/globals.css';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        @import "tailwindcss";
+        :root {
+          --text: 26 26 26;
+          --foreground: 10 10 10;
+        }
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      const textToken = result?.tokens.find((t) => t.name === 'tw-text');
+      expect(textToken).toBeDefined();
+      expect(textToken?.category).toBe('color');
+    });
+  });
 });

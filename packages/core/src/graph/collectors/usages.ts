@@ -211,7 +211,12 @@ export async function collectUsages(
     // Normalize token names by stripping -- and $ prefixes before comparison.
     // Token scanner outputs names WITH prefix (--primary-color, $primary)
     // but usage regex captures WITHOUT prefix (primary-color, primary).
-    const normalize = (name: string) => name.replace(/^--|^\$/, '').toLowerCase();
+    const normalize = (name: string) =>
+      name
+        .replace(/^--|^\$/, '')
+        .replace(/^tw-/, '')
+        .replace(/-dark$/, '')
+        .toLowerCase();
     const knownSet = new Set(options.knownTokens.map(normalize));
     filteredTokenUsages = tokenUsages.filter(u =>
       knownSet.has(normalize(u.tokenName))

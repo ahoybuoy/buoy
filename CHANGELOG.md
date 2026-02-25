@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.27] - 2026-02-25
+
+### Fixed
+- Tailwind token usage matching now correctly treats Tailwind-scanned token names (`tw-*`, `*-dark`) as equivalent to semantic utility usages (e.g., `bg-surface`), fixing widespread unused-token false positives
+- Next.js App Router route components (`page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`, `not-found.tsx`, `template.tsx`) are properly exempted from unused-component drift when framework-consumed by the router
+- Tailwind v4 CSS variable `--text` is categorized as a color token (not typography), preventing color tokens from polluting `typography.md`
+
 ## [0.3.26] - 2026-02-25
 
 ### Fixed

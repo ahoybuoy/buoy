@@ -46,6 +46,25 @@ describe('collectUsages', () => {
     expect(result.tokenUsages.some((u) => u.usageType === 'tailwind')).toBe(true);
   });
 
+  it('matches semantic Tailwind utility usage against tw-* known token names', async () => {
+    projectRoot = await makeTempProject();
+    await mkdir(join(projectRoot, 'app'), { recursive: true });
+    await writeFile(
+      join(projectRoot, 'app', 'page.tsx'),
+      `<div className="bg-surface text-foreground" />`,
+      'utf-8',
+    );
+
+    const result = await collectUsages({
+      projectRoot,
+      knownTokens: ['tw-surface', 'tw-foreground'],
+    });
+
+    expect(result.tokenUsages.map((u) => u.tokenName)).toEqual(
+      expect.arrayContaining(['surface', 'foreground']),
+    );
+  });
+
   it('does not treat built-in Tailwind palette classes as semantic tokens', async () => {
     projectRoot = await makeTempProject();
     await mkdir(join(projectRoot, 'components'), { recursive: true });
