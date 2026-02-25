@@ -962,6 +962,23 @@ describe("SemanticDiffEngine", () => {
       const drifts = engine.checkUnusedTokens(tokens, usageMap);
       expect(drifts).toHaveLength(0);
     });
+
+    it("matches Tailwind color-prefixed token usage when usage map key is semantic class name", () => {
+      const tokens = [
+        createMockToken("tw-color-surface", "#111111", "css"),
+      ];
+      const usageMap = new Map([["surface", 4]]);
+      const drifts = engine.checkUnusedTokens(tokens, usageMap);
+      expect(drifts).toHaveLength(0);
+    });
+
+    it("matches token usage through aliases", () => {
+      const token = createMockToken("tw-color-surface", "#111111", "css");
+      token.aliases = ["color-surface", "surface"];
+      const usageMap = new Map([["surface", 2]]);
+      const drifts = engine.checkUnusedTokens([token], usageMap);
+      expect(drifts).toHaveLength(0);
+    });
   });
 });
 

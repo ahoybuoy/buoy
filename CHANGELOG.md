@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.28] - 2026-02-25
+
+### Fixed
+- Tailwind semantic utility usage now matches Tailwind token aliases more reliably in unused-token checks (including `tw-*`, `tw-color-*`, and dark alias forms), reducing false-positive unused-token drift in Tailwind v4 semantic-token setups
+- Unused-token matching now checks token aliases in addition to token names, improving resolution for aliased Tailwind theme variables (e.g., `bg-surface` -> `--color-surface` -> `--surface`)
+
 ## [0.3.27] - 2026-02-25
 
 ### Fixed

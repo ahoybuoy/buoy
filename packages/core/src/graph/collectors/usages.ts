@@ -208,18 +208,9 @@ export async function collectUsages(
   // Filter to known tokens if provided
   let filteredTokenUsages = tokenUsages;
   if (options.knownTokens && options.knownTokens.length > 0) {
-    // Normalize token names by stripping -- and $ prefixes before comparison.
-    // Token scanner outputs names WITH prefix (--primary-color, $primary)
-    // but usage regex captures WITHOUT prefix (primary-color, primary).
-    const normalize = (name: string) =>
-      name
-        .replace(/^--|^\$/, '')
-        .replace(/^tw-/, '')
-        .replace(/-dark$/, '')
-        .toLowerCase();
-    const knownSet = new Set(options.knownTokens.map(normalize));
+    const knownSet = buildKnownTokenCandidates(options.knownTokens);
     filteredTokenUsages = tokenUsages.filter(u =>
-      knownSet.has(normalize(u.tokenName))
+      knownSet.has(normalizeTokenKey(u.tokenName))
     );
   }
 
@@ -479,13 +470,8 @@ function buildKnownTokenCandidates(knownTokens: string[]): Set<string> {
   const out = new Set<string>();
 
   for (const token of knownTokens) {
-    const base = normalizeTokenKey(token);
-    if (!base) continue;
-    out.add(base);
-
-    // Tailwind token scanner often prefixes names with "tw-"
-    if (base.startsWith('tw-')) {
-      out.add(base.slice(3));
+    for (const candidate of tokenKeyVariants(token)) {
+      if (candidate) out.add(candidate);
     }
   }
 
@@ -495,8 +481,29 @@ function buildKnownTokenCandidates(knownTokens: string[]): Set<string> {
 function normalizeTokenKey(name: string): string {
   return name
     .replace(/^--|^\$/, '')
+    .replace(/^tw-/, '')
+    .replace(/-dark$/, '')
     .trim()
     .toLowerCase();
+}
+
+function tokenKeyVariants(name: string): Set<string> {
+  const variants = new Set<string>();
+  const base = normalizeTokenKey(name);
+  if (!base) return variants;
+
+  variants.add(base);
+
+  // Tailwind theme aliases frequently use category prefixes in token names
+  // (e.g., tw-color-surface) while class usage is just "surface" (bg-surface).
+  const categoryPrefixes = ['color-', 'spacing-', 'radius-', 'font-'];
+  for (const prefix of categoryPrefixes) {
+    if (base.startsWith(prefix) && base.length > prefix.length) {
+      variants.add(base.slice(prefix.length));
+    }
+  }
+
+  return variants;
 }
 
 // ============================================================================

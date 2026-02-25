@@ -494,31 +494,36 @@ export class SemanticDiffEngine {
   ): DriftSignal[] {
     const drifts: DriftSignal[] = [];
 
-    // Build normalized usage map: strip token prefixes (CSS/SCSS/Tailwind) for matching
+    // Build normalized usage map variants for matching (CSS/SCSS/Tailwind aliases).
     // collectUsages() regex captures var(--name) WITHOUT the -- prefix,
     // but token.name typically includes the prefix (e.g. "--primary-color")
     const normalizedUsageMap = new Map<string, number>();
     for (const [key, count] of usageMap) {
-      const normalized = key
-        .replace(/^--|^\$/, "")
-        .replace(/^tw-/, "")
-        .replace(/-dark$/, "");
-      normalizedUsageMap.set(
-        normalized,
-        (normalizedUsageMap.get(normalized) || 0) + count,
-      );
+      for (const normalized of this.tokenNameVariants(key)) {
+        normalizedUsageMap.set(
+          normalized,
+          (normalizedUsageMap.get(normalized) || 0) + count,
+        );
+      }
     }
 
     for (const token of tokens) {
-      const normalizedName = token.name
-        .replace(/^--|^\$/, "")
-        .replace(/^tw-/, "")
-        .replace(/-dark$/, "");
-      const usageCount =
+      let usageCount =
         usageMap.get(token.id) ||
         usageMap.get(token.name) ||
-        normalizedUsageMap.get(normalizedName) ||
         0;
+
+      if (usageCount === 0) {
+        const namesToCheck = [token.name, ...(token.aliases || [])];
+        for (const name of namesToCheck) {
+          for (const variant of this.tokenNameVariants(name)) {
+            usageCount = normalizedUsageMap.get(variant) || 0;
+            if (usageCount > 0) break;
+          }
+          if (usageCount > 0) break;
+        }
+      }
+
       if (usageCount === 0) {
         drifts.push({
           id: createDriftId("unused-token", token.id),
@@ -539,6 +544,26 @@ export class SemanticDiffEngine {
     }
 
     return drifts;
+  }
+
+  private tokenNameVariants(name: string): Set<string> {
+    const out = new Set<string>();
+    const base = name
+      .replace(/^--|^\$/, "")
+      .replace(/^tw-/, "")
+      .replace(/-dark$/, "")
+      .toLowerCase();
+    if (!base) return out;
+
+    out.add(base);
+
+    for (const prefix of ["color-", "spacing-", "radius-", "font-"]) {
+      if (base.startsWith(prefix) && base.length > prefix.length) {
+        out.add(base.slice(prefix.length));
+      }
+    }
+
+    return out;
   }
 
   // Token suggestion methods - delegate to service
