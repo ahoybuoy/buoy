@@ -308,7 +308,10 @@ function isEntryPointComponent(component: Component): boolean {
  * DriftAnalysisService - Main entry point for drift detection
  */
 export class DriftAnalysisService {
-  constructor(private config: BuoyConfig) {}
+  constructor(
+    private config: BuoyConfig,
+    private projectRoot: string = process.cwd(),
+  ) {}
 
   /**
    * Run full drift analysis pipeline
@@ -329,7 +332,7 @@ export class DriftAnalysisService {
 
     // Step 1: Scan components
     onProgress?.("Scanning components...");
-    const orchestrator = new ScanOrchestrator(this.config, process.cwd(), {
+    const orchestrator = new ScanOrchestrator(this.config, this.projectRoot, {
       cache,
     });
     const { components } = await orchestrator.scanComponents({
@@ -360,7 +363,7 @@ export class DriftAnalysisService {
     // Step 2.2: Check framework sprawl
     onProgress?.("Checking for framework sprawl...");
     const { ProjectDetector } = await import("../detect/project-detector.js");
-    const detector = new ProjectDetector(process.cwd());
+    const detector = new ProjectDetector(this.projectRoot);
     const projectInfo = await detector.detect();
     if (projectInfo.frameworks.length > 0) {
       const sprawlDrift = engine.checkFrameworkSprawl(
@@ -377,12 +380,15 @@ export class DriftAnalysisService {
     // Step 2.3: Scan for unused components and tokens
     onProgress?.("Scanning for unused components and tokens...");
     const { collectUsages } = await import("@buoy-design/core");
+    const usageGlobs = this.getUsageCollectorGlobs();
 
     const componentNames = components.map((c) => c.name);
     const tokenNames = scannedTokens.map((t) => t.name);
 
     const usageResult = await collectUsages({
-      projectRoot: process.cwd(),
+      projectRoot: this.projectRoot,
+      include: usageGlobs.include,
+      exclude: usageGlobs.exclude,
       knownComponents: componentNames,
       knownTokens: tokenNames,
     });
@@ -511,7 +517,7 @@ export class DriftAnalysisService {
     if (this.config.sources.tailwind?.enabled) {
       onProgress?.("Scanning for Tailwind arbitrary values...");
       const tailwindScanner = new TailwindScanner({
-        projectRoot: process.cwd(),
+        projectRoot: this.projectRoot,
         include: this.config.sources.tailwind.files,
         exclude: this.config.sources.tailwind.exclude,
         detectArbitraryValues: true,
@@ -646,12 +652,56 @@ export class DriftAnalysisService {
     };
   }
 
+  private getUsageCollectorGlobs(): { include?: string[]; exclude?: string[] } {
+    const include = new Set<string>();
+    const exclude = new Set<string>();
+
+    const addMany = (target: Set<string>, values?: string[]) => {
+      if (!values) return;
+      for (const value of values) {
+        if (value?.trim()) target.add(value);
+      }
+    };
+
+    const {
+      react,
+      nextjs,
+      vue,
+      svelte,
+      angular,
+      webcomponent,
+      templates,
+      tailwind,
+      tokens,
+    } = this.config.sources;
+
+    for (const source of [react, nextjs, vue, svelte, angular, webcomponent, templates]) {
+      if (!source?.enabled) continue;
+      addMany(include, (source as { include?: string[] }).include);
+      addMany(exclude, (source as { exclude?: string[] }).exclude);
+    }
+
+    if (tailwind?.enabled) {
+      addMany(include, tailwind.files);
+      addMany(exclude, tailwind.exclude);
+    }
+
+    if (tokens?.enabled) {
+      addMany(include, tokens.files);
+    }
+
+    return {
+      include: include.size > 0 ? [...include] : undefined,
+      exclude: exclude.size > 0 ? [...exclude] : undefined,
+    };
+  }
+
   /**
    * Scan barrel files (index.ts) for re-exports and count re-exported components as used.
    * Components re-exported from barrel files are part of the public API.
    */
   private async scanBarrelReExports(componentUsageMap: Map<string, number>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const barrelFiles = await glob('**/index.{ts,tsx,js,jsx}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
@@ -707,7 +757,7 @@ export class DriftAnalysisService {
    * Handles React.lazy(() => import('./Component')) and next/dynamic patterns.
    */
   private async scanDynamicImports(componentUsageMap: Map<string, number>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const sourceFiles = await glob('**/*.{tsx,jsx,ts,js}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.test.*', '**/*.spec.*'],
@@ -747,7 +797,7 @@ export class DriftAnalysisService {
     knownComponents: string[],
   ): Promise<void> {
     if (knownComponents.length === 0) return;
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const templateFiles = await glob('**/*.{vue,svelte,html}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
@@ -800,7 +850,7 @@ export class DriftAnalysisService {
    * Detects app.component('Name', ...) and Vue.component('Name', ...) calls.
    */
   private async scanAutoRegistration(componentUsageMap: Map<string, number>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const sourceFiles = await glob('**/*.{ts,js,tsx,jsx}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
@@ -831,7 +881,7 @@ export class DriftAnalysisService {
    * Components in declarations: [...] are registered and should count as used.
    */
   private async scanNgModuleDeclarations(componentUsageMap: Map<string, number>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const moduleFiles = await glob('**/*.module.ts', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
@@ -878,7 +928,7 @@ export class DriftAnalysisService {
    * A component referenced in a .stories file is documented/tested and should count as used.
    */
   private async scanStoryFileUsages(componentUsageMap: Map<string, number>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const storyFiles = await glob('**/*.stories.{ts,tsx,js,jsx}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
@@ -929,7 +979,7 @@ export class DriftAnalysisService {
    * mean the component is registered and used by the browser.
    */
   private async scanWebComponentRegistrations(componentUsageMap: Map<string, number>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const files = await glob('**/*.{ts,js}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/*.d.ts', '**/*.spec.*', '**/*.test.*'],
@@ -968,7 +1018,7 @@ export class DriftAnalysisService {
    * If we detect Nuxt (nuxt.config.ts exists), mark all components in components/ as used.
    */
   private async scanNuxtAutoImports(componentUsageMap: Map<string, number>, componentNames: Set<string>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     // Check for Nuxt config
     const nuxtConfigs = await glob('nuxt.config.{ts,js,mjs}', { cwd, nodir: true });
     if (nuxtConfigs.length === 0) return;
@@ -985,7 +1035,7 @@ export class DriftAnalysisService {
    * Components imported in .test.tsx/.spec.tsx are actively maintained/tested.
    */
   private async scanTestFileUsages(componentUsageMap: Map<string, number>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const testFiles = await glob('**/*.{test,spec}.{ts,tsx,js,jsx}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
@@ -1030,7 +1080,7 @@ export class DriftAnalysisService {
    * compound component patterns like Component.Sub = SubComponent.
    */
   private async scanHOCWrapperUsages(componentUsageMap: Map<string, number>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const sourceFiles = await glob('**/*.{ts,tsx,js,jsx}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.d.ts'],
@@ -1112,7 +1162,7 @@ export class DriftAnalysisService {
    * all components re-exported from that barrel are the product's public API.
    */
   private async scanPackageExports(componentUsageMap: Map<string, number>): Promise<void> {
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     try {
       const pkgContent = await readFile(resolve(cwd, 'package.json'), 'utf-8');
       const pkg = JSON.parse(pkgContent);
@@ -1192,7 +1242,7 @@ export class DriftAnalysisService {
     knownComponents: string[],
   ): Promise<void> {
     if (knownComponents.length === 0) return;
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
     const sourceFiles = await glob('**/*.{tsx,jsx,ts,js}', {
       cwd,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.d.ts'],
@@ -1236,7 +1286,7 @@ export class DriftAnalysisService {
     matching?: "exact" | "tight" | "loose";
   }): Promise<DriftSignal[]> {
     const occurrences: ClassOccurrence[] = [];
-    const cwd = process.cwd();
+    const cwd = this.projectRoot;
 
     // Find all source files
     const patterns = ["**/*.tsx", "**/*.jsx", "**/*.vue", "**/*.svelte"];

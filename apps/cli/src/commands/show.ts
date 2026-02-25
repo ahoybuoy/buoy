@@ -2,7 +2,7 @@ import { Command, Option } from "commander";
 import chalk from "chalk";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { writeFileSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
 import { homedir } from "os";
 import { loadConfig, getConfigPath } from "../config/loader.js";
 import { buildAutoConfig, detectMonorepo } from "../config/auto-detect.js";
@@ -116,13 +116,13 @@ export function createShowCommand(): Command {
       const spin = spinner("Scanning components...");
 
       try {
-        const config = await getOrBuildConfig();
+        const { config, projectRoot } = await getOrBuildConfigWithRoot();
 
         const { result: scanResult } = await withOptionalCache(
-          process.cwd(),
+          projectRoot,
           parentOpts.cache !== false,
           async (cache: ScanCache | undefined) => {
-            const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
+            const orchestrator = new ScanOrchestrator(config, projectRoot, { cache });
             return orchestrator.scanComponents({
               onProgress: (msg) => { spin.text = msg; },
             });
@@ -311,13 +311,13 @@ export function createShowCommand(): Command {
       const spin = spinner("Analyzing drift...");
 
       try {
-        const config = await getOrBuildConfig();
+        const { config, projectRoot } = await getOrBuildConfigWithRoot();
 
         const { result } = await withOptionalCache(
-          process.cwd(),
+          projectRoot,
           parentOpts.cache !== false,
           async (cache: ScanCache | undefined) => {
-            const service = new DriftAnalysisService(config);
+            const service = new DriftAnalysisService(config, projectRoot);
             return service.analyze({
               onProgress: (msg) => { spin.text = msg; },
               includeIgnored: options.includeIgnored ?? false,
@@ -506,10 +506,10 @@ export function createShowCommand(): Command {
       const spin = spinner("Analyzing design system health...");
 
       try {
-        const config = await getOrBuildConfig();
+        const { config, projectRoot } = await getOrBuildConfigWithRoot();
 
         // Gather all health metrics from drift analysis
-        const healthMetrics = await gatherHealthMetrics(config, spin, parentOpts.cache !== false);
+        const healthMetrics = await gatherHealthMetrics(config, spin, parentOpts.cache !== false, projectRoot);
 
         spin.stop();
 
@@ -1425,22 +1425,22 @@ export function createShowCommand(): Command {
       const spin = spinner("Gathering design system data...");
 
       try {
-        const config = await getOrBuildConfig();
+        const { config, projectRoot } = await getOrBuildConfigWithRoot();
 
         const { result: allResults } = await withOptionalCache(
-          process.cwd(),
+          projectRoot,
           parentOpts.cache !== false,
           async (cache: ScanCache | undefined) => {
             // Scan components and tokens
             spin.text = "Scanning components and tokens...";
-            const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
+            const orchestrator = new ScanOrchestrator(config, projectRoot, { cache });
             const scanResult = await orchestrator.scan({
               onProgress: (msg) => { spin.text = msg; },
             });
 
             // Analyze drift
             spin.text = "Analyzing drift...";
-            const service = new DriftAnalysisService(config);
+            const service = new DriftAnalysisService(config, projectRoot);
             const driftResult = await service.analyze({
               onProgress: (msg) => { spin.text = msg; },
               includeIgnored: false,
@@ -1564,13 +1564,24 @@ export function createShowCommand(): Command {
 
 // Helper: Load or auto-build config
 async function getOrBuildConfig(): Promise<BuoyConfig> {
+  const { config } = await getOrBuildConfigWithRoot();
+  return config;
+}
+
+async function getOrBuildConfigWithRoot(): Promise<{ config: BuoyConfig; projectRoot: string }> {
   const existingConfigPath = getConfigPath();
   if (existingConfigPath) {
-    const { config } = await loadConfig();
-    return config;
+    const { config, configPath } = await loadConfig();
+    return {
+      config,
+      projectRoot: configPath ? dirname(configPath) : process.cwd(),
+    };
   }
   const autoResult = await buildAutoConfig(process.cwd());
-  return autoResult.config;
+  return {
+    config: autoResult.config,
+    projectRoot: process.cwd(),
+  };
 }
 
 // Helper: Get setup status for all dock tools
@@ -1735,8 +1746,9 @@ export async function gatherHealthMetrics(
   config: BuoyConfig,
   spin: { text: string },
   useCache: boolean,
+  projectRoot: string = process.cwd(),
 ): Promise<HealthMetrics> {
-  const cwd = process.cwd();
+  const cwd = projectRoot;
 
   // Run drift analysis to get all signals
   spin.text = "Scanning components and tokens...";
@@ -1750,7 +1762,7 @@ export async function gatherHealthMetrics(
       });
 
       spin.text = "Analyzing drift...";
-      const service = new DriftAnalysisService(config);
+      const service = new DriftAnalysisService(config, cwd);
       const driftResult = await service.analyze({
         onProgress: (msg) => { spin.text = msg; },
         includeIgnored: false,

@@ -1,5 +1,6 @@
 // apps/cli/src/commands/check.ts
 import { Command } from "commander";
+import { dirname } from "node:path";
 import { loadConfig, getConfigPath } from "../config/loader.js";
 import { buildAutoConfig } from "../config/auto-detect.js";
 import type { BuoyConfig } from "../config/schema.js";
@@ -238,16 +239,19 @@ export function createCheckCommand(): Command {
         log("Loading configuration...");
         const existingConfigPath = getConfigPath();
         let config: BuoyConfig;
+        let projectRoot = process.cwd();
 
         if (existingConfigPath) {
           const loaded = await loadConfig();
           config = loaded.config;
+          projectRoot = loaded.configPath ? dirname(loaded.configPath) : process.cwd();
           if (options.verbose) {
             log(`Using config: ${existingConfigPath}`);
           }
         } else {
           const auto = await buildAutoConfig(process.cwd());
           config = auto.config;
+          projectRoot = process.cwd();
           log("No config found, using auto-detected settings");
         }
 
@@ -268,7 +272,7 @@ export function createCheckCommand(): Command {
         log("Scanning for drift...");
 
         // Use consolidated drift analysis service
-        const service = new DriftAnalysisService(config);
+        const service = new DriftAnalysisService(config, projectRoot);
         const result = await service.analyze({
           onProgress: log,
           includeIgnored: false,
@@ -295,7 +299,7 @@ export function createCheckCommand(): Command {
         if (failBelow != null) {
           log("Calculating health score...");
           const dummySpinner = { text: "" };
-          const healthMetrics = await gatherHealthMetrics(config, dummySpinner, true);
+          const healthMetrics = await gatherHealthMetrics(config, dummySpinner, true, projectRoot);
           const healthResult = calculateHealthScorePillar(healthMetrics);
           healthScore = healthResult.score;
 
@@ -319,10 +323,10 @@ export function createCheckCommand(): Command {
             log("Reporting to Buoy Cloud...");
 
             // Get git metadata
-            const gitMeta = getGitMetadata(process.cwd());
+            const gitMeta = getGitMetadata(projectRoot);
 
             // Scan for tokens and components to include in report
-            const orchestrator = new ScanOrchestrator(config, process.cwd());
+            const orchestrator = new ScanOrchestrator(config, projectRoot);
             const scanStart = Date.now();
             const scanResults = await orchestrator.scan({
               onProgress: log,

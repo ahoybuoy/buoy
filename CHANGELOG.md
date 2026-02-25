@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.29] - 2026-02-25
+
+### Fixed
+- Unused-token drift analysis now uses the resolved config/project root (not shell `cwd`) across `show`, `check`, and health flows, fixing monorepo subdirectory runs that scanned the wrong tree
+- Drift usage collection now respects configured source include/exclude globs (including monorepo relative paths like `../../packages/...`), so semantic Tailwind utility usage in workspace packages is counted during unused-token checks
+- Additional monorepo root scoping fixes in drift helper scans (barrels, tests, stories, dynamic imports, HOC wrappers, etc.) reduce usage-detection mismatches when analyzing from app/package subdirectories
+
 ## [0.3.28] - 2026-02-25
 
 ### Fixed
