@@ -25,7 +25,8 @@ import {
 import { glob } from "glob";
 import { minimatch } from "minimatch";
 import { readFile } from "fs/promises";
-import { resolve } from "path";
+import { existsSync } from "fs";
+import { dirname, extname, resolve } from "path";
 
 export interface DriftAnalysisOptions {
   /** Callback for progress updates */
@@ -235,6 +236,127 @@ function ruleMatches(
   return true;
 }
 
+function extractTailwindSemanticTokenNameLocal(classToken: string): string | null {
+  const core = classToken.split(":").pop()?.trim() ?? "";
+  if (!core) return null;
+
+  const normalizedCore = core.replace(/^!/, "").replace(/^-/, "");
+  if (!normalizedCore) return null;
+
+  const withoutOpacity = normalizedCore.replace(/\/[a-zA-Z0-9.[\]-]+$/, "");
+  const match = withoutOpacity.match(
+    /^(?:bg|text|border|ring|fill|stroke|outline|caret|accent|from|via|to)-([a-zA-Z0-9_-]+)$/,
+  );
+  if (!match?.[1]) return null;
+
+  const value = match[1];
+  if (
+    /^(transparent|current|black|white|inherit)$/.test(value) ||
+    /^[a-z]+-\d{2,3}$/.test(value) ||
+    /^\[[^\]]+\]$/.test(value)
+  ) {
+    return null;
+  }
+
+  return value;
+}
+
+function extractNamedObjectBlocks(content: string, key: string): string[] {
+  const results: string[] = [];
+  const patterns = [
+    new RegExp(`${key}\\s*:\\s*\\{`, "g"),
+    new RegExp(`['"]${key}['"]\\s*:\\s*\\{`, "g"),
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(content)) !== null) {
+      const openBraceIndex = match.index + match[0].length - 1;
+      const block = extractBalancedBracesContent(content, openBraceIndex);
+      if (block != null) results.push(block);
+    }
+  }
+
+  return results;
+}
+
+function extractBalancedBracesContent(content: string, openBraceIndex: number): string | null {
+  if (content[openBraceIndex] !== "{") return null;
+  let depth = 0;
+  for (let i = openBraceIndex; i < content.length; i++) {
+    const ch = content[i];
+    if (ch === "{") depth++;
+    if (ch === "}") depth--;
+    if (depth === 0) {
+      return content.slice(openBraceIndex + 1, i);
+    }
+  }
+  return null;
+}
+
+function parseColorObjectAliases(colorsBlock: string): Map<string, Set<string>> {
+  const aliases = new Map<string, Set<string>>();
+
+  // First parse one-level nested scales (e.g., surface: { DEFAULT: "var(--surface)" ... })
+  const nestedPattern = /['"]?([a-zA-Z0-9_-]+)['"]?\s*:\s*\{/g;
+  let nestedMatch: RegExpExecArray | null;
+  while ((nestedMatch = nestedPattern.exec(colorsBlock)) !== null) {
+    const parent = nestedMatch[1]!;
+    const openBraceIndex = nestedMatch.index + nestedMatch[0].length - 1;
+    const nestedContent = extractBalancedBracesContent(colorsBlock, openBraceIndex);
+    if (!nestedContent) continue;
+
+    const nestedStart = openBraceIndex;
+    const nestedEnd = nestedStart + nestedContent.length + 2; // braces
+
+    const kvPattern = /['"]?([a-zA-Z0-9_-]+)['"]?\s*:\s*["'`]([^"'`]+)["'`]/g;
+    let kv: RegExpExecArray | null;
+    while ((kv = kvPattern.exec(nestedContent)) !== null) {
+      const child = kv[1]!;
+      const value = kv[2]!;
+      const refs = extractCssVarRefs(value);
+      if (refs.length === 0) continue;
+      const semantic = child === "DEFAULT" ? parent : `${parent}-${child}`;
+      for (const ref of refs) addAlias(aliases, semantic, ref);
+    }
+
+    // Skip over nested object contents so top-level string scan doesn't double-process nested entries.
+    nestedPattern.lastIndex = nestedEnd;
+  }
+
+  // Top-level direct string colors (e.g., background: "var(--surface)")
+  const topLevelPattern = /['"]?([a-zA-Z0-9_-]+)['"]?\s*:\s*["'`]([^"'`]+)["'`]/g;
+  let top: RegExpExecArray | null;
+  while ((top = topLevelPattern.exec(colorsBlock)) !== null) {
+    const semantic = top[1]!;
+    const value = top[2]!;
+    const refs = extractCssVarRefs(value);
+    if (refs.length === 0) continue;
+    for (const ref of refs) addAlias(aliases, semantic, ref);
+  }
+
+  return aliases;
+}
+
+function extractCssVarRefs(value: string): string[] {
+  const refs: string[] = [];
+  const pattern = /var\(\s*--([a-zA-Z0-9_-]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(value)) !== null) {
+    if (match[1]) refs.push(match[1]);
+  }
+  return refs;
+}
+
+function addAlias(map: Map<string, Set<string>>, semantic: string, tokenName: string): void {
+  let bucket = map.get(semantic);
+  if (!bucket) {
+    bucket = new Set<string>();
+    map.set(semantic, bucket);
+  }
+  bucket.add(tokenName);
+}
+
 /**
  * Apply severity filter to drifts
  */
@@ -409,6 +531,10 @@ export class DriftAnalysisService {
         (tokenUsageMap.get(tu.tokenName) || 0) + 1,
       );
     }
+
+    // Tailwind semantic aliases may map class names to differently named CSS vars
+    // via imported presets (e.g., bg-background -> var(--surface)).
+    await this.applyTailwindConfigAliasUsages(tokenUsageMap);
 
     // Fix 2: Count barrel file re-exports as usage
     // Components re-exported from barrel files (index.ts) are part of the public API
@@ -694,6 +820,173 @@ export class DriftAnalysisService {
       include: include.size > 0 ? [...include] : undefined,
       exclude: exclude.size > 0 ? [...exclude] : undefined,
     };
+  }
+
+  private async applyTailwindConfigAliasUsages(tokenUsageMap: Map<string, number>): Promise<void> {
+    if (!this.config.sources.tailwind?.enabled) return;
+
+    const aliasMap = await this.resolveTailwindSemanticAliasMap();
+    if (aliasMap.size === 0) return;
+
+    const usageGlobs = this.getUsageCollectorGlobs();
+    const include = usageGlobs.include ?? ["**/*.{ts,tsx,js,jsx,vue,svelte,astro,html,mdx,md}"];
+    const exclude = usageGlobs.exclude ?? ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.next/**"];
+
+    const files = await glob(include, {
+      cwd: this.projectRoot,
+      ignore: exclude,
+      absolute: false,
+      nodir: true,
+    });
+
+    for (const file of files) {
+      let content = "";
+      try {
+        content = await readFile(resolve(this.projectRoot, file), "utf-8");
+      } catch {
+        continue;
+      }
+
+      for (const classToken of this.extractTailwindClassTokens(content)) {
+        const semantic = extractTailwindSemanticTokenNameLocal(classToken);
+        if (!semantic) continue;
+
+        const mapped = aliasMap.get(semantic);
+        if (!mapped || mapped.size === 0) continue;
+
+        for (const tokenName of mapped) {
+          tokenUsageMap.set(tokenName, (tokenUsageMap.get(tokenName) || 0) + 1);
+        }
+      }
+    }
+  }
+
+  private async resolveTailwindSemanticAliasMap(): Promise<Map<string, Set<string>>> {
+    const configFile = this.findTailwindConfigFile();
+    if (!configFile) return new Map();
+
+    const visited = new Set<string>();
+    const queue = [configFile];
+    const aliases = new Map<string, Set<string>>();
+
+    while (queue.length > 0 && visited.size < 64) {
+      const filePath = queue.shift()!;
+      if (visited.has(filePath)) continue;
+      visited.add(filePath);
+
+      let content = "";
+      try {
+        content = await readFile(filePath, "utf-8");
+      } catch {
+        continue;
+      }
+
+      this.extractTailwindColorAliasesFromSource(content, aliases);
+
+      for (const specifier of this.extractLocalImportSpecifiers(content)) {
+        const resolved = this.resolveLocalImport(filePath, specifier);
+        if (resolved && !visited.has(resolved)) {
+          queue.push(resolved);
+        }
+      }
+    }
+
+    return aliases;
+  }
+
+  private findTailwindConfigFile(): string | null {
+    for (const name of [
+      "tailwind.config.ts",
+      "tailwind.config.js",
+      "tailwind.config.mjs",
+      "tailwind.config.cjs",
+    ]) {
+      const path = resolve(this.projectRoot, name);
+      if (existsSync(path)) return path;
+    }
+    return null;
+  }
+
+  private extractLocalImportSpecifiers(content: string): string[] {
+    const out = new Set<string>();
+    const patterns = [
+      /import[\s\S]*?\sfrom\s*["']([^"']+)["']/g,
+      /(?:export\s+\{[^}]*\}\s+from|export\s+\*\s+from)\s*["']([^"']+)["']/g,
+      /require\(\s*["']([^"']+)["']\s*\)/g,
+    ];
+
+    for (const pattern of patterns) {
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(content)) !== null) {
+        const spec = match[1];
+        if (spec?.startsWith(".")) out.add(spec);
+      }
+    }
+
+    return [...out];
+  }
+
+  private resolveLocalImport(fromFile: string, specifier: string): string | null {
+    const base = resolve(dirname(fromFile), specifier);
+    const candidates = extname(base)
+      ? [base]
+      : [
+          base,
+          `${base}.ts`,
+          `${base}.tsx`,
+          `${base}.js`,
+          `${base}.mjs`,
+          `${base}.cjs`,
+          resolve(base, "index.ts"),
+          resolve(base, "index.tsx"),
+          resolve(base, "index.js"),
+          resolve(base, "index.mjs"),
+          resolve(base, "index.cjs"),
+        ];
+
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  private extractTailwindColorAliasesFromSource(
+    content: string,
+    aliases: Map<string, Set<string>>,
+  ): void {
+    for (const colorsBlock of extractNamedObjectBlocks(content, "colors")) {
+      const parsed = parseColorObjectAliases(colorsBlock);
+      for (const [semantic, tokenNames] of parsed) {
+        let bucket = aliases.get(semantic);
+        if (!bucket) {
+          bucket = new Set<string>();
+          aliases.set(semantic, bucket);
+        }
+        for (const tokenName of tokenNames) bucket.add(tokenName);
+      }
+    }
+  }
+
+  private extractTailwindClassTokens(content: string): string[] {
+    const classTokens = new Set<string>();
+
+    // Generic string literal scan catches JSX, Astro, template literals, and utility wrappers.
+    const stringPattern = /(['"`])((?:\\.|(?!\1)[\s\S])*)\1/g;
+    let match: RegExpExecArray | null;
+    while ((match = stringPattern.exec(content)) !== null) {
+      const raw = match[2];
+      if (!raw || (!raw.includes("-") && !raw.includes(":"))) continue;
+      for (const token of raw.split(/\s+/)) {
+        if (token) classTokens.add(token);
+      }
+    }
+
+    // Also include extractor output for nested utility helper patterns.
+    for (const extracted of extractStaticClassStrings(content)) {
+      for (const token of extracted.classes) classTokens.add(token);
+    }
+
+    return [...classTokens];
   }
 
   /**

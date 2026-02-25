@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.30] - 2026-02-25
+
+### Fixed
+- Unused-token drift analysis now resolves semantic Tailwind utility aliases through `tailwind.config.*` and locally imported preset files (including monorepo workspace presets), so classes like `bg-background` can count usage for underlying CSS vars such as `--surface`
+- Added recursive local import/preset traversal for Tailwind color alias mapping and regression tests for imported `tailwind-preset.ts` chains
+
 ## [0.3.29] - 2026-02-25
 
 ### Fixed
