@@ -344,10 +344,7 @@ No spacing tokens detected in this project.
     }
 
     const rows = spacingTokens.map((token) => {
-      let value = '';
-      if (token.value.type === 'spacing') {
-        value = `${token.value.value}${token.value.unit}`;
-      }
+      const value = this.formatTokenValue(token);
       const usage = token.metadata?.description || 'General spacing';
       return `| \`${token.name}\` | ${value} | ${usage} |`;
     });
@@ -396,10 +393,7 @@ No typography tokens detected in this project.
     }
 
     const rows = typographyTokens.map((token) => {
-      let value = '';
-      if (token.value.type === 'typography') {
-        value = `${token.value.fontFamily}, ${token.value.fontSize}px, ${token.value.fontWeight}`;
-      }
+      const value = this.formatTokenValue(token);
       return `| \`${token.name}\` | ${value} |`;
     });
 

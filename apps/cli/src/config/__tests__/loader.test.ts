@@ -102,6 +102,16 @@ describe("Config Loader", () => {
       expect(result).toBeNull();
     });
 
+    it("walks up to find config in parent directory", () => {
+      vi.mocked(existsSync).mockImplementation((path) => {
+        return String(path) === resolve("/test", ".buoy.yaml");
+      });
+
+      const result = getConfigPath("/test/project/app");
+
+      expect(result).toBe(resolve("/test", ".buoy.yaml"));
+    });
+
     it("uses cwd by default", () => {
       vi.mocked(existsSync).mockReturnValue(false);
       const originalCwd = process.cwd();

@@ -155,6 +155,16 @@ export function expandPatternsForMonorepo(
         if (baseWorkspace === 'packages') {
           monorepoPatterns.push(`packages/@*/*/${basePattern}`);
         }
+      } else if (
+        basePattern.startsWith('app/') ||
+        basePattern.startsWith('components/') ||
+        basePattern.startsWith('lib/')
+      ) {
+        // Preserve root-level app/components/lib directories inside workspace packages
+        monorepoPatterns.push(`${baseWorkspace}/*/${basePattern}`);
+        if (baseWorkspace === 'packages') {
+          monorepoPatterns.push(`packages/@*/*/${basePattern}`);
+        }
       } else {
         // For patterns not starting with src/, add them under workspace packages
         // **/*.tsx -> packages/*/src/**/*.tsx
@@ -173,6 +183,13 @@ export function expandPatternsForMonorepo(
   if (monorepoConfig.type === 'nx' || monorepoConfig.type === 'turborepo') {
     for (const basePattern of basePatterns) {
       if (basePattern.startsWith('src/')) {
+        additionalPatterns.push(`apps/*/${basePattern}`);
+        additionalPatterns.push(`libs/*/${basePattern}`);
+      } else if (
+        basePattern.startsWith('app/') ||
+        basePattern.startsWith('components/') ||
+        basePattern.startsWith('lib/')
+      ) {
         additionalPatterns.push(`apps/*/${basePattern}`);
         additionalPatterns.push(`libs/*/${basePattern}`);
       } else {
@@ -205,7 +222,14 @@ export function getIncludePatternsForFramework(
 ): string[] {
   // Base patterns by framework
   const basePatterns: Record<string, string[]> = {
-    react: ['src/**/*.tsx', 'src/**/*.jsx'],
+    react: [
+      'src/**/*.tsx',
+      'src/**/*.jsx',
+      'app/**/*.tsx',
+      'app/**/*.jsx',
+      'components/**/*.tsx',
+      'components/**/*.jsx',
+    ],
     vue: ['src/**/*.vue'],
     svelte: ['src/**/*.svelte'],
     angular: ['src/**/*.component.ts'],

@@ -72,6 +72,9 @@ const SCSS_VAR_PATTERN = /\$([a-zA-Z][a-zA-Z0-9_-]*)/g;
 // Tailwind arbitrary value: [#fff] or [16px]
 const TAILWIND_ARBITRARY_PATTERN = /(?:bg|text|border|ring|shadow|fill|stroke)-\[([^\]]+)\]/g;
 
+// Tailwind utility classes that commonly map to semantic color tokens
+const TAILWIND_TOKEN_UTILITY_PATTERN = /^(?:bg|text|border|ring|fill|stroke|outline|caret|accent|from|via|to)-([a-zA-Z0-9_-]+)$/;
+
 // Hardcoded hex colors: #fff, #ffffff, #ffffffff
 const HEX_COLOR_PATTERN = /#([0-9a-fA-F]{3,8})\b/g;
 
@@ -185,6 +188,15 @@ export async function collectUsages(
       'tailwind',
       hardcodedValues,
       true
+    );
+
+    // Collect semantic Tailwind token utilities (e.g., bg-surface -> --surface)
+    collectTailwindTokenUsages(
+      content,
+      lines,
+      file,
+      tokenUsages,
+      options.knownTokens,
     );
 
     // Collect component usages (JSX/template files)
@@ -376,6 +388,110 @@ function extractProps(jsxString: string): string[] {
   }
 
   return [...new Set(props)];
+}
+
+function collectTailwindTokenUsages(
+  content: string,
+  lines: string[],
+  filePath: string,
+  usages: TokenUsage[],
+  knownTokens?: string[],
+): void {
+  if (!knownTokens || knownTokens.length === 0) return;
+
+  const knownCandidates = buildKnownTokenCandidates(knownTokens);
+  if (knownCandidates.size === 0) return;
+
+  // Scan string literals; this catches className="...", clsx("..."), cva("..."), etc.
+  const stringPattern = /(['"`])((?:\\.|(?!\1)[\s\S])*)\1/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = stringPattern.exec(content)) !== null) {
+    const raw = match[2];
+    if (!raw || (!raw.includes('-') && !raw.includes(':'))) continue;
+
+    const classTokens = raw.split(/\s+/).filter(Boolean);
+    if (classTokens.length === 0) continue;
+
+    for (const token of classTokens) {
+      const semanticName = extractTailwindSemanticTokenName(token);
+      if (!semanticName) continue;
+
+      const normalized = normalizeTokenKey(semanticName);
+      if (!knownCandidates.has(normalized)) continue;
+
+      const { lineNumber, columnNumber } = getPosition(content, match.index);
+      const line = lines[lineNumber - 1] ?? '';
+      if (isInComment(line, columnNumber)) continue;
+
+      const contextStart = Math.max(0, lineNumber - 2);
+      const contextEnd = Math.min(lines.length, lineNumber + 1);
+      const context = lines.slice(contextStart, contextEnd).join('\n');
+
+      usages.push({
+        tokenName: semanticName,
+        filePath,
+        lineNumber,
+        columnNumber,
+        usageType: 'tailwind',
+        context,
+        rawValue: token,
+      });
+    }
+  }
+}
+
+function extractTailwindSemanticTokenName(classToken: string): string | null {
+  // Remove variants like dark:hover:focus:
+  const core = classToken.split(':').pop()?.trim() ?? '';
+  if (!core) return null;
+
+  // Ignore negatives and important modifier prefix
+  const normalizedCore = core.replace(/^!/, '').replace(/^-/, '');
+  if (!normalizedCore) return null;
+
+  // Strip opacity suffix, e.g. bg-surface/80
+  const withoutOpacity = normalizedCore.replace(/\/[a-zA-Z0-9.]+$/, '');
+
+  const match = withoutOpacity.match(TAILWIND_TOKEN_UTILITY_PATTERN);
+  if (!match?.[1]) return null;
+
+  const value = match[1];
+
+  // Exclude obviously non-semantic built-in palette classes and modifiers
+  if (
+    /^(transparent|current|black|white|inherit)$/.test(value) ||
+    /^[a-z]+-\d{2,3}$/.test(value) || // slate-900, blue-500, etc.
+    /^\[[^\]]+\]$/.test(value)
+  ) {
+    return null;
+  }
+
+  return value;
+}
+
+function buildKnownTokenCandidates(knownTokens: string[]): Set<string> {
+  const out = new Set<string>();
+
+  for (const token of knownTokens) {
+    const base = normalizeTokenKey(token);
+    if (!base) continue;
+    out.add(base);
+
+    // Tailwind token scanner often prefixes names with "tw-"
+    if (base.startsWith('tw-')) {
+      out.add(base.slice(3));
+    }
+  }
+
+  return out;
+}
+
+function normalizeTokenKey(name: string): string {
+  return name
+    .replace(/^--|^\$/, '')
+    .trim()
+    .toLowerCase();
 }
 
 // ============================================================================

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'fs';
-import { resolve } from 'path';
+import { dirname, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { ZodError } from 'zod';
@@ -63,6 +63,23 @@ export interface LoadConfigResult {
   configPath: string | null;
 }
 
+function findConfigPathUpwards(cwd: string): string | null {
+  let current = resolve(cwd);
+
+  while (true) {
+    for (const filename of CONFIG_FILES) {
+      const fullPath = resolve(current, filename);
+      if (existsSync(fullPath)) {
+        return fullPath;
+      }
+    }
+
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
 /**
  * Apply preset defaults to config. User-specified values take precedence.
  */
@@ -97,16 +114,8 @@ function applyPreset(config: BuoyConfig): BuoyConfig {
 }
 
 export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfigResult> {
-  // Find config file
-  let configPath: string | null = null;
-
-  for (const filename of CONFIG_FILES) {
-    const fullPath = resolve(cwd, filename);
-    if (existsSync(fullPath)) {
-      configPath = fullPath;
-      break;
-    }
-  }
+  // Find config file (walk up so monorepo package dirs can use root config)
+  let configPath: string | null = findConfigPathUpwards(cwd);
 
   if (!configPath) {
     // No config file - use zero-config auto-detection
@@ -149,7 +158,8 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
 
     // Merge auto-detected framework sources with user config
     // This ensures partial configs still get framework detection
-    const mergedConfig = await mergeAutoDetectedSources(userConfig, cwd);
+    const configDir = dirname(configPath);
+    const mergedConfig = await mergeAutoDetectedSources(userConfig, configDir);
 
     return {
       config: mergedConfig,
@@ -186,11 +196,5 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
 }
 
 export function getConfigPath(cwd: string = process.cwd()): string | null {
-  for (const filename of CONFIG_FILES) {
-    const fullPath = resolve(cwd, filename);
-    if (existsSync(fullPath)) {
-      return fullPath;
-    }
-  }
-  return null;
+  return findConfigPathUpwards(cwd);
 }

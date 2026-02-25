@@ -283,6 +283,17 @@ describe('SkillExportService', () => {
 
       expect(result).toContain('No spacing tokens');
     });
+
+    it('renders raw spacing values instead of empty cells', () => {
+      const rawSpacingToken = {
+        ...createMockToken('space-fluid', 'spacing', 8),
+        value: { type: 'raw' as const, value: 'clamp(0.75rem, 2vw, 1.25rem)' },
+      };
+
+      const result = service.generateSpacingTokens([rawSpacingToken]);
+
+      expect(result).toContain('clamp(0.75rem, 2vw, 1.25rem)');
+    });
   });
 
   describe('generateTypographyTokens', () => {
@@ -299,6 +310,17 @@ describe('SkillExportService', () => {
       const result = service.generateTypographyTokens([]);
 
       expect(result).toContain('No typography tokens');
+    });
+
+    it('renders raw typography values instead of empty cells', () => {
+      const rawTypographyToken = {
+        ...createMockToken('font-sans', 'typography', 'Inter'),
+        value: { type: 'raw' as const, value: 'Inter, ui-sans-serif, system-ui' },
+      };
+
+      const result = service.generateTypographyTokens([rawTypographyToken]);
+
+      expect(result).toContain('Inter, ui-sans-serif, system-ui');
     });
   });
 

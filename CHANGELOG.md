@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.26] - 2026-02-25
+
+### Fixed
+- Tailwind semantic utility usage now counts as token usage in unused-token checks (e.g., `bg-surface`, `text-foreground`), reducing false positives in Tailwind-heavy projects
+- `buoy dock hooks` now finds `.git` / hook config files by walking up to the monorepo root, so hook installation works from package subdirectories
+- `buoy dock` config generation now maps Next.js to `sources.nextjs` (not `react`) and generates `app/`, `src/`, and `components/` include patterns
+- Monorepo pattern expansion preserves workspace `app/` and `components/` directories instead of incorrectly forcing them under `src/`
+- Framework detection now scans all workspace packages instead of stopping after the first 20, improving monorepo auto-detection reliability
+- `buoy dock skills/context/agents` scans from the resolved config/workspace root, preventing empty component inventories when run from monorepo subdirectories
+- Skill export now renders raw spacing/typography token values (e.g., `clamp(...)`, raw font stacks) instead of blank table cells
+
 ## [0.3.20] - 2026-02-15
 
 ### Breaking Changes

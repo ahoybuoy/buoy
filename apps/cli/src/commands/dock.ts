@@ -596,10 +596,10 @@ async function runAgentsDock(options: { dryRun?: boolean; json?: boolean }) {
   const spin = spinner("Setting up AI agents...");
 
   try {
-    const { config, projectName } = await loadOrBuildConfig(cwd);
+    const { config, projectName, scanRoot } = await loadOrBuildConfig(cwd);
 
     spin.text = "Scanning...";
-    const orchestrator = new ScanOrchestrator(config, cwd);
+    const orchestrator = new ScanOrchestrator(config, scanRoot);
     const scanResult = await orchestrator.scan({
       onProgress: (msg) => {
         spin.text = msg;
@@ -765,10 +765,10 @@ async function runSkillsDock(options: {
   const spin = spinner("Creating skills...");
 
   try {
-    const { config, projectName } = await loadOrBuildConfig(cwd);
+    const { config, projectName, scanRoot } = await loadOrBuildConfig(cwd);
 
     spin.text = "Scanning...";
-    const orchestrator = new ScanOrchestrator(config, cwd);
+    const orchestrator = new ScanOrchestrator(config, scanRoot);
     const scanResult = await orchestrator.scan({
       onProgress: (msg) => {
         spin.text = msg;
@@ -841,10 +841,10 @@ async function runContextDock(options: {
   const spin = spinner("Generating context...");
 
   try {
-    const { config, projectName } = await loadOrBuildConfig(cwd);
+    const { config, projectName, scanRoot } = await loadOrBuildConfig(cwd);
 
     spin.text = "Scanning...";
-    const orchestrator = new ScanOrchestrator(config, cwd);
+    const orchestrator = new ScanOrchestrator(config, scanRoot);
     const scanResult = await orchestrator.scan();
 
     spin.text = "Analyzing...";
@@ -1004,8 +1004,8 @@ async function runHooksDock(options: { commit?: boolean; claude?: boolean }) {
   if (setupClaude) {
     if (setupCommit) console.log(""); // Add spacing if both
 
-    const { config, projectName } = await loadOrBuildConfig(cwd);
-    const orchestrator = new ScanOrchestrator(config, cwd);
+    const { config, projectName, scanRoot } = await loadOrBuildConfig(cwd);
+    const orchestrator = new ScanOrchestrator(config, scanRoot);
     
     const spin = spinner("Scanning design system for Claude context...");
     const scanResult = await orchestrator.scan();
@@ -1043,20 +1043,42 @@ async function runHooksDock(options: { commit?: boolean; claude?: boolean }) {
 
 async function loadOrBuildConfig(
   cwd: string,
-): Promise<{ config: BuoyConfig; projectName: string }> {
-  const existingConfigPath = getConfigPath();
+): Promise<{ config: BuoyConfig; projectName: string; scanRoot: string }> {
+  const existingConfigPath = getConfigPath(cwd);
   if (existingConfigPath) {
-    const result = await loadConfig();
+    const result = await loadConfig(cwd);
+    const scanRoot = result.configPath ? dirname(result.configPath) : cwd;
     return {
       config: result.config,
       projectName: result.config.project?.name || "design-system",
+      scanRoot,
     };
   }
-  const autoResult = await buildAutoConfig(cwd);
+  const scanRoot = findDockScanRoot(cwd);
+  const autoResult = await buildAutoConfig(scanRoot);
   return {
     config: autoResult.config,
     projectName: autoResult.config.project?.name || "design-system",
+    scanRoot,
   };
+}
+
+function findDockScanRoot(startDir: string): string {
+  let current = resolve(startDir);
+
+  while (true) {
+    const hasWorkspaceMarker =
+      existsSync(join(current, "pnpm-workspace.yaml")) ||
+      existsSync(join(current, "turbo.json")) ||
+      existsSync(join(current, "lerna.json")) ||
+      existsSync(join(current, "nx.json"));
+
+    if (hasWorkspaceMarker) return current;
+
+    const parent = dirname(current);
+    if (parent === current) return startDir;
+    current = parent;
+  }
 }
 
 function generateConfig(project: DetectedProject): string {
@@ -1073,8 +1095,11 @@ function generateConfig(project: DetectedProject): string {
   for (const framework of project.frameworks) {
     const sourceKey = getSourceKey(framework.name);
     if (sourceKey) {
-      const extensions = getExtensions(sourceKey, framework.typescript);
-      const defaultPatterns = extensions.map((ext) => `src/**/*.${ext}`);
+      const defaultPatterns = getDefaultIncludePatterns(
+        framework.name,
+        sourceKey,
+        framework.typescript,
+      );
       const patterns = monorepoConfig.type
         ? expandPatternsForMonorepo(defaultPatterns, monorepoConfig).allPatterns
         : defaultPatterns;
@@ -1109,10 +1134,10 @@ function generateConfig(project: DetectedProject): string {
 }
 
 function getSourceKey(name: string): string | null {
+  if (name === "next" || name === "nextjs") return "nextjs";
   if (
     [
       "react",
-      "nextjs",
       "remix",
       "gatsby",
       "react-native",
@@ -1142,6 +1167,39 @@ function getExtensions(sourceKey: string, typescript: boolean): string[] {
     default:
       return typescript ? ["tsx", "jsx"] : ["jsx", "tsx"];
   }
+}
+
+function getDefaultIncludePatterns(
+  frameworkName: string,
+  sourceKey: string,
+  typescript: boolean,
+): string[] {
+  if (sourceKey === "nextjs") {
+    const exts = typescript ? ["tsx", "jsx"] : ["jsx", "tsx"];
+    return Array.from(new Set(exts.flatMap((ext) => [
+      `app/**/*.${ext}`,
+      `src/**/*.${ext}`,
+      `components/**/*.${ext}`,
+    ])));
+  }
+
+  if (sourceKey === "react") {
+    const exts = typescript ? ["tsx", "jsx"] : ["jsx", "tsx"];
+    const reactPatterns = exts.flatMap((ext) => [
+      `src/**/*.${ext}`,
+      `components/**/*.${ext}`,
+    ]);
+
+    // Next.js and Remix commonly use app/ routes/components outside src/
+    if (frameworkName === "next" || frameworkName === "nextjs" || frameworkName === "remix") {
+      reactPatterns.push(...exts.map((ext) => `app/**/*.${ext}`));
+    }
+
+    return Array.from(new Set(reactPatterns));
+  }
+
+  const extensions = getExtensions(sourceKey, typescript);
+  return extensions.map((ext) => `src/**/*.${ext}`);
 }
 
 function printDetectionResults(project: DetectedProject): void {

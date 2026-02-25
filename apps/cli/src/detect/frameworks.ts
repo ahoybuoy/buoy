@@ -149,7 +149,7 @@ export async function detectFrameworks(projectRoot: string, monorepoInfo?: Monor
 
       try {
         const matches = await glob(pkgPattern, { cwd: projectRoot, nodir: true });
-        for (const match of matches.slice(0, 20)) {  // Limit to 20 packages
+        for (const match of matches) {
           try {
             const wsPkgPath = resolve(projectRoot, match);
             const wsPkgJson: PackageJson = JSON.parse(await readFile(wsPkgPath, 'utf-8'));

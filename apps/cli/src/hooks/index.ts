@@ -6,7 +6,7 @@ import {
   chmodSync,
   readFileSync,
 } from "fs";
-import { resolve } from "path";
+import { dirname, resolve } from "path";
 
 /**
  * Pre-commit hook script content
@@ -63,39 +63,70 @@ repos:
 
 export type HookSystem = "git" | "husky" | "pre-commit" | "lint-staged";
 
+function findAncestorDir(
+  startDir: string,
+  predicate: (dir: string) => boolean,
+): string | null {
+  let current = resolve(startDir);
+
+  while (true) {
+    if (predicate(current)) return current;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+function findGitRoot(startDir: string): string | null {
+  return findAncestorDir(startDir, (dir) => existsSync(resolve(dir, ".git")));
+}
+
+function findHuskyRoot(startDir: string): string | null {
+  return findAncestorDir(startDir, (dir) => existsSync(resolve(dir, ".husky")));
+}
+
+function findPreCommitRoot(startDir: string): string | null {
+  return findAncestorDir(startDir, (dir) =>
+    existsSync(resolve(dir, ".pre-commit-config.yaml"))
+  );
+}
+
+function findLintStagedRoot(startDir: string): string | null {
+  return findAncestorDir(startDir, (dir) => {
+    const pkgPath = resolve(dir, "package.json");
+    if (!existsSync(pkgPath)) return false;
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      return Boolean(pkg["lint-staged"]);
+    } catch {
+      return false;
+    }
+  });
+}
+
+function detectHookSystemWithRoot(
+  projectRoot: string,
+): { hookSystem: HookSystem | null; root: string | null } {
+  const huskyRoot = findHuskyRoot(projectRoot);
+  if (huskyRoot) return { hookSystem: "husky", root: huskyRoot };
+
+  const preCommitRoot = findPreCommitRoot(projectRoot);
+  if (preCommitRoot) return { hookSystem: "pre-commit", root: preCommitRoot };
+
+  const lintStagedRoot = findLintStagedRoot(projectRoot);
+  if (lintStagedRoot) return { hookSystem: "lint-staged", root: lintStagedRoot };
+
+  const gitRoot = findGitRoot(projectRoot);
+  if (gitRoot) return { hookSystem: "git", root: gitRoot };
+
+  return { hookSystem: null, root: null };
+}
+
 /**
  * Detect which hook system is in use
  */
 export function detectHookSystem(projectRoot: string): HookSystem | null {
-  // Check for Husky
-  if (existsSync(resolve(projectRoot, ".husky"))) {
-    return "husky";
-  }
-
-  // Check for pre-commit
-  if (existsSync(resolve(projectRoot, ".pre-commit-config.yaml"))) {
-    return "pre-commit";
-  }
-
-  // Check for lint-staged in package.json
-  const pkgPath = resolve(projectRoot, "package.json");
-  if (existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-      if (pkg["lint-staged"]) {
-        return "lint-staged";
-      }
-    } catch {
-      // Ignore parse errors
-    }
-  }
-
-  // Check for .git directory (can use raw git hooks)
-  if (existsSync(resolve(projectRoot, ".git"))) {
-    return "git";
-  }
-
-  return null;
+  return detectHookSystemWithRoot(projectRoot).hookSystem;
 }
 
 export interface SetupHooksResult {
@@ -109,9 +140,9 @@ export interface SetupHooksResult {
  * Setup pre-commit hooks for the project
  */
 export function setupHooks(projectRoot: string): SetupHooksResult {
-  const hookSystem = detectHookSystem(projectRoot);
+  const { hookSystem, root } = detectHookSystemWithRoot(projectRoot);
 
-  if (!hookSystem) {
+  if (!hookSystem || !root) {
     return {
       success: false,
       hookSystem: null,
@@ -121,13 +152,13 @@ export function setupHooks(projectRoot: string): SetupHooksResult {
 
   switch (hookSystem) {
     case "husky":
-      return setupHuskyHook(projectRoot);
+      return setupHuskyHook(root);
     case "pre-commit":
-      return setupPreCommitConfig(projectRoot);
+      return setupPreCommitConfig(root);
     case "lint-staged":
-      return setupLintStaged(projectRoot);
+      return setupLintStaged(root);
     case "git":
-      return setupGitHook(projectRoot);
+      return setupGitHook(root);
     default:
       return {
         success: false,

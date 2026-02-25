@@ -10,7 +10,14 @@ export const ComponentSourceConfigSchema = z.object({
 
 // React source config
 export const ReactConfigSchema = ComponentSourceConfigSchema.extend({
-  include: z.array(z.string()).default(['src/**/*.tsx', 'src/**/*.jsx']),
+  include: z.array(z.string()).default([
+    'src/**/*.tsx',
+    'src/**/*.jsx',
+    'app/**/*.tsx',
+    'app/**/*.jsx',
+    'components/**/*.tsx',
+    'components/**/*.jsx',
+  ]),
 });
 
 // Next.js source config
@@ -99,7 +106,16 @@ export const TokenConfigSchema = z.object({
 // Tailwind source config (for arbitrary value detection)
 export const TailwindConfigSchema = z.object({
   enabled: z.boolean().default(true),
-  files: z.array(z.string()).default(['src/**/*.tsx', 'src/**/*.jsx', 'src/**/*.vue', 'src/**/*.svelte']),
+  files: z.array(z.string()).default([
+    'src/**/*.tsx',
+    'src/**/*.jsx',
+    'src/**/*.vue',
+    'src/**/*.svelte',
+    'app/**/*.tsx',
+    'app/**/*.jsx',
+    'components/**/*.tsx',
+    'components/**/*.jsx',
+  ]),
   exclude: z.array(z.string()).default(['**/node_modules/**', '**/dist/**', '**/.next/**']),
 });
 
