@@ -1,4 +1,5 @@
 // Audit report generation - analyzes codebase for design system health
+import type { DriftType } from "../models/drift.js";
 
 export interface AuditValue {
   category: 'color' | 'spacing' | 'typography' | 'radius';
@@ -55,6 +56,10 @@ export interface HealthMetrics {
   namingInconsistencyCount: number;
   /** Number of critical-severity drift signals */
   criticalCount: number;
+  /** Number of accessibility-conflict drift signals */
+  accessibilityConflictCount?: number;
+  /** Number of color-contrast drift signals */
+  colorContrastCount?: number;
   /** Whether a utility CSS framework (Tailwind) is detected */
   hasUtilityFramework: boolean;
   /** Whether a design system library (MUI, Chakra, shadcn, etc.) is detected */
@@ -71,6 +76,14 @@ export interface HealthMetrics {
   semanticMismatchCount?: number;
   /** Number of deprecated-pattern drift signals (technical debt) */
   deprecatedPatternCount?: number;
+  /** Number of orphaned-token drift signals (token exists in code but not canonical DS source) */
+  orphanedTokenCount?: number;
+  /** Number of value-divergence drift signals (code/design values differ) */
+  valueDivergenceCount?: number;
+  /** Number of missing-documentation drift signals */
+  missingDocumentationCount?: number;
+  /** Number of framework-sprawl drift signals */
+  frameworkSprawlCount?: number;
   /** Number of files with >2 hardcoded values (severe maintenance burden) */
   highDensityFileCount?: number;
   /** Number of drift signals from vendored/template components (e.g., shadcn/ui) */
@@ -109,6 +122,30 @@ export interface HealthScoreResult {
   /** Raw metrics used for scoring */
   metrics: HealthMetrics;
 }
+
+export type HealthPillarKey = "valueDiscipline" | "tokenHealth" | "consistency" | "criticalIssues";
+export type HealthCoverageMode = "direct" | "indirect";
+
+/**
+ * Exhaustive mapping of drift signal types to the health score pillar they influence.
+ * Keep this in sync with DriftType to prevent adding new drift types without scoring coverage.
+ */
+export const DRIFT_TYPE_HEALTH_COVERAGE: Record<DriftType, { pillar: HealthPillarKey; mode: HealthCoverageMode }> = {
+  "deprecated-pattern": { pillar: "criticalIssues", mode: "direct" },
+  "accessibility-conflict": { pillar: "criticalIssues", mode: "direct" },
+  "semantic-mismatch": { pillar: "consistency", mode: "direct" },
+  "orphaned-component": { pillar: "valueDiscipline", mode: "direct" },
+  "orphaned-token": { pillar: "tokenHealth", mode: "direct" },
+  "value-divergence": { pillar: "tokenHealth", mode: "direct" },
+  "naming-inconsistency": { pillar: "consistency", mode: "direct" },
+  "missing-documentation": { pillar: "criticalIssues", mode: "direct" },
+  "hardcoded-value": { pillar: "valueDiscipline", mode: "direct" },
+  "framework-sprawl": { pillar: "consistency", mode: "direct" },
+  "unused-component": { pillar: "valueDiscipline", mode: "direct" },
+  "unused-token": { pillar: "tokenHealth", mode: "direct" },
+  "color-contrast": { pillar: "criticalIssues", mode: "direct" },
+  "repeated-pattern": { pillar: "valueDiscipline", mode: "direct" },
+};
 
 /**
  * Generate an audit report from extracted values
@@ -465,7 +502,11 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   // What fraction of tokens are actually used? All used = 5, all unused = 0.
   let tokenUsagePoints: number;
   if (metrics.tokenCount > 0) {
-    const usedTokens = metrics.tokenCount - metrics.unusedTokenCount;
+    const effectiveUnusedTokenCount = Math.min(
+      metrics.tokenCount,
+      metrics.unusedTokenCount + (metrics.orphanedTokenCount ?? 0),
+    );
+    const usedTokens = metrics.tokenCount - effectiveUnusedTokenCount;
     tokenUsagePoints = 5 * clamp(usedTokens / metrics.tokenCount, 0, 1);
   } else if (metrics.hasUtilityFramework || metrics.hasDesignSystemLibrary) {
     // No explicit tokens but has a framework/library — give partial credit
@@ -479,7 +520,11 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   }
 
   // Round the combined score for integer totals
-  const tokenHealthScore = Math.round(utilityPoints + libraryPoints + tokenCoveragePoints + tokenUsagePoints);
+  const valueDivergencePenalty = Math.min(3, Math.ceil((metrics.valueDivergenceCount ?? 0) / 5));
+  const tokenHealthScore = Math.max(
+    0,
+    Math.round(utilityPoints + libraryPoints + tokenCoveragePoints + tokenUsagePoints) - valueDivergencePenalty,
+  );
 
   // Token health suggestions (threshold-based)
   if (metrics.tokenCount > 0 && metrics.unusedTokenCount > 5) {
@@ -494,6 +539,16 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
       );
     }
   }
+  if ((metrics.orphanedTokenCount ?? 0) > 0) {
+    suggestions.push(
+      `${metrics.orphanedTokenCount} token${metrics.orphanedTokenCount === 1 ? '' : 's'} exist in code but not in the canonical design system source`
+    );
+  }
+  if ((metrics.valueDivergenceCount ?? 0) > 0) {
+    suggestions.push(
+      `${metrics.valueDivergenceCount} value divergence issue${metrics.valueDivergenceCount === 1 ? '' : 's'} — sync code values with design system definitions`
+    );
+  }
   if (tokenHealthScore < 10 && metrics.componentCount > 0) {
     if (frameworks.includes('tailwind')) {
       suggestions.push('Tailwind detected but token coverage is low — extend your theme config with custom values');
@@ -507,7 +562,8 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
 
   // Pillar 3: Consistency (0-10)
   // Includes naming-inconsistency + semantic-mismatch signals
-  const inconsistencyCount = metrics.namingInconsistencyCount + (metrics.semanticMismatchCount ?? 0);
+  const frameworkSprawlCount = metrics.frameworkSprawlCount ?? 0;
+  const inconsistencyCount = metrics.namingInconsistencyCount + (metrics.semanticMismatchCount ?? 0) + frameworkSprawlCount * 2;
   const namingRate = inconsistencyCount / Math.max(metrics.componentCount, 1);
   const consistencyRaw = 10 * clamp(1 - namingRate / 0.25, 0, 1);
 
@@ -527,25 +583,55 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
       );
     }
   }
+  if (frameworkSprawlCount > 0) {
+    suggestions.push(
+      `${frameworkSprawlCount} framework sprawl signal${frameworkSprawlCount === 1 ? '' : 's'} — standardize on fewer UI/styling frameworks`
+    );
+  }
 
   // Pillar 4: Critical Issues (0-10)
   // Includes critical severity + deprecated patterns (2 deprecated = 1 critical equivalent)
   const deprecatedCount = metrics.deprecatedPatternCount ?? 0;
+  const accessibilityConflictCount = metrics.accessibilityConflictCount ?? 0;
+  const colorContrastCount = metrics.colorContrastCount ?? 0;
+  const missingDocumentationCount = metrics.missingDocumentationCount ?? 0;
   const highDensityFiles = metrics.highDensityFileCount ?? 0;
-  const effectiveCriticalCount = metrics.criticalCount
+  const otherCriticalCount = Math.max(
+    0,
+    metrics.criticalCount - accessibilityConflictCount - colorContrastCount,
+  );
+  const effectiveCriticalCount = otherCriticalCount
+    + accessibilityConflictCount
+    + colorContrastCount
     + Math.ceil(deprecatedCount / 2)
+    + Math.ceil(missingDocumentationCount / 10)
     + Math.floor(highDensityFiles / 3);
   // Use 2-point steps for finer granularity (was 3-point)
   const criticalRaw = Math.max(0, 10 - effectiveCriticalCount * 2);
 
-  if (metrics.criticalCount > 0) {
+  if (accessibilityConflictCount > 0) {
     suggestions.push(
-      `${metrics.criticalCount} critical issue${metrics.criticalCount === 1 ? '' : 's'} (accessibility/contrast) — fix immediately`
+      `${accessibilityConflictCount} accessibility conflict${accessibilityConflictCount === 1 ? '' : 's'} — fix immediately`
+    );
+  }
+  if (colorContrastCount > 0) {
+    suggestions.push(
+      `${colorContrastCount} color contrast issue${colorContrastCount === 1 ? '' : 's'} — fix immediately`
+    );
+  }
+  if (otherCriticalCount > 0) {
+    suggestions.push(
+      `${otherCriticalCount} critical issue${otherCriticalCount === 1 ? '' : 's'} — fix immediately`
     );
   }
   if (deprecatedCount > 0) {
     suggestions.push(
       `${deprecatedCount} deprecated pattern${deprecatedCount === 1 ? '' : 's'} — migrate to current API`
+    );
+  }
+  if (missingDocumentationCount > 0) {
+    suggestions.push(
+      `${missingDocumentationCount} component${missingDocumentationCount === 1 ? '' : 's'} missing documentation/examples — add docs to reduce misuse`
     );
   }
 

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.32] - 2026-02-26
+
+### Fixed
+- Health scoring now explicitly maps **all drift types** into the 4-pillar score model, including direct handling for `accessibility-conflict`, `color-contrast`, `orphaned-token`, `value-divergence`, `missing-documentation`, and `framework-sprawl`
+- `gatherHealthMetrics()` now counts the newly scored drift types so `buoy show health` and score-based CI gates reflect the full drift set
+
+### Added
+- Exhaustive `DriftType -> health pillar` coverage mapping in core with tests, preventing new drift types from being added without score coverage
+
 ## [0.3.31] - 2026-02-26
 
 ### Added

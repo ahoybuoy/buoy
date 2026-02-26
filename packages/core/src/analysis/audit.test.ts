@@ -3,12 +3,14 @@ import {
   generateAuditReport,
   calculateHealthScore,
   calculateHealthScorePillar,
+  DRIFT_TYPE_HEALTH_COVERAGE,
   getHealthTier,
   findCloseMatches,
   type AuditReport,
   type AuditValue,
   type HealthMetrics,
 } from './audit.js';
+import { DriftTypeSchema } from '../models/drift.js';
 
 // Helper to create extracted values
 function createValue(
@@ -858,6 +860,61 @@ describe('calculateHealthScorePillar', () => {
       expect(withDeprecated.pillars.criticalIssues.score).toBeLessThan(clean.pillars.criticalIssues.score);
     });
 
+    it('penalizes token health for orphaned-token and value-divergence signals', () => {
+      const clean = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        tokenCount: 40,
+        unusedTokenCount: 0,
+        hasUtilityFramework: true,
+      }));
+      const withTokenDrift = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        tokenCount: 40,
+        unusedTokenCount: 0,
+        orphanedTokenCount: 6,
+        valueDivergenceCount: 8,
+        hasUtilityFramework: true,
+      }));
+      expect(withTokenDrift.pillars.tokenHealth.score).toBeLessThan(clean.pillars.tokenHealth.score);
+    });
+
+    it('penalizes consistency for framework-sprawl signals', () => {
+      const clean = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+      }));
+      const withSprawl = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        frameworkSprawlCount: 2,
+      }));
+      expect(withSprawl.pillars.consistency.score).toBeLessThan(clean.pillars.consistency.score);
+    });
+
+    it('penalizes critical issues for missing-documentation signals', () => {
+      const clean = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+      }));
+      const withMissingDocs = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        missingDocumentationCount: 15,
+      }));
+      expect(withMissingDocs.pillars.criticalIssues.score).toBeLessThan(clean.pillars.criticalIssues.score);
+    });
+
+    it('penalizes critical issues for accessibility and color contrast signals explicitly', () => {
+      const clean = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+      }));
+      const withCriticalTypes = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100,
+        criticalCount: 3,
+        accessibilityConflictCount: 1,
+        colorContrastCount: 2,
+      }));
+      expect(withCriticalTypes.pillars.criticalIssues.score).toBeLessThan(clean.pillars.criticalIssues.score);
+      expect(withCriticalTypes.suggestions.some(s => s.includes('accessibility conflict'))).toBe(true);
+      expect(withCriticalTypes.suggestions.some(s => s.includes('color contrast'))).toBe(true);
+    });
+
     it('does not change scores when silent drift counts are zero or undefined', () => {
       const withZero = calculateHealthScorePillar(makeMetrics({
         componentCount: 100,
@@ -866,11 +923,26 @@ describe('calculateHealthScorePillar', () => {
         orphanedComponentCount: 0,
         semanticMismatchCount: 0,
         deprecatedPatternCount: 0,
+        orphanedTokenCount: 0,
+        valueDivergenceCount: 0,
+        missingDocumentationCount: 0,
+        frameworkSprawlCount: 0,
+        accessibilityConflictCount: 0,
+        colorContrastCount: 0,
       }));
       const withUndefined = calculateHealthScorePillar(makeMetrics({
         componentCount: 100,
       }));
       expect(withZero.score).toBe(withUndefined.score);
+    });
+
+    it('has exhaustive direct health coverage mapping for all drift types', () => {
+      const driftTypes = [...DriftTypeSchema.options].sort();
+      const mappedTypes = Object.keys(DRIFT_TYPE_HEALTH_COVERAGE).sort();
+      expect(mappedTypes).toEqual(driftTypes);
+      for (const type of driftTypes) {
+        expect(DRIFT_TYPE_HEALTH_COVERAGE[type as keyof typeof DRIFT_TYPE_HEALTH_COVERAGE].mode).toBe('direct');
+      }
     });
 
     it('adds deprecated pattern suggestion', () => {
