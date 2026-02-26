@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.31] - 2026-02-26
+
+### Added
+- Remote and single-file drift verification in `buoy drift check` via `--url`, positional public URLs (including bare domains like `buoy.design/ds.astro`), local single-file paths, optional `--tokens`, and `--fixture` manifest support
+- Remote and single-file support in `buoy show drift` with the same URL/fixture flags and JSON `sourceContext` metadata (`local`, `remote-url`, `remote-fixture`)
+- Remote fetch guardrails for drift verification: URL normalization, timeout/size limits, localhost/private-network blocking by default (with explicit override), redirect handling, and reduced-confidence labeling when project context is missing
+
 ## [0.3.30] - 2026-02-25
 
 ### Fixed

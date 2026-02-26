@@ -11,6 +11,10 @@ import {
   hasDriftsAboveThreshold,
   calculateDriftSummary,
 } from "../services/drift-analysis.js";
+import {
+  classifyCheckInput,
+  runSingleSourceOrRemoteCheck,
+} from "../services/remote-check.js";
 import { formatUpgradeHint } from "../utils/upgrade-hints.js";
 import { generatePRCommentPreview } from "../output/pr-comment-preview.js";
 import {
@@ -205,11 +209,20 @@ function calculateMaturityScore(tokenCount: number, driftCount: number): number 
 export function createCheckCommand(): Command {
   const cmd = new Command("check")
     .description("Fast drift check for pre-commit hooks")
+    .argument("[target]", "Optional local file path or public URL to check directly")
     .option(
       "--fail-on <severity>",
       "Exit 1 if drift at this severity or higher: critical, warning, info, none",
       "critical",
     )
+    .option("--url <url>", "Public source file URL to check (supports bare host/path)")
+    .option("--tokens <urlOrPath>", "Remote/local token file for single-source checks")
+    .option("--fixture <urlOrPath>", "Remote/local fixture manifest JSON (source + tokens + optional config)")
+    .option("--strict-remote", "Fail if remote/local single-source check is missing tokens/config context")
+    .option("--allow-private-network", "Allow localhost/private IP URLs for remote checks (disabled by default)")
+    .option("--remote-timeout-ms <ms>", "Remote fetch timeout in ms", (v) => parseInt(v, 10))
+    .option("--remote-max-bytes <bytes>", "Max remote response size in bytes", (v) => parseInt(v, 10))
+    .option("--remote-cache", "Enable temporary in-run cache for remote fetches")
     .option("--staged", "Only check staged files (for pre-commit hooks)")
     .option("--quiet", "Suppress all output except errors")
     .option("-v, --verbose", "Show detailed output")
@@ -223,7 +236,8 @@ export function createCheckCommand(): Command {
     .option("--report", "Report results to Buoy Cloud (requires login)")
     .option("--repo <repo>", "Repository name (owner/repo) for cloud reporting")
     .option("--pr <number>", "PR number for cloud reporting", parseInt)
-    .action(async (options) => {
+    .action(async (target: string | undefined, options, command) => {
+      const resolvedTarget = typeof target === "string" ? target : command?.args?.[0];
       // --json is shorthand for --format json
       if (options.json) {
         options.format = "json";
@@ -236,6 +250,102 @@ export function createCheckCommand(): Command {
           : () => {};
 
       try {
+        const actualInputMode = classifyCheckInput(resolvedTarget, {
+          url: options.url,
+          fixture: options.fixture,
+        });
+
+        if (actualInputMode !== "project") {
+          if (options.staged) {
+            throw new Error("--staged is not supported with --url/--fixture or direct file/URL targets");
+          }
+          if (options.report) {
+            throw new Error("--report is not supported with --url/--fixture or direct file/URL targets");
+          }
+
+          const failOn = options.failOn as Severity | "none";
+          const remoteResult = await runSingleSourceOrRemoteCheck({
+            failOn,
+            verbose: options.verbose,
+            strictRemote: !!options.strictRemote,
+            allowPrivateNetwork: !!options.allowPrivateNetwork,
+            timeoutMs: options.remoteTimeoutMs,
+            maxBytes: options.remoteMaxBytes,
+            cache: !!options.remoteCache,
+            tokens: options.tokens,
+            fixture: options.fixture,
+            url: options.url,
+            target: resolvedTarget,
+          });
+
+          const drifts = remoteResult.drifts;
+          const summary = remoteResult.summary;
+          const exitCode = hasDriftsAboveThreshold(drifts, failOn) ? 1 : 0;
+          const format = options.format as OutputFormat;
+
+          if (format === "ai-feedback") {
+            console.log(formatAiFeedback(drifts, exitCode, summary));
+            process.exit(exitCode);
+            return;
+          }
+
+          if (format === "json") {
+            console.log(JSON.stringify({
+              passed: exitCode === 0,
+              drifts: drifts.map((d) => ({
+                id: d.id,
+                type: d.type,
+                severity: d.severity,
+                message: d.message,
+                source: d.source,
+                details: d.details,
+              })),
+              summary,
+              sourceContext: remoteResult.sourceContext,
+            }, null, 2));
+            process.exit(exitCode);
+            return;
+          }
+
+          if (!options.quiet) {
+            if (remoteResult.sourceContext.confidence === "reduced") {
+              console.log("~ Reduced-confidence remote/single-file check");
+              console.log(`  ${remoteResult.sourceContext.reason}`);
+              console.log("");
+            }
+            console.log(`Source: ${remoteResult.sourceContext.source}`);
+            console.log(`Context: ${remoteResult.sourceContext.mode}`);
+            console.log("");
+
+            if (exitCode === 0) {
+              if (summary.total === 0) {
+                console.log("+ No drift detected");
+              } else {
+                console.log(`+ Check passed (${summary.total} drift${summary.total !== 1 ? "s" : ""} below threshold)`);
+              }
+            } else {
+              console.log("x Drift detected");
+              console.log("");
+              console.log(`  Critical: ${summary.critical}`);
+              console.log(`  Warning:  ${summary.warning}`);
+              console.log(`  Info:     ${summary.info}`);
+              if (options.verbose && drifts.length > 0) {
+                console.log("");
+                console.log("Issues:");
+                for (const drift of drifts.slice(0, 10)) {
+                  const sev = drift.severity === "critical" ? "!" : drift.severity === "warning" ? "~" : "i";
+                  const loc = drift.source.location ? ` (${drift.source.location})` : "";
+                  console.log(`  [${sev}] ${drift.source.entityName}: ${drift.message}${loc}`);
+                }
+                if (drifts.length > 10) console.log(`  ... and ${drifts.length - 10} more`);
+              }
+            }
+          }
+
+          process.exit(exitCode);
+          return;
+        }
+
         log("Loading configuration...");
         const existingConfigPath = getConfigPath();
         let config: BuoyConfig;

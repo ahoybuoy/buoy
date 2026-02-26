@@ -26,6 +26,7 @@ import {
 } from "../output/formatters.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
+import { classifyCheckInput, runSingleSourceOrRemoteCheck } from "../services/remote-check.js";
 import { saveHistory, getLastScore } from "../services/scan-history.js";
 import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
 import type { DriftSignal, Severity } from "@buoy-design/core";
@@ -292,15 +293,25 @@ export function createShowCommand(): Command {
   cmd
     .command("drift")
     .description("Show drift signals (design system violations)")
+    .argument("[target]", "Optional local file path or public URL to analyze directly")
     .option("--json", "Output as JSON")
     .option("--raw", "Output raw signals without grouping")
     .option("-f, --format <type>", "Output format: json, markdown, html, table, tree, agent")
     .addOption(new Option("-S, --severity <level>", "Filter by minimum severity").choices(["info", "warning", "critical"]))
     .option("-t, --type <type>", "Filter by drift type")
     .option("-v, --verbose", "Verbose output with full details")
+    .option("--url <url>", "Public source file URL to analyze (supports bare host/path)")
+    .option("--tokens <urlOrPath>", "Remote/local token file for single-source drift analysis")
+    .option("--fixture <urlOrPath>", "Remote/local fixture manifest JSON (source + tokens + optional config)")
+    .option("--strict-remote", "Fail if remote/single-source analysis is missing tokens/config context")
+    .option("--allow-private-network", "Allow localhost/private IP URLs for remote analysis")
+    .option("--remote-timeout-ms <ms>", "Remote fetch timeout in ms", (v) => parseInt(v, 10))
+    .option("--remote-max-bytes <bytes>", "Max remote response size in bytes", (v) => parseInt(v, 10))
+    .option("--remote-cache", "Enable temporary in-run cache for remote fetches")
     .option("--include-ignored", "Include ignored drifts (show all)")
     .option("--clear-cache", "Clear cache before scanning")
-    .action(async (options, command) => {
+    .action(async (target: string | undefined, options, command) => {
+      const resolvedTarget = typeof target === "string" ? target : command?.args?.[0];
       const parentOpts = command.parent?.opts() || {};
       const json = options.json || parentOpts.json !== false;
       const useJson = json && !options.format && !options.verbose;
@@ -311,6 +322,151 @@ export function createShowCommand(): Command {
       const spin = spinner("Analyzing drift...");
 
       try {
+        const inputMode = classifyCheckInput(resolvedTarget, {
+          url: options.url,
+          fixture: options.fixture,
+        });
+
+        if (inputMode !== "project") {
+          const remote = await runSingleSourceOrRemoteCheck({
+            failOn: "none",
+            verbose: options.verbose,
+            strictRemote: !!options.strictRemote,
+            allowPrivateNetwork: !!options.allowPrivateNetwork,
+            timeoutMs: options.remoteTimeoutMs,
+            maxBytes: options.remoteMaxBytes,
+            cache: !!options.remoteCache,
+            tokens: options.tokens,
+            fixture: options.fixture,
+            url: options.url,
+            target: resolvedTarget,
+          });
+
+          let drifts = remote.drifts;
+          if (options.severity) {
+            const rank = { info: 0, warning: 1, critical: 2 } as const;
+            const min = rank[options.severity as "info" | "warning" | "critical"] ?? 0;
+            drifts = drifts.filter(d => rank[d.severity] >= min);
+          }
+          if (options.type) {
+            drifts = drifts.filter(d => d.type === options.type);
+          }
+
+          spin.stop();
+
+          const format = options.format;
+
+          if (format === "agent") {
+            console.log(formatAgent(drifts));
+            return;
+          }
+
+          if (format === "markdown") {
+            console.log(formatMarkdown(drifts));
+            return;
+          }
+
+          if (format === "html") {
+            const htmlContent = formatHtml(drifts, { designerFriendly: true });
+            const filename = "drift-report.html";
+            writeFileSync(filename, htmlContent);
+            success(`HTML report saved to ${filename}`);
+            return;
+          }
+
+          if (options.raw) {
+            console.log(JSON.stringify({
+              drifts,
+              summary: {
+                total: drifts.length,
+                critical: drifts.filter((d: DriftSignal) => d.severity === "critical").length,
+                warning: drifts.filter((d: DriftSignal) => d.severity === "warning").length,
+                info: drifts.filter((d: DriftSignal) => d.severity === "info").length,
+              },
+              sourceContext: remote.sourceContext,
+            }, null, 2));
+            return;
+          }
+
+          if (format === "json" || useJson) {
+            const aggregator = new DriftAggregator({
+              strategies: ["value", "suggestion", "path", "entity"],
+              minGroupSize: 2,
+              pathPatterns: [],
+            });
+            const aggregated = aggregator.aggregate(drifts);
+            console.log(JSON.stringify({
+              groups: aggregated.groups.map(g => ({
+                id: g.id,
+                strategy: g.groupingKey.strategy,
+                key: g.groupingKey.value,
+                summary: g.summary,
+                count: g.totalCount,
+                severity: g.bySeverity,
+                representative: {
+                  type: g.representative.type,
+                  message: g.representative.message,
+                  location: g.representative.source.location,
+                  tokenSuggestions: g.representative.details?.tokenSuggestions || undefined,
+                },
+              })),
+              ungrouped: aggregated.ungrouped.map(d => ({
+                id: d.id,
+                type: d.type,
+                severity: d.severity,
+                message: d.message,
+                location: d.source.location,
+                tokenSuggestions: d.details?.tokenSuggestions || undefined,
+              })),
+              summary: {
+                totalSignals: aggregated.totalSignals,
+                totalGroups: aggregated.totalGroups,
+                ungroupedCount: aggregated.ungrouped.length,
+                reductionRatio: Math.round(aggregated.reductionRatio * 10) / 10,
+                bySeverity: {
+                  critical: drifts.filter((d: DriftSignal) => d.severity === "critical").length,
+                  warning: drifts.filter((d: DriftSignal) => d.severity === "warning").length,
+                  info: drifts.filter((d: DriftSignal) => d.severity === "info").length,
+                },
+              },
+              ignoredCount: 0,
+              sourceContext: remote.sourceContext,
+            }, null, 2));
+            return;
+          }
+
+          const uniqueFiles = new Set(
+            drifts.map(d => d.source.location?.split(':')[0] || d.source.entityName)
+          );
+          if (remote.sourceContext.confidence === "reduced") {
+            info("Reduced-confidence remote/single-file drift analysis");
+            if (remote.sourceContext.reason) info(remote.sourceContext.reason);
+            info(`Source: ${remote.sourceContext.source}`);
+            newline();
+          }
+
+          if (options.verbose) {
+            header("Drift Analysis");
+            newline();
+            const summary = getSummary(drifts);
+            keyValue("Components scanned", "n/a (remote/single-file)");
+            keyValue("Critical", String(summary.critical));
+            keyValue("Warning", String(summary.warning));
+            keyValue("Info", String(summary.info));
+            newline();
+            console.log(formatDriftList(drifts));
+          } else if (format === "table") {
+            header("Drift Analysis");
+            newline();
+            console.log(formatDriftTable(drifts));
+          } else {
+            newline();
+            console.log(formatDriftTree(drifts, uniqueFiles.size));
+          }
+
+          return;
+        }
+
         const { config, projectRoot } = await getOrBuildConfigWithRoot();
 
         const { result } = await withOptionalCache(
