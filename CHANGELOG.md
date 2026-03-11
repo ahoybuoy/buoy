@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.33] - 2026-03-10
+
+### Added
+- `buoy-design` npm package alias so `npm install buoy-design` and `npx buoy-design` work (catches users who guess the package name from the brand)
+
 ## [0.3.32] - 2026-02-26
 
 ### Fixed

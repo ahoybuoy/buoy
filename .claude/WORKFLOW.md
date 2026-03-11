@@ -31,7 +31,7 @@ The `workflow-check.js` hook reminds you before commits if CHANGELOG.md hasn't b
 ### 2. Version Synchronization (Enforced)
 
 These packages MUST have matching versions:
-- `@buoy-design/cli` ↔ `ahoybuoy`
+- `@buoy-design/cli` ↔ `ahoybuoy` ↔ `buoy-design`
 
 These packages SHOULD have matching versions:
 - `@buoy-design/core` ↔ `@buoy-design/scanners`

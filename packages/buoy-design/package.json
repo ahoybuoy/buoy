@@ -1,5 +1,5 @@
 {
-  "name": "ahoybuoy",
+  "name": "buoy-design",
   "version": "0.3.33",
   "description": "Catch design drift before it ships",
   "type": "module",
@@ -9,7 +9,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ahoybuoy/buoy.git",
-    "directory": "packages/ahoybuoy"
+    "directory": "packages/buoy-design"
   },
   "bugs": {
     "url": "https://github.com/ahoybuoy/buoy/issues"
@@ -27,7 +27,7 @@
   ],
   "bin": {
     "buoy": "./bin.js",
-    "ahoybuoy": "./bin.js"
+    "buoy-design": "./bin.js"
   },
   "dependencies": {
     "@buoy-design/cli": "workspace:*"

@@ -399,6 +399,8 @@ node apps/cli/dist/bin.js show all
 | `@buoy-design/cli`      | Command-line interface                   |
 | `@buoy-design/core`     | Domain models and drift detection engine |
 | `@buoy-design/scanners` | Framework-specific code scanners         |
+| `ahoybuoy`              | CLI wrapper (`npx ahoybuoy`)             |
+| `buoy-design`           | CLI wrapper (`npx buoy-design`)          |
 
 ## License
 

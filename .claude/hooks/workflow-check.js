@@ -103,7 +103,8 @@ function checkVersionSync(cwd) {
   const issues = [];
   const packages = [
     'apps/cli/package.json',
-    'apps/ahoybuoy/package.json',
+    'packages/ahoybuoy/package.json',
+    'packages/buoy-design/package.json',
     'packages/core/package.json',
     'packages/scanners/package.json'
   ];
@@ -118,9 +119,12 @@ function checkVersionSync(cwd) {
       }
     }
 
-    // CLI and ahoybuoy should match
-    if (versions['apps/cli/package.json'] !== versions['apps/ahoybuoy/package.json']) {
+    // CLI, ahoybuoy, and buoy-design should match
+    if (versions['apps/cli/package.json'] !== versions['packages/ahoybuoy/package.json']) {
       issues.push('cli and ahoybuoy versions should match');
+    }
+    if (versions['apps/cli/package.json'] !== versions['packages/buoy-design/package.json']) {
+      issues.push('cli and buoy-design versions should match');
     }
 
     // Core and scanners should match
