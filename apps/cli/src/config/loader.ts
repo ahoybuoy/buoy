@@ -12,7 +12,7 @@ import { buildAutoConfig } from './auto-detect.js';
  * These are the component scanning sources (not tokens/figma/storybook).
  */
 const AUTO_DETECTABLE_SOURCES: (keyof SourcesConfig)[] = [
-  'react', 'vue', 'svelte', 'angular', 'webcomponent', 'templates', 'tailwind'
+  'react', 'vue', 'svelte', 'angular', 'webcomponent', 'templates', 'tailwind', 'tokens'
 ];
 
 /**
