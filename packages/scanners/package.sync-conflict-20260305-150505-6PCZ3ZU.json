@@ -1,7 +1,7 @@
 {
-  "name": "@buoy-design/core",
-  "version": "0.3.35",
-  "description": "Core domain models and analysis for Buoy design drift detection",
+  "name": "@buoy-design/scanners",
+  "version": "0.3.24",
+  "description": "Source scanners for Buoy (React, Vue, Svelte, Angular, Figma, Storybook)",
   "type": "module",
   "license": "MIT",
   "author": "Buoy <hello@buoy.design>",
@@ -9,7 +9,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ahoybuoy/buoy.git",
-    "directory": "packages/core"
+    "directory": "packages/scanners"
   },
   "bugs": {
     "url": "https://github.com/ahoybuoy/buoy/issues"
@@ -17,8 +17,10 @@
   "keywords": [
     "buoy",
     "design-system",
-    "drift-detection",
-    "design-tokens"
+    "scanner",
+    "react",
+    "vue",
+    "figma"
   ],
   "files": [
     "dist",
@@ -31,17 +33,21 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./models": {
-      "types": "./dist/models/index.d.ts",
-      "import": "./dist/models/index.js"
+    "./git": {
+      "types": "./dist/git/index.d.ts",
+      "import": "./dist/git/index.js"
     },
-    "./analysis": {
-      "types": "./dist/analysis/index.d.ts",
-      "import": "./dist/analysis/index.js"
+    "./figma": {
+      "types": "./dist/figma/index.d.ts",
+      "import": "./dist/figma/index.js"
     },
-    "./types": {
-      "types": "./dist/types.d.ts",
-      "import": "./dist/types.js"
+    "./storybook": {
+      "types": "./dist/storybook/index.d.ts",
+      "import": "./dist/storybook/index.js"
+    },
+    "./css": {
+      "types": "./dist/css/index.d.ts",
+      "import": "./dist/css/index.js"
     }
   },
   "scripts": {
@@ -53,13 +59,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@buoy-design/core": "workspace:*",
     "glob": "^11.0.0",
-    "graphology": "^0.26.0",
-    "graphology-types": "^0.24.8",
-    "simple-git": "^3.30.0",
+    "typescript": "^5.7.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "@types/node": "^22.10.2",
+    "memfs": "^4.51.1"
   }
 }
