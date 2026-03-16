@@ -427,6 +427,62 @@ function isEntryPointComponent(component: Component): boolean {
 }
 
 /**
+ * Known CSS variable prefixes that are framework-internal implementation details.
+ * Users override these for configuration but never reference them via var() directly.
+ * Flagging them as "unused tokens" is a false positive.
+ */
+const FRAMEWORK_INTERNAL_PREFIXES: Record<string, string[]> = {
+  // Tailwind CSS — utility internals and plugin variables
+  tailwind: [
+    '--tw-',           // all Tailwind internals (ring, shadow, gradient, transform, filter, prose, etc.)
+  ],
+  // Radix UI — component internal sizing/animation variables
+  radix: [
+    '--radix-',
+  ],
+  // Chakra UI — generated theme CSS variables
+  chakra: [
+    '--chakra-',
+  ],
+  // Mantine — theme system variables
+  mantine: [
+    '--mantine-',
+  ],
+  // Material UI — theme CSS variables
+  mui: [
+    '--mui-',
+    '--md-',
+    '--joy-',
+  ],
+  // Ant Design — component theme variables
+  antd: [
+    '--ant-',
+  ],
+};
+
+/**
+ * Check if a token name matches a known framework-internal CSS variable prefix.
+ * These tokens are consumed by the framework itself, not by user components.
+ */
+function isFrameworkInternalToken(tokenName: string, detectedFrameworks: Set<string>): boolean {
+  const name = tokenName.startsWith('--') ? tokenName : `--${tokenName}`;
+
+  for (const [framework, prefixes] of Object.entries(FRAMEWORK_INTERNAL_PREFIXES)) {
+    // Match detected framework names loosely (e.g., "tailwindcss" matches "tailwind")
+    const isDetected = [...detectedFrameworks].some((f) =>
+      f.includes(framework) || framework.includes(f)
+    );
+    if (!isDetected) continue;
+
+    for (const prefix of prefixes) {
+      if (name.startsWith(prefix)) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * DriftAnalysisService - Main entry point for drift detection
  */
 export class DriftAnalysisService {
@@ -596,8 +652,23 @@ export class DriftAnalysisService {
       onProgress?.(`Found ${unusedComponentDrifts.length} unused components`);
     }
 
+    // Filter out framework-internal tokens before unused check.
+    // These are CSS variables consumed by the framework itself (e.g., --tw-ring-color,
+    // --tw-prose-body) — users override them for configuration but never reference
+    // them directly via var(). Flagging them as "unused" is a false positive.
+    const detectedNames = new Set(projectInfo.frameworks.map((f) => f.name.toLowerCase()));
+    // Tailwind and CSS libraries are source configs, not component frameworks — detect from config/deps/tokens
+    if (this.config.sources.tailwind?.enabled) detectedNames.add('tailwind');
+    for (const tokenFile of projectInfo.tokens) {
+      detectedNames.add(tokenFile.type.toLowerCase());
+    }
+    if (projectInfo.designSystem) {
+      detectedNames.add(projectInfo.designSystem.type.toLowerCase());
+    }
+    const userTokens = scannedTokens.filter((t) => !isFrameworkInternalToken(t.name, detectedNames));
+
     // Check for unused tokens
-    const unusedTokenDrifts = engine.checkUnusedTokens(scannedTokens, tokenUsageMap);
+    const unusedTokenDrifts = engine.checkUnusedTokens(userTokens, tokenUsageMap);
     if (unusedTokenDrifts.length > 0) {
       drifts.push(
         ...applySeverityOverrides(unusedTokenDrifts, this.config.drift.severity),
