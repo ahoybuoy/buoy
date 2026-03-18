@@ -52,6 +52,8 @@ export interface DriftAnalysisResult {
   drifts: DriftSignal[];
   /** Components that were scanned */
   components: Component[];
+  /** Number of tokens found during scan */
+  tokenCount: number;
   /** Number of drifts filtered out by ignore list */
   ignoredCount: number;
   /** Summary counts by severity */
@@ -844,6 +846,7 @@ export class DriftAnalysisService {
     return {
       drifts,
       components,
+      tokenCount: scannedTokens.length,
       ignoredCount,
       summary: calculateDriftSummary(drifts),
     };

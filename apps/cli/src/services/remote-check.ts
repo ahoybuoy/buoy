@@ -23,6 +23,10 @@ export interface RemoteCheckRunResult {
   drifts: DriftSignal[];
   summary: ReturnType<typeof calculateDriftSummary>;
   sourceContext: RemoteSourceContext;
+  /** Number of components found during remote scan */
+  componentCount?: number;
+  /** Number of tokens found during remote scan */
+  tokenCount?: number;
 }
 
 export interface RemoteCheckOptions {
@@ -174,6 +178,8 @@ export async function runSingleSourceOrRemoteCheck(
     return {
       drifts: result.drifts,
       summary: calculateDriftSummary(result.drifts),
+      componentCount: result.components.length,
+      tokenCount: result.tokenCount,
       sourceContext: {
         mode: mode === "local-file" ? "local" : mode,
         confidence: hasContextAssets ? "full" : "reduced",
@@ -408,6 +414,7 @@ function inferSourceConfig(sourceRelPath: string, fixture: FixtureManifest | nul
       sourceConfig: {
         templates: { enabled: true, include: [sourceRelPath], exclude: [], type: "astro" },
         tailwind: { enabled: true, files: [sourceRelPath], exclude: [] },
+        tokens: { enabled: true, files: [sourceRelPath] },
       } as any,
     };
   }
@@ -416,6 +423,7 @@ function inferSourceConfig(sourceRelPath: string, fixture: FixtureManifest | nul
       sourceConfig: {
         react: { enabled: true, include: [sourceRelPath], exclude: [] },
         tailwind: { enabled: true, files: [sourceRelPath], exclude: [] },
+        tokens: { enabled: true, files: [sourceRelPath] },
       } as any,
     };
   }
@@ -424,6 +432,7 @@ function inferSourceConfig(sourceRelPath: string, fixture: FixtureManifest | nul
       sourceConfig: {
         vue: { enabled: true, include: [sourceRelPath], exclude: [] },
         tailwind: { enabled: true, files: [sourceRelPath], exclude: [] },
+        tokens: { enabled: true, files: [sourceRelPath] },
       } as any,
     };
   }
@@ -432,6 +441,7 @@ function inferSourceConfig(sourceRelPath: string, fixture: FixtureManifest | nul
       sourceConfig: {
         svelte: { enabled: true, include: [sourceRelPath], exclude: [] },
         tailwind: { enabled: true, files: [sourceRelPath], exclude: [] },
+        tokens: { enabled: true, files: [sourceRelPath] },
       } as any,
     };
   }
@@ -456,7 +466,15 @@ function buildRemoteConfig(args: {
     project: { name: "remote-fixture-check" },
     sources: {
       ...args.inferred.sourceConfig,
-      tokens: args.tokenFiles.length > 0 ? { enabled: true, files: args.tokenFiles } as any : undefined,
+      ...(args.tokenFiles.length > 0 ? {
+        tokens: {
+          enabled: true,
+          files: [
+            ...((args.inferred.sourceConfig as any)?.tokens?.files ?? []),
+            ...args.tokenFiles,
+          ],
+        },
+      } : {}),
     } as any,
     drift: {
       ignore: [],

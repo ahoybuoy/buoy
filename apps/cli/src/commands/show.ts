@@ -653,32 +653,104 @@ export function createShowCommand(): Command {
   cmd
     .command("health")
     .description("Show design system health score")
+    .argument("[target]", "Optional local file path or public URL to check")
+    .option("--url <url>", "Public source file URL to check (supports bare host/path)")
+    .option("--tokens <urlOrPath>", "Remote/local token file for single-source checks")
+    .option("--fixture <urlOrPath>", "Remote/local fixture manifest JSON (source + tokens + optional config)")
     .option("--json", "Output as JSON")
-    .action(async (options, command) => {
+    .action(async (target: string | undefined, options, command) => {
       const parentOpts = command.parent?.opts() || {};
       const json = options.json ?? parentOpts.json;
       if (json) setJsonMode(true);
 
+      const resolvedTarget = typeof target === "string" ? target : command?.args?.[0];
+      const inputMode = classifyCheckInput(resolvedTarget, { url: options.url, fixture: options.fixture });
+
       const spin = spinner("Analyzing design system health...");
 
       try {
-        const { config, projectRoot } = await getOrBuildConfigWithRoot();
+        let healthMetrics: HealthMetrics;
 
-        // Gather all health metrics from drift analysis
-        const healthMetrics = await gatherHealthMetrics(config, spin, parentOpts.cache !== false, projectRoot);
+        if (inputMode !== "project") {
+          // Remote health check — try auto-discovering a .buoy-health.json fixture first
+          spin.text = "Fetching health metrics...";
+          const targetRef = resolvedTarget || options.url || "";
+          const discoveredMetrics = await tryFetchRemoteHealthMetrics(targetRef);
+
+          if (!discoveredMetrics) {
+            // Fall back to single-file drift analysis
+            spin.text = "Analyzing remote source...";
+            const remoteResult = await runSingleSourceOrRemoteCheck({
+              failOn: "none",
+              verbose: false,
+              tokens: options.tokens,
+              fixture: options.fixture,
+              url: options.url,
+              target: resolvedTarget,
+            });
+
+            const drifts = remoteResult.drifts;
+            const richContext = computeRichSuggestionContext(drifts);
+
+            const fileDriftCounts = new Map<string, number>();
+            for (const d of drifts) {
+              if (d.type !== "hardcoded-value") continue;
+              const loc = d.source?.location;
+              if (!loc) continue;
+              const file = loc.split(":")[0];
+              if (file) fileDriftCounts.set(file, (fileDriftCounts.get(file) || 0) + 1);
+            }
+
+            healthMetrics = {
+              componentCount: remoteResult.componentCount ?? 0,
+              tokenCount: remoteResult.tokenCount ?? 0,
+              hardcodedValueCount: drifts.filter(d => d.type === "hardcoded-value").length,
+              unusedTokenCount: drifts.filter(d => d.type === "unused-token").length,
+              namingInconsistencyCount: drifts.filter(d => d.type === "naming-inconsistency").length,
+              criticalCount: drifts.filter(d => d.severity === "critical").length,
+              accessibilityConflictCount: drifts.filter(d => d.type === "accessibility-conflict").length,
+              colorContrastCount: drifts.filter(d => d.type === "color-contrast").length,
+              hasUtilityFramework: false,
+              hasDesignSystemLibrary: false,
+              totalDriftCount: drifts.length,
+              unusedComponentCount: drifts.filter(d => d.type === "unused-component").length,
+              repeatedPatternCount: drifts.filter(d => d.type === "repeated-pattern").length,
+              orphanedComponentCount: drifts.filter(d => d.type === "orphaned-component").length,
+              semanticMismatchCount: drifts.filter(d => d.type === "semantic-mismatch").length,
+              deprecatedPatternCount: drifts.filter(d => d.type === "deprecated-pattern").length,
+              orphanedTokenCount: drifts.filter(d => d.type === "orphaned-token").length,
+              valueDivergenceCount: drifts.filter(d => d.type === "value-divergence").length,
+              missingDocumentationCount: drifts.filter(d => d.type === "missing-documentation").length,
+              frameworkSprawlCount: drifts.filter(d => d.type === "framework-sprawl").length,
+              highDensityFileCount: [...fileDriftCounts.values()].filter(count => count > 2).length,
+              vendoredDriftCount: richContext.vendoredDriftCount,
+              topHardcodedColor: richContext.topHardcodedColor,
+              worstFile: richContext.worstFile,
+              uniqueSpacingValues: richContext.uniqueSpacingValues,
+            };
+          } else {
+            healthMetrics = discoveredMetrics;
+          }
+
+        } else {
+          const { config, projectRoot } = await getOrBuildConfigWithRoot();
+          healthMetrics = await gatherHealthMetrics(config, spin, parentOpts.cache !== false, projectRoot);
+        }
 
         spin.stop();
 
         const result = calculateHealthScorePillar(healthMetrics);
 
-        // Save to local history for trend tracking
-        saveHistory(process.cwd(), {
-          timestamp: new Date().toISOString(),
-          score: result.score,
-          tier: result.tier,
-          driftCount: healthMetrics.totalDriftCount ?? 0,
-          componentCount: healthMetrics.componentCount,
-        });
+        // Only save history for local project scans
+        if (inputMode === "project") {
+          saveHistory(process.cwd(), {
+            timestamp: new Date().toISOString(),
+            score: result.score,
+            tier: result.tier,
+            driftCount: healthMetrics.totalDriftCount ?? 0,
+            componentCount: healthMetrics.componentCount,
+          });
+        }
 
         if (json) {
           console.log(JSON.stringify({
@@ -692,8 +764,13 @@ export function createShowCommand(): Command {
             },
             suggestions: result.suggestions,
             metrics: result.metrics,
+            ...(inputMode !== "project" ? { source: resolvedTarget || options.url, context: inputMode } : {}),
           }, null, 2));
         } else {
+          if (inputMode !== "project") {
+            console.log(`Source: ${resolvedTarget || options.url}`);
+            console.log(`Context: ${inputMode}`);
+          }
           printPillarHealthReport(result);
         }
       } catch (err) {
@@ -1998,6 +2075,52 @@ export async function gatherHealthMetrics(
   }
 
   return metrics;
+}
+
+/**
+ * Try to fetch a .buoy-health.json from the same host as the target URL.
+ * Returns HealthMetrics if found, null otherwise.
+ */
+async function tryFetchRemoteHealthMetrics(targetRef: string): Promise<HealthMetrics | null> {
+  try {
+    // Normalize to a URL
+    let url: URL;
+    if (/^https?:\/\//i.test(targetRef)) {
+      url = new URL(targetRef);
+    } else {
+      url = new URL(`https://${targetRef}`);
+    }
+
+    const healthUrl = `${url.protocol}//${url.host}/.buoy-health.json`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(healthUrl, {
+        signal: controller.signal,
+        redirect: "follow",
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("json") && !contentType.includes("text")) return null;
+
+      const data = await response.json() as Record<string, unknown>;
+
+      // Validate required fields
+      if (typeof data.componentCount !== "number" || typeof data.tokenCount !== "number") {
+        return null;
+      }
+
+      return data as unknown as HealthMetrics;
+    } catch {
+      return null;
+    }
+  } catch {
+    return null;
+  }
 }
 
 function printPillarHealthReport(result: HealthScoreResult): void {

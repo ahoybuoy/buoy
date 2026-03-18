@@ -135,6 +135,8 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           tokens = await this.parseJsonTokenFile(file);
         } else if (ext === ".css" || ext === ".scss") {
           tokens = await this.parseCssVariables(file);
+        } else if (ext === ".astro" || ext === ".vue" || ext === ".svelte" || ext === ".html") {
+          tokens = await this.parseEmbeddedStyleTokens(file);
         } else if (ext === ".ts" || ext === ".tsx" || ext === ".js" || ext === ".mjs" || ext === ".cjs") {
           tokens = await this.parseTypeScriptUnionTypes(file);
         }
@@ -621,6 +623,59 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         metadata: {},
         scannedAt: new Date(),
       });
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Parse CSS custom properties from embedded <style> blocks in
+   * .astro, .vue, .svelte, and .html files.
+   */
+  private async parseEmbeddedStyleTokens(filePath: string): Promise<DesignToken[]> {
+    const content = await readFile(filePath, "utf-8");
+    const relativePath = relative(this.config.projectRoot, filePath);
+    const tokens: DesignToken[] = [];
+
+    // Extract all <style> blocks
+    const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = styleRegex.exec(content)) !== null) {
+      const styleContent = match[1]!;
+      // Calculate the line offset of this <style> block
+      const lineOffset = content.slice(0, match.index).split("\n").length;
+
+      const contentWithoutComments = this.stripCssComments(styleContent);
+      const cssVariables = this.extractCssVariables(contentWithoutComments, styleContent);
+
+      for (const { name, value, lineNumber } of cssVariables) {
+        const prefix = this.config.cssVariablePrefix;
+        if (prefix && !name.startsWith(prefix.replace(/^--/, ""))) {
+          continue;
+        }
+
+        const cleanName = name.trim();
+        const cleanValue = value.trim();
+        const source: CssTokenSource = {
+          type: "css",
+          path: relativePath,
+          line: lineNumber + lineOffset - 1,
+        };
+        const category = this.inferCategory(cleanName, cleanValue);
+        const tokenValue = this.parseTokenValue(category, cleanValue);
+
+        tokens.push({
+          id: createTokenId(source, cleanName),
+          name: `--${cleanName}`,
+          category: this.normalizeCategory(category),
+          value: tokenValue,
+          source,
+          aliases: [],
+          usedBy: [],
+          metadata: {},
+          scannedAt: new Date(),
+        });
+      }
     }
 
     return tokens;
