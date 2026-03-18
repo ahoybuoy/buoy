@@ -1,7 +1,7 @@
 {
-  "name": "@buoy-design/scanners",
-  "version": "0.3.38",
-  "description": "Source scanners for Buoy (React, Vue, Svelte, Angular, Figma, Storybook)",
+  "name": "@buoy-design/core",
+  "version": "0.3.24",
+  "description": "Core domain models and analysis for Buoy design drift detection",
   "type": "module",
   "license": "MIT",
   "author": "Buoy <hello@buoy.design>",
@@ -9,7 +9,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ahoybuoy/buoy.git",
-    "directory": "packages/scanners"
+    "directory": "packages/core"
   },
   "bugs": {
     "url": "https://github.com/ahoybuoy/buoy/issues"
@@ -17,10 +17,8 @@
   "keywords": [
     "buoy",
     "design-system",
-    "scanner",
-    "react",
-    "vue",
-    "figma"
+    "drift-detection",
+    "design-tokens"
   ],
   "files": [
     "dist",
@@ -33,21 +31,17 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./git": {
-      "types": "./dist/git/index.d.ts",
-      "import": "./dist/git/index.js"
+    "./models": {
+      "types": "./dist/models/index.d.ts",
+      "import": "./dist/models/index.js"
     },
-    "./figma": {
-      "types": "./dist/figma/index.d.ts",
-      "import": "./dist/figma/index.js"
+    "./analysis": {
+      "types": "./dist/analysis/index.d.ts",
+      "import": "./dist/analysis/index.js"
     },
-    "./storybook": {
-      "types": "./dist/storybook/index.d.ts",
-      "import": "./dist/storybook/index.js"
-    },
-    "./css": {
-      "types": "./dist/css/index.d.ts",
-      "import": "./dist/css/index.js"
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
     }
   },
   "scripts": {
@@ -59,13 +53,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@buoy-design/core": "workspace:*",
     "glob": "^11.0.0",
-    "typescript": "^5.7.2",
+    "graphology": "^0.26.0",
+    "graphology-types": "^0.24.8",
+    "simple-git": "^3.30.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "memfs": "^4.51.1"
+    "typescript": "^5.7.2"
   }
 }

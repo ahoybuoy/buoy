@@ -2091,7 +2091,7 @@ async function tryFetchRemoteHealthMetrics(targetRef: string): Promise<HealthMet
       url = new URL(`https://${targetRef}`);
     }
 
-    const healthUrl = `${url.protocol}//${url.host}/.buoy-health.json`;
+    const healthUrl = `${url.protocol}//${url.host}/buoy-health.json`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
