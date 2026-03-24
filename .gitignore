@@ -16,6 +16,9 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Syncthing conflict files
+*.sync-conflict-*
+
 # Environment
 .env
 .env.local
