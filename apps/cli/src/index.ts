@@ -5,6 +5,7 @@ import {
   createDriftCommand,
   createDockCommand,
   createAhoyCommand,
+  createDesignMdCommand,
 } from "./commands/index.js";
 
 export function createCli(): Command {
@@ -26,6 +27,7 @@ Command Groups:
   Drift Actions      drift (scan, check, fix, ignore)
   Setup              dock (config, skills, agents, context, hooks, commands, plugins, tokens, graph)
   Cloud              ahoy (login, logout, status, github, gitlab, billing, plans)
+  Design             designmd (lint, diff, export, init)
 
 Quick Start:
   $ buoy show all           # everything an AI agent needs
@@ -45,6 +47,9 @@ Quick Start:
 
   // === Cloud ===
   program.addCommand(createAhoyCommand());
+
+  // === Design ===
+  program.addCommand(createDesignMdCommand());
 
   return program;
 }
