@@ -16,6 +16,9 @@ export * from './plugins/index.js';
 // Re-export token parsing
 export * from './tokens/index.js';
 
+// Re-export DESIGN.md adapter
+export * from './designmd/index.js';
+
 // Re-export graph
 export * from './graph/index.js';
 
