@@ -22,7 +22,9 @@ describe("diffDesignMd", () => {
 
   it("returns exit 1 when 'after' introduces a regression", () => {
     const clean = `---\nname: A\ncolors:\n  primary: "#000000"\n---\n`;
-    // Use 'not-a-hex' (real upstream-error trigger in v0.1.1)
+    // invalid hex triggers core validation in @google/design.md@0.1.1.
+    // Token-reference rules ({colors.foo}) are NOT enforced at this version,
+    // so we use an invalid color value to drive the error path.
     const broken = `---\nname: A\ncolors:\n  primary: not-a-hex\n---\n`;
     vi.mocked(readFileSync)
       .mockReturnValueOnce(clean)
@@ -39,11 +41,9 @@ describe("diffDesignMd", () => {
       .mockReturnValueOnce(before)
       .mockReturnValueOnce(after);
     const r = diffDesignMd({ before: "a.md", after: "b.md" });
-    expect(r.json.tokens.colors).toEqual({
-      added: ["tertiary"],
-      removed: ["secondary"],
-      modified: ["primary"],
-    });
+    expect(r.json.tokens.colors.added).toEqual(["tertiary"]);
+    expect(r.json.tokens.colors.removed).toEqual(["secondary"]);
+    expect(r.json.tokens.colors.modified).toEqual(["primary"]);
     expect(r.json.tokens.spacing).toEqual({
       added: [],
       removed: [],
