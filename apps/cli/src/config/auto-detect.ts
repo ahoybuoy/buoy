@@ -422,6 +422,10 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
  */
 export async function findTokenFiles(projectRoot: string): Promise<string[]> {
   const patterns = [
+    // DESIGN.md (highest-priority token source when present)
+    'DESIGN.md',
+    '**/DESIGN.md',
+
     // CSS custom properties - explicit token files
     '**/tokens.css',
     '**/variables.css',
