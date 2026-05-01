@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { lintDesignMd } from "./lint.js";
 import { diffDesignMd } from "./diff.js";
 import { exportDesignMd } from "./export.js";
-import { generateDesignMd } from "./init.js";
+import { discoverAndGenerate } from "./init.js";
 
 export function createDesignMdCommand(): Command {
   const cmd = new Command("designmd")
@@ -47,9 +47,11 @@ export function createDesignMdCommand(): Command {
     .description("Generate a DESIGN.md from discovered tokens")
     .option("-o, --output <path>", "Write to file (default: stdout)")
     .option("--name <name>", "Design system name", "Untitled")
-    .action((opts: { output?: string; name: string }) => {
-      // Token discovery wired in Task 8 — emit empty skeleton for now.
-      const md = generateDesignMd({ name: opts.name, tokens: [] });
+    .action(async (opts: { output?: string; name: string }) => {
+      const md = await discoverAndGenerate({
+        cwd: process.cwd(),
+        name: opts.name,
+      });
       if (opts.output) writeFileSync(opts.output, md);
       else process.stdout.write(md);
     });
