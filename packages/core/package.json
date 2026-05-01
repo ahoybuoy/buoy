@@ -53,6 +53,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@google/design.md": "0.1.1",
     "glob": "^11.0.0",
     "graphology": "^0.26.0",
     "graphology-types": "^0.24.8",
