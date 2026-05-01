@@ -1,5 +1,8 @@
 // apps/cli/src/scan/orchestrator.ts
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Component, DesignToken } from "@buoy-design/core";
+import { parseDesignMd, designMdToTokens } from "@buoy-design/core";
 import type { ScanCache } from "@buoy-design/scanners";
 import type { BuoyConfig, SourcesConfig } from "../config/schema.js";
 
@@ -351,7 +354,49 @@ export class ScanOrchestrator {
       result.cacheStats = { hits: totalCacheHits, misses: totalCacheMisses };
     }
 
+    // DESIGN.md precedence: when a DESIGN.md exists at the project root, its
+    // tokens replace the auto-discovered ones for owned categories
+    // (color/spacing/other). Other categories (typography, shadow, etc.) are
+    // untouched. If DESIGN.md is absent or fails to parse cleanly, behavior
+    // is unchanged.
+    const designMdResult = await this.applyDesignMdPrecedence(result.tokens);
+    result.tokens = designMdResult.tokens;
+    (result as ScanResult & { designMdApplied?: boolean }).designMdApplied =
+      designMdResult.applied;
+
     return result;
+  }
+
+  /**
+   * If a DESIGN.md exists at the project root, parse it and replace tokens
+   * of categories owned by DESIGN.md (color, spacing, other) with the
+   * projection. Returns the original tokens unchanged when no DESIGN.md is
+   * present or it parses with errors.
+   */
+  private async applyDesignMdPrecedence(
+    tokens: DesignToken[],
+  ): Promise<{ tokens: DesignToken[]; applied: boolean }> {
+    const designMdPath = join(this.projectRoot, "DESIGN.md");
+    if (!existsSync(designMdPath)) return { tokens, applied: false };
+
+    const source = readFileSync(designMdPath, "utf8");
+    const parsed = parseDesignMd(source);
+
+    // If parse produced errors, skip the precedence step (don't break scans
+    // on a broken DESIGN.md).
+    if (parsed.summary.errors > 0) return { tokens, applied: false };
+
+    const designMdTokens = designMdToTokens(parsed.designSystem);
+    if (designMdTokens.length === 0) return { tokens, applied: false };
+
+    const ownedCategories = new Set<DesignToken["category"]>([
+      "color",
+      "spacing",
+      "other",
+    ]);
+
+    const kept = tokens.filter((t) => !ownedCategories.has(t.category));
+    return { tokens: [...kept, ...designMdTokens], applied: true };
   }
 
   /**
