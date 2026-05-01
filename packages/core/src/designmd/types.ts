@@ -14,7 +14,7 @@ export interface DesignMdSystem {
   colors?: Record<string, string>;
   typography?: Record<string, DesignMdToken>;
   rounded?: Record<string, string>;
-  spacing?: Record<string, string | number>;
+  spacing?: Record<string, string>;
   components?: Record<string, Record<string, string>>;
 }
 

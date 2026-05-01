@@ -162,11 +162,3 @@ export function parseDesignMd(source: string): DesignMdResult {
     };
   }
 }
-
-export type {
-  DesignMdResult,
-  DesignMdFinding,
-  DesignMdSummary,
-  DesignMdSystem,
-  DesignMdSeverity,
-} from "./types.js";

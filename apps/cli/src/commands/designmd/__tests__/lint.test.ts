@@ -21,6 +21,9 @@ describe("lintDesignMd CLI logic", () => {
   });
 
   it("returns exit 1 when errors are found", () => {
+    // invalid hex triggers core validation in @google/design.md@0.1.1.
+    // Token-reference rules ({colors.foo}) are NOT enforced at this version,
+    // so we use an invalid color value to drive the error path.
     vi.mocked(readFileSync).mockReturnValue(
       `---\ncolors:\n  primary: not-a-hex\n---\n`
     );

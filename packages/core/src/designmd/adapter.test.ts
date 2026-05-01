@@ -7,7 +7,7 @@ vi.mock("@google/design.md/linter", async (importOriginal) => {
 });
 
 import { lint } from "@google/design.md/linter";
-import { parseDesignMd, type DesignMdResult } from "./adapter.js";
+import { parseDesignMd, type DesignMdResult } from "./index.js";
 
 const FIXTURE = `---
 name: Heritage
