@@ -1,4 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("@google/design.md/linter", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@google/design.md/linter")>();
+  return { ...actual, lint: vi.fn(actual.lint) };
+});
+
+import { lint } from "@google/design.md/linter";
 import { parseDesignMd, type DesignMdResult } from "./adapter.js";
 
 const FIXTURE = `---
@@ -16,6 +24,11 @@ A test fixture.
 `;
 
 describe("parseDesignMd", () => {
+  beforeEach(() => {
+    vi.mocked(lint).mockClear();
+    // Factory wraps the real implementation; mockClear preserves it.
+  });
+
   it("parses tokens, findings, and summary from a valid DESIGN.md", () => {
     const result: DesignMdResult = parseDesignMd(FIXTURE);
 
@@ -36,5 +49,20 @@ describe("parseDesignMd", () => {
     // Either lint surfaces the bad value as a finding, or parse rejects.
     // Adapter contract: never throws — always returns a result.
     expect(result.summary.errors + result.summary.warnings).toBeGreaterThan(0);
+  });
+
+  it("returns a synthetic parse-error finding when lint() throws", () => {
+    vi.mocked(lint).mockImplementationOnce(() => {
+      throw new Error("upstream blew up");
+    });
+    const result = parseDesignMd("---\nname: anything\n---\n");
+    expect(result.summary.errors).toBe(1);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]).toEqual({
+      rule: "parse-error",
+      severity: "error",
+      path: "",
+      message: "upstream blew up",
+    });
   });
 });

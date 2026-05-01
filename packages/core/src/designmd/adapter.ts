@@ -2,6 +2,7 @@ import { lint } from "@google/design.md/linter";
 import type {
   DesignMdResult,
   DesignMdFinding,
+  DesignMdSeverity,
   DesignMdSummary,
   DesignMdSystem,
   DesignMdToken,
@@ -112,9 +113,12 @@ function normalizeFindings(raw: unknown): DesignMdFinding[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((f) => {
     const o = (f ?? {}) as AnyRec;
+    const sev = o.severity;
+    const severity: DesignMdSeverity =
+      sev === "error" || sev === "warning" || sev === "info" ? sev : "info";
     return {
       rule: typeof o.rule === "string" ? o.rule : "",
-      severity: (o.severity as DesignMdFinding["severity"]) ?? "info",
+      severity,
       path: typeof o.path === "string" ? o.path : "",
       message: typeof o.message === "string" ? o.message : "",
     };
