@@ -359,6 +359,13 @@ export class ScanOrchestrator {
     // (color/spacing/other). Other categories (typography, shadow, etc.) are
     // untouched. If DESIGN.md is absent or fails to parse cleanly, behavior
     // is unchanged.
+    //
+    // This step runs unconditionally — regardless of which `sources` were
+    // explicitly requested. DESIGN.md represents design intent, and drift
+    // detection benefits from that intent even when the caller only asked
+    // for component scans (e.g. `scan({ sources: ["react"] })`). If you
+    // need a path that strictly avoids touching DESIGN.md, gate the call
+    // here on the source filter — but that has not been a real ask yet.
     const designMdResult = await this.applyDesignMdPrecedence(result.tokens);
     result.tokens = designMdResult.tokens;
     (result as ScanResult & { designMdApplied?: boolean }).designMdApplied =
