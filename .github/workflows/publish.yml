@@ -3,6 +3,12 @@ name: Publish to npm
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref containing the package versions to publish
+        required: true
+        default: v0.4.0
 
 jobs:
   publish:
@@ -13,17 +19,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.ref }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
-          cache: 'pnpm'
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@11.5.1
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -31,32 +41,47 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Publish @buoy-design/core
-        run: pnpm --filter @buoy-design/core publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        continue-on-error: true
+      - name: Publish packages
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Publish @buoy-design/scanners
-        run: pnpm --filter @buoy-design/scanners publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        continue-on-error: true
+          publish_package() {
+            local package_dir="$1"
+            local package_name
+            local package_version
+            package_name="$(node -p "require('./${package_dir}/package.json').name")"
+            package_version="$(node -p "require('./${package_dir}/package.json').version")"
 
-      - name: Publish @buoy-design/cli
-        run: pnpm --filter @buoy-design/cli publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        continue-on-error: true
+            if npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+              echo "${package_name}@${package_version} is already published; skipping"
+              return
+            fi
 
-      - name: Publish ahoybuoy
-        run: pnpm --filter ahoybuoy publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        continue-on-error: true
+            echo "Publishing ${package_name}@${package_version}"
+            (cd "${package_dir}" && npm publish --access public)
+          }
 
-      - name: Publish buoy-design
-        run: pnpm --filter buoy-design publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        continue-on-error: true
+          publish_package packages/core
+          publish_package packages/scanners
+          publish_package apps/cli
+          publish_package packages/ahoybuoy
+          publish_package packages/buoy-design
+
+      - name: Verify published versions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for package_dir in \
+            packages/core \
+            packages/scanners \
+            apps/cli \
+            packages/ahoybuoy \
+            packages/buoy-design; do
+            package_name="$(node -p "require('./${package_dir}/package.json').name")"
+            expected_version="$(node -p "require('./${package_dir}/package.json').version")"
+            published_version="$(npm view "${package_name}@${expected_version}" version)"
+            test "${published_version}" = "${expected_version}"
+            echo "Verified ${package_name}@${published_version}"
+          done
