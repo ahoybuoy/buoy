@@ -38,6 +38,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Clean package build output
+        run: |
+          pnpm --filter @buoy-design/core clean
+          pnpm --filter @buoy-design/scanners clean
+          pnpm --filter @buoy-design/cli clean
+
       - name: Build
         run: pnpm build
 
@@ -50,6 +56,9 @@ jobs:
             local package_dir="$1"
             local package_name
             local package_version
+            local pack_dir
+            local pack_output
+            local tarball_path
             package_name="$(node -p "require('./${package_dir}/package.json').name")"
             package_version="$(node -p "require('./${package_dir}/package.json').version")"
 
@@ -59,7 +68,17 @@ jobs:
             fi
 
             echo "Publishing ${package_name}@${package_version}"
-            (cd "${package_dir}" && npm publish --access public)
+            pack_dir="${RUNNER_TEMP}/buoy-npm-packages"
+            mkdir -p "${pack_dir}"
+            pack_output="$(pnpm --dir "${package_dir}" pack --pack-destination "${pack_dir}")"
+            tarball_path="$(printf '%s\n' "${pack_output}" | tail -n 1)"
+
+            if tar -xOf "${tarball_path}" package/package.json | grep -q 'workspace:'; then
+              echo "Refusing to publish ${package_name}: unresolved workspace dependency"
+              exit 1
+            fi
+
+            npm publish "${tarball_path}" --access public
           }
 
           publish_package packages/core
@@ -73,15 +92,45 @@ jobs:
         run: |
           set -euo pipefail
 
+          verify_package() {
+            local package_dir="$1"
+            local package_name
+            local expected_version
+            local published_version=""
+            package_name="$(node -p "require('./${package_dir}/package.json').name")"
+            expected_version="$(node -p "require('./${package_dir}/package.json').version")"
+
+            for attempt in {1..12}; do
+              published_version="$(npm view "${package_name}@${expected_version}" version 2>/dev/null || true)"
+              if [ "${published_version}" = "${expected_version}" ]; then
+                echo "Verified ${package_name}@${published_version}"
+                return
+              fi
+              echo "Waiting for ${package_name}@${expected_version} to propagate (${attempt}/12)"
+              sleep 5
+            done
+
+            echo "Registry verification failed for ${package_name}@${expected_version}"
+            exit 1
+          }
+
           for package_dir in \
             packages/core \
             packages/scanners \
             apps/cli \
             packages/ahoybuoy \
             packages/buoy-design; do
-            package_name="$(node -p "require('./${package_dir}/package.json').name")"
-            expected_version="$(node -p "require('./${package_dir}/package.json').version")"
-            published_version="$(npm view "${package_name}@${expected_version}" version)"
-            test "${published_version}" = "${expected_version}"
-            echo "Verified ${package_name}@${published_version}"
+            verify_package "${package_dir}"
           done
+
+      - name: Smoke test public CLI aliases
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_version="$(node -p "require('./package.json').version")"
+          smoke_dir="$(mktemp -d)"
+          cd "${smoke_dir}"
+          npm init --yes >/dev/null
+          npm install "ahoybuoy@${release_version}" "buoy-design@${release_version}" --ignore-scripts
+          test "$(npx --no-install ahoybuoy --version)" = "${release_version}"
+          test "$(npx --no-install buoy-design --version)" = "${release_version}"

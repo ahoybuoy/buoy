@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-01
+
+### Fixed
+- Publish installable npm tarballs with monorepo `workspace:*` dependencies resolved to the release version
+- Clean stale build output before packing so Syncthing conflict artifacts cannot enter npm packages
+- Make npm releases retry-safe, wait for registry propagation, and smoke-test both public CLI aliases
+
 ## [0.4.0] - 2026-07-31
 
 ### Added
