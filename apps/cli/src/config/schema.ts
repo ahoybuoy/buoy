@@ -221,6 +221,22 @@ export const ProjectConfigSchema = z.object({
   apiEndpoint: z.string().optional(),
 });
 
+/**
+ * Code-first system definition. These globs identify the code an organization
+ * treats as its canonical UI system; everything else is observed as consumer
+ * or unmanaged surface area.
+ */
+export const SystemOwnerSchema = z.object({
+  name: z.string(),
+  paths: z.array(z.string()).min(1),
+});
+
+export const SystemConfigSchema = z.object({
+  components: z.array(z.string()).default([]),
+  tokens: z.array(z.string()).default([]),
+  owners: z.array(SystemOwnerSchema).default([]),
+});
+
 // Output config
 export const OutputConfigSchema = z.object({
   format: z.enum(['table', 'json', 'markdown']).default('table'),
@@ -241,6 +257,7 @@ export const ExperimentalConfigSchema = z.object({
 // Main config schema
 export const BuoyConfigSchema = z.object({
   project: ProjectConfigSchema,
+  system: SystemConfigSchema.default({}),
   preset: z.enum(['strict', 'relaxed', 'default']).optional(),
   sources: SourcesConfigSchema.default({}),
   drift: DriftConfigSchema.default({}),
@@ -273,6 +290,8 @@ export type DriftTypeConfig = z.infer<typeof DriftTypeConfigSchema>;
 export type DriftConfig = z.infer<typeof DriftConfigSchema>;
 export type ClaudeConfig = z.infer<typeof ClaudeConfigSchema>;
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
+export type SystemOwner = z.infer<typeof SystemOwnerSchema>;
+export type SystemConfig = z.infer<typeof SystemConfigSchema>;
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 export type ExperimentalConfig = z.infer<typeof ExperimentalConfigSchema>;
 export type BuoyConfig = z.infer<typeof BuoyConfigSchema>;

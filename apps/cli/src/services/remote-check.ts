@@ -464,6 +464,7 @@ function buildRemoteConfig(args: {
 }): BuoyConfig {
   const base: BuoyConfig = {
     project: { name: "remote-fixture-check" },
+    system: { components: [], tokens: [], owners: [] },
     sources: {
       ...args.inferred.sourceConfig,
       ...(args.tokenFiles.length > 0 ? {
@@ -498,6 +499,7 @@ function buildRemoteConfig(args: {
     ...base,
     ...args.fixtureConfig,
     project: { ...base.project, ...(args.fixtureConfig.project || {}) },
+    system: { ...base.system, ...(args.fixtureConfig.system || {}) },
     sources: { ...base.sources, ...(args.fixtureConfig.sources || {}) } as any,
     drift: { ...base.drift, ...(args.fixtureConfig.drift || {}) } as any,
     health: { ...base.health, ...(args.fixtureConfig.health || {}) },

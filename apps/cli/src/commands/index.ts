@@ -3,6 +3,7 @@ export { createDriftCommand } from "./drift.js";
 export { createDockCommand } from "./dock.js";
 export { createAhoyCommand } from "./ahoy.js";
 export { createDesignMdCommand } from "./designmd/index.js";
+export { createSystemCommand } from "./system.js";
 
 // Re-exports for internal use (subcommands within groups)
 export { createCheckCommand } from "./check.js";

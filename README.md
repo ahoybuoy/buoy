@@ -13,6 +13,39 @@ src/components/Button.tsx:24
   hardcoded-value: #3b82f6 → var(--color-primary) (92% match)
 ```
 
+## Code-first System Observability
+
+Your shipped code is the design-system source of truth. Declare the packages you
+own, then use Buoy to map adoption, unmanaged UI surface area, and the blast
+radius of a component or token change. Figma and other design tools can remain
+optional inputs; they are not required for the system map.
+
+```yaml
+# .buoy.yaml
+project:
+  name: acme
+
+system:
+  components:
+    - packages/ui/src/**
+  tokens:
+    - packages/tokens/src/**
+  owners:
+    - name: Checkout
+      paths:
+        - apps/checkout/**
+```
+
+```bash
+buoy system map                 # Canonical system vs unmanaged surface area
+buoy system impact Button       # Consumers and migration risk for a change
+buoy system impact color-primary --kind token
+```
+
+This is the foundation for cloud adoption trends, deprecation planning, and
+AI-assisted iteration reporting: every result is derived from code and can be
+attributed to a repository path and owner.
+
 ## Quick Start
 
 ```bash

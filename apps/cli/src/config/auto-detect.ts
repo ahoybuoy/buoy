@@ -283,6 +283,7 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
     project: {
       name: basename(projectRoot),
     },
+    system: { components: [], tokens: [], owners: [] },
     sources: {},
     drift: {
       ignore: [],

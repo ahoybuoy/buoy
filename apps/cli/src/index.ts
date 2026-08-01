@@ -6,6 +6,7 @@ import {
   createDockCommand,
   createAhoyCommand,
   createDesignMdCommand,
+  createSystemCommand,
 } from "./commands/index.js";
 
 export function createCli(): Command {
@@ -13,7 +14,7 @@ export function createCli(): Command {
 
   program
     .name("buoy")
-    .description("Catch design drift before it ships")
+    .description("Observe and evolve your code-first design system")
     .version(pkg.version)
     .configureHelp({
       sortSubcommands: false,
@@ -23,7 +24,7 @@ export function createCli(): Command {
       "after",
       `
 Command Groups:
-  View               show (components, tokens, drift, health, history, config, skills, agents, context, hooks, commands, graph, plugins, all)
+  View               show (components, tokens, drift, health, history, config, skills, agents, context, hooks, commands, graph, plugins, all), system
   Drift Actions      drift (scan, check, fix, ignore)
   Setup              dock (config, skills, agents, context, hooks, commands, plugins, tokens, graph)
   Cloud              ahoy (login, logout, status, github, gitlab, billing, plans)
@@ -38,6 +39,7 @@ Quick Start:
 
   // === View (read-only) ===
   program.addCommand(createShowCommand());
+  program.addCommand(createSystemCommand());
 
   // === Drift Actions ===
   program.addCommand(createDriftCommand());
