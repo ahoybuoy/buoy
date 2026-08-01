@@ -1,6 +1,6 @@
 {
   "name": "buoy-design",
-  "version": "0.3.38",
+  "version": "0.4.0",
   "description": "Catch design drift before it ships",
   "type": "module",
   "license": "MIT",

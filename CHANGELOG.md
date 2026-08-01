@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-31
+
+### Added
+- **`buoy designmd` command group** — first-class support for the [DESIGN.md](https://github.com/google-labs-code/design.md) format (Google Labs): `designmd init` generates a spec-compliant DESIGN.md from your codebase via real token discovery, `designmd lint` validates it, `designmd diff` compares it against scanned tokens, and `designmd export` emits Tailwind or DTCG token formats
+- **`buoy system` command group** — code-first system observability: `system map` builds a component/token ownership and usage map from the scanned codebase; `system impact <name>` reports the blast radius of a component or token change. New `system:` config block (components/tokens/owners)
+- DESIGN.md adapter in `@buoy-design/core` wrapping `@google/design.md/linter`, with severity validation and parse-error coverage
+
+### Changed
+- The scanner now prefers DESIGN.md tokens over auto-discovered CSS tokens when a DESIGN.md is present; precedence runs unconditionally
+
+## [0.3.38] - 2026-03-18
+
+### Fixed
+- Renamed health fixture to `buoy-health.json` for CDN compatibility
+
+## [0.3.37] - 2026-03-17
+
+### Added
+- Remote URL support for `buoy show health` (check a repo's health without cloning)
+
+## [0.3.36] - 2026-03-14
+
+### Fixed
+- Framework-internal tokens are filtered out of unused-token detection
+
+## [0.3.35] - 2026-03-12
+
+### Fixed
+- Republish with resolved workspace dependency versions
+
+## [0.3.34] - 2026-03-11
+
+### Fixed
+- Auto-detected tokens are merged into user config instead of being ignored when a config file exists
+
 ## [0.3.33] - 2026-03-10
 
 ### Added
