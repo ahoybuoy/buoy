@@ -9,11 +9,20 @@
  * 4. Filtering against ignore list
  */
 
-import type { DriftSignal, Severity, Component } from "@buoy-design/core";
+import type {
+  DriftSignal,
+  Severity,
+  Component,
+  DesignToken,
+} from "@buoy-design/core";
 import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { getSeverityWeight } from "@buoy-design/core";
-import { TailwindScanner, ScanCache, extractStaticClassStrings } from "@buoy-design/scanners";
+import {
+  TailwindScanner,
+  ScanCache,
+  extractStaticClassStrings,
+} from "@buoy-design/scanners";
 import {
   detectRepeatedPatterns,
   checkVariantConsistency,
@@ -54,6 +63,8 @@ export interface DriftAnalysisResult {
   components: Component[];
   /** Number of tokens found during scan */
   tokenCount: number;
+  /** Tokens found during the scan, used by safe-fix workflows. */
+  tokens: DesignToken[];
   /** Number of drifts filtered out by ignore list */
   ignoredCount: number;
   /** Summary counts by severity */
@@ -181,7 +192,10 @@ export function applyEnforceRules(
 ): DriftSignal[] {
   if (rules.length === 0) return drifts;
 
-  const promoteRules = rules.map((rule) => ({ ...rule, to: "critical" as Severity }));
+  const promoteRules = rules.map((rule) => ({
+    ...rule,
+    to: "critical" as Severity,
+  }));
   return applyPromoteRules(drifts, promoteRules, onWarning);
 }
 
@@ -193,7 +207,8 @@ function ruleMatches(
   const { type, severity, file, component, token, value } = rule;
 
   // Rule with no filter dimensions does nothing
-  if (!type && !severity && !file && !component && !token && !value) return false;
+  if (!type && !severity && !file && !component && !token && !value)
+    return false;
 
   // All specified dimensions must match (AND logic)
   if (type && d.type !== type) return false;
@@ -210,7 +225,9 @@ function ruleMatches(
     try {
       if (!new RegExp(component).test(d.source.entityName)) return false;
     } catch {
-      onWarning?.(`Invalid regex "${component}" in ignore rule component field, skipping`);
+      onWarning?.(
+        `Invalid regex "${component}" in ignore rule component field, skipping`,
+      );
       return false;
     }
   }
@@ -220,7 +237,9 @@ function ruleMatches(
     try {
       if (!new RegExp(token).test(d.source.entityName)) return false;
     } catch {
-      onWarning?.(`Invalid regex "${token}" in ignore rule token field, skipping`);
+      onWarning?.(
+        `Invalid regex "${token}" in ignore rule token field, skipping`,
+      );
       return false;
     }
   }
@@ -230,7 +249,9 @@ function ruleMatches(
     try {
       if (!new RegExp(value).test(actual)) return false;
     } catch {
-      onWarning?.(`Invalid regex "${value}" in ignore rule value field, skipping`);
+      onWarning?.(
+        `Invalid regex "${value}" in ignore rule value field, skipping`,
+      );
       return false;
     }
   }
@@ -238,7 +259,9 @@ function ruleMatches(
   return true;
 }
 
-function extractTailwindSemanticTokenNameLocal(classToken: string): string | null {
+function extractTailwindSemanticTokenNameLocal(
+  classToken: string,
+): string | null {
   const core = classToken.split(":").pop()?.trim() ?? "";
   if (!core) return null;
 
@@ -282,7 +305,10 @@ function extractNamedObjectBlocks(content: string, key: string): string[] {
   return results;
 }
 
-function extractBalancedBracesContent(content: string, openBraceIndex: number): string | null {
+function extractBalancedBracesContent(
+  content: string,
+  openBraceIndex: number,
+): string | null {
   if (content[openBraceIndex] !== "{") return null;
   let depth = 0;
   for (let i = openBraceIndex; i < content.length; i++) {
@@ -296,7 +322,9 @@ function extractBalancedBracesContent(content: string, openBraceIndex: number): 
   return null;
 }
 
-function parseColorObjectAliases(colorsBlock: string): Map<string, Set<string>> {
+function parseColorObjectAliases(
+  colorsBlock: string,
+): Map<string, Set<string>> {
   const aliases = new Map<string, Set<string>>();
 
   // First parse one-level nested scales (e.g., surface: { DEFAULT: "var(--surface)" ... })
@@ -305,7 +333,10 @@ function parseColorObjectAliases(colorsBlock: string): Map<string, Set<string>> 
   while ((nestedMatch = nestedPattern.exec(colorsBlock)) !== null) {
     const parent = nestedMatch[1]!;
     const openBraceIndex = nestedMatch.index + nestedMatch[0].length - 1;
-    const nestedContent = extractBalancedBracesContent(colorsBlock, openBraceIndex);
+    const nestedContent = extractBalancedBracesContent(
+      colorsBlock,
+      openBraceIndex,
+    );
     if (!nestedContent) continue;
 
     const nestedStart = openBraceIndex;
@@ -327,7 +358,8 @@ function parseColorObjectAliases(colorsBlock: string): Map<string, Set<string>> 
   }
 
   // Top-level direct string colors (e.g., background: "var(--surface)")
-  const topLevelPattern = /['"]?([a-zA-Z0-9_-]+)['"]?\s*:\s*["'`]([^"'`]+)["'`]/g;
+  const topLevelPattern =
+    /['"]?([a-zA-Z0-9_-]+)['"]?\s*:\s*["'`]([^"'`]+)["'`]/g;
   let top: RegExpExecArray | null;
   while ((top = topLevelPattern.exec(colorsBlock)) !== null) {
     const semantic = top[1]!;
@@ -350,7 +382,11 @@ function extractCssVarRefs(value: string): string[] {
   return refs;
 }
 
-function addAlias(map: Map<string, Set<string>>, semantic: string, tokenName: string): void {
+function addAlias(
+  map: Map<string, Set<string>>,
+  semantic: string,
+  tokenName: string,
+): void {
   let bucket = map.get(semantic);
   if (!bucket) {
     bucket = new Set<string>();
@@ -397,35 +433,35 @@ export function applySeverityOverrides(
 // Entry point file patterns - these components are rendered by the framework
 // router, not imported by other components, so they should never be flagged as unused
 const ENTRY_POINT_PATTERNS = [
-  /\/pages?\//,           // Next.js pages/ or page.tsx
-  /\/app\/.*page\./,      // Next.js App Router page.tsx
-  /\/app\/.*layout\./,    // Next.js App Router layout.tsx
-  /\/app\/.*loading\./,   // Next.js App Router loading.tsx
-  /\/app\/.*error\./,     // Next.js App Router error.tsx
-  /\/app\/.*not-found\./,  // Next.js App Router not-found.tsx
-  /\/app\/.*template\./,  // Next.js App Router template.tsx
-  /\/routes?\//,          // Remix/SvelteKit routes
-  /\/\+page\./,           // SvelteKit +page.svelte
-  /\/\+layout\./,         // SvelteKit +layout.svelte
-  /\/\+error\./,          // SvelteKit +error.svelte
-  /\/\+server\./,         // SvelteKit +server.ts
-  /\/views?\//,           // Vue views directory
-  /\/screens?\//,         // React Native screens
-  /\.astro$/,             // Astro page/layout components are auto-routed
-  /\/(app|main|index)\.(tsx|jsx)$/,  // App root / main entry / index component files
-  /\/_app\./,             // Next.js custom App
-  /\/_document\./,        // Next.js custom Document
-  /\/root\./,             // Remix root
-  /\/entry\./,            // Entry files
+  /\/pages?\//, // Next.js pages/ or page.tsx
+  /\/app\/.*page\./, // Next.js App Router page.tsx
+  /\/app\/.*layout\./, // Next.js App Router layout.tsx
+  /\/app\/.*loading\./, // Next.js App Router loading.tsx
+  /\/app\/.*error\./, // Next.js App Router error.tsx
+  /\/app\/.*not-found\./, // Next.js App Router not-found.tsx
+  /\/app\/.*template\./, // Next.js App Router template.tsx
+  /\/routes?\//, // Remix/SvelteKit routes
+  /\/\+page\./, // SvelteKit +page.svelte
+  /\/\+layout\./, // SvelteKit +layout.svelte
+  /\/\+error\./, // SvelteKit +error.svelte
+  /\/\+server\./, // SvelteKit +server.ts
+  /\/views?\//, // Vue views directory
+  /\/screens?\//, // React Native screens
+  /\.astro$/, // Astro page/layout components are auto-routed
+  /\/(app|main|index)\.(tsx|jsx)$/, // App root / main entry / index component files
+  /\/_app\./, // Next.js custom App
+  /\/_document\./, // Next.js custom Document
+  /\/root\./, // Remix root
+  /\/entry\./, // Entry files
 ];
 
 function isEntryPointComponent(component: Component): boolean {
   const source = component.source;
   // Only file-based sources (react, vue, svelte) have a path field
-  if (source.type === 'figma' || source.type === 'storybook') return false;
+  if (source.type === "figma" || source.type === "storybook") return false;
   // Prefix with "/" so regexes match both "app/foo/page.tsx" and "/app/foo/page.tsx"
-  const location = `/${source.path || ''}`;
-  return ENTRY_POINT_PATTERNS.some(pattern => pattern.test(location));
+  const location = `/${source.path || ""}`;
+  return ENTRY_POINT_PATTERNS.some((pattern) => pattern.test(location));
 }
 
 /**
@@ -436,43 +472,36 @@ function isEntryPointComponent(component: Component): boolean {
 const FRAMEWORK_INTERNAL_PREFIXES: Record<string, string[]> = {
   // Tailwind CSS — utility internals and plugin variables
   tailwind: [
-    '--tw-',           // all Tailwind internals (ring, shadow, gradient, transform, filter, prose, etc.)
+    "--tw-", // all Tailwind internals (ring, shadow, gradient, transform, filter, prose, etc.)
   ],
   // Radix UI — component internal sizing/animation variables
-  radix: [
-    '--radix-',
-  ],
+  radix: ["--radix-"],
   // Chakra UI — generated theme CSS variables
-  chakra: [
-    '--chakra-',
-  ],
+  chakra: ["--chakra-"],
   // Mantine — theme system variables
-  mantine: [
-    '--mantine-',
-  ],
+  mantine: ["--mantine-"],
   // Material UI — theme CSS variables
-  mui: [
-    '--mui-',
-    '--md-',
-    '--joy-',
-  ],
+  mui: ["--mui-", "--md-", "--joy-"],
   // Ant Design — component theme variables
-  antd: [
-    '--ant-',
-  ],
+  antd: ["--ant-"],
 };
 
 /**
  * Check if a token name matches a known framework-internal CSS variable prefix.
  * These tokens are consumed by the framework itself, not by user components.
  */
-function isFrameworkInternalToken(tokenName: string, detectedFrameworks: Set<string>): boolean {
-  const name = tokenName.startsWith('--') ? tokenName : `--${tokenName}`;
+function isFrameworkInternalToken(
+  tokenName: string,
+  detectedFrameworks: Set<string>,
+): boolean {
+  const name = tokenName.startsWith("--") ? tokenName : `--${tokenName}`;
 
-  for (const [framework, prefixes] of Object.entries(FRAMEWORK_INTERNAL_PREFIXES)) {
+  for (const [framework, prefixes] of Object.entries(
+    FRAMEWORK_INTERNAL_PREFIXES,
+  )) {
     // Match detected framework names loosely (e.g., "tailwindcss" matches "tailwind")
-    const isDetected = [...detectedFrameworks].some((f) =>
-      f.includes(framework) || framework.includes(f)
+    const isDetected = [...detectedFrameworks].some(
+      (f) => f.includes(framework) || framework.includes(f),
     );
     if (!isDetected) continue;
 
@@ -521,7 +550,9 @@ export class DriftAnalysisService {
 
     // Step 2: Scan tokens (before analysis, so suggestions can be generated)
     onProgress?.("Scanning tokens...");
-    const { tokens: scannedTokens } = await orchestrator.scanTokens({ onProgress });
+    const { tokens: scannedTokens } = await orchestrator.scanTokens({
+      onProgress,
+    });
 
     // Step 2.1: Run semantic diff analysis
     onProgress?.("Analyzing drift...");
@@ -547,13 +578,18 @@ export class DriftAnalysisService {
     const projectInfo = await detector.detect();
     if (projectInfo.frameworks.length > 0) {
       const sprawlDrift = engine.checkFrameworkSprawl(
-        projectInfo.frameworks.map((f) => ({ name: f.name, version: f.version })),
+        projectInfo.frameworks.map((f) => ({
+          name: f.name,
+          version: f.version,
+        })),
       );
       if (sprawlDrift) {
         drifts.push(
           ...applySeverityOverrides([sprawlDrift], this.config.drift.severity),
         );
-        onProgress?.(`Framework sprawl detected: ${projectInfo.frameworks.map((f) => f.name).join(", ")}`);
+        onProgress?.(
+          `Framework sprawl detected: ${projectInfo.frameworks.map((f) => f.name).join(", ")}`,
+        );
       }
     }
 
@@ -643,13 +679,21 @@ export class DriftAnalysisService {
 
     // Fix 1: Exempt entry point components (pages, routes, layouts)
     // These are rendered by the framework router, not imported by other components
-    const nonEntryPointComponents = components.filter(c => !isEntryPointComponent(c));
+    const nonEntryPointComponents = components.filter(
+      (c) => !isEntryPointComponent(c),
+    );
 
     // Check for unused components (excluding entry points)
-    const unusedComponentDrifts = engine.checkUnusedComponents(nonEntryPointComponents, componentUsageMap);
+    const unusedComponentDrifts = engine.checkUnusedComponents(
+      nonEntryPointComponents,
+      componentUsageMap,
+    );
     if (unusedComponentDrifts.length > 0) {
       drifts.push(
-        ...applySeverityOverrides(unusedComponentDrifts, this.config.drift.severity),
+        ...applySeverityOverrides(
+          unusedComponentDrifts,
+          this.config.drift.severity,
+        ),
       );
       onProgress?.(`Found ${unusedComponentDrifts.length} unused components`);
     }
@@ -658,57 +702,88 @@ export class DriftAnalysisService {
     // These are CSS variables consumed by the framework itself (e.g., --tw-ring-color,
     // --tw-prose-body) — users override them for configuration but never reference
     // them directly via var(). Flagging them as "unused" is a false positive.
-    const detectedNames = new Set(projectInfo.frameworks.map((f) => f.name.toLowerCase()));
+    const detectedNames = new Set(
+      projectInfo.frameworks.map((f) => f.name.toLowerCase()),
+    );
     // Tailwind and CSS libraries are source configs, not component frameworks — detect from config/deps/tokens
-    if (this.config.sources.tailwind?.enabled) detectedNames.add('tailwind');
+    if (this.config.sources.tailwind?.enabled) detectedNames.add("tailwind");
     for (const tokenFile of projectInfo.tokens) {
       detectedNames.add(tokenFile.type.toLowerCase());
     }
     if (projectInfo.designSystem) {
       detectedNames.add(projectInfo.designSystem.type.toLowerCase());
     }
-    const userTokens = scannedTokens.filter((t) => !isFrameworkInternalToken(t.name, detectedNames));
+    const userTokens = scannedTokens.filter(
+      (t) => !isFrameworkInternalToken(t.name, detectedNames),
+    );
 
     // Check for unused tokens
-    const unusedTokenDrifts = engine.checkUnusedTokens(userTokens, tokenUsageMap);
+    const unusedTokenDrifts = engine.checkUnusedTokens(
+      userTokens,
+      tokenUsageMap,
+    );
     if (unusedTokenDrifts.length > 0) {
       drifts.push(
-        ...applySeverityOverrides(unusedTokenDrifts, this.config.drift.severity),
+        ...applySeverityOverrides(
+          unusedTokenDrifts,
+          this.config.drift.severity,
+        ),
       );
       onProgress?.(`Found ${unusedTokenDrifts.length} unused tokens`);
     }
 
     // Step 2.4: Cross-source comparison (orphaned-component, orphaned-token, value-divergence)
-    const { classifyComponents, classifyTokens } = await import("./source-classifier.js");
+    const { classifyComponents, classifyTokens } =
+      await import("./source-classifier.js");
     const canonicalPatterns = this.config.sources.tokens?.canonical ?? [];
     const classifiedComponents = classifyComponents(components);
     const classifiedTokens = classifyTokens(scannedTokens, canonicalPatterns);
 
-    if (classifiedComponents.canonical.length > 0 && classifiedComponents.code.length > 0) {
-      onProgress?.(`Comparing ${classifiedComponents.code.length} code components against ${classifiedComponents.canonical.length} design components...`);
+    if (
+      classifiedComponents.canonical.length > 0 &&
+      classifiedComponents.code.length > 0
+    ) {
+      onProgress?.(
+        `Comparing ${classifiedComponents.code.length} code components against ${classifiedComponents.canonical.length} design components...`,
+      );
       const componentDiff = engine.compareComponents(
         classifiedComponents.code,
         classifiedComponents.canonical,
       );
       if (componentDiff.drifts.length > 0) {
         drifts.push(
-          ...applySeverityOverrides(componentDiff.drifts, this.config.drift.severity),
+          ...applySeverityOverrides(
+            componentDiff.drifts,
+            this.config.drift.severity,
+          ),
         );
-        onProgress?.(`Found ${componentDiff.drifts.length} cross-source component issues`);
+        onProgress?.(
+          `Found ${componentDiff.drifts.length} cross-source component issues`,
+        );
       }
     }
 
-    if (classifiedTokens.canonical.length > 0 && classifiedTokens.code.length > 0) {
-      onProgress?.(`Comparing ${classifiedTokens.code.length} code tokens against ${classifiedTokens.canonical.length} design tokens...`);
+    if (
+      classifiedTokens.canonical.length > 0 &&
+      classifiedTokens.code.length > 0
+    ) {
+      onProgress?.(
+        `Comparing ${classifiedTokens.code.length} code tokens against ${classifiedTokens.canonical.length} design tokens...`,
+      );
       const tokenDiff = engine.compareTokens(
         classifiedTokens.code,
         classifiedTokens.canonical,
       );
       if (tokenDiff.drifts.length > 0) {
         drifts.push(
-          ...applySeverityOverrides(tokenDiff.drifts, this.config.drift.severity),
+          ...applySeverityOverrides(
+            tokenDiff.drifts,
+            this.config.drift.severity,
+          ),
         );
-        onProgress?.(`Found ${tokenDiff.drifts.length} cross-source token issues`);
+        onProgress?.(
+          `Found ${tokenDiff.drifts.length} cross-source token issues`,
+        );
       }
     }
 
@@ -738,24 +813,28 @@ export class DriftAnalysisService {
     }
 
     // Step 2.6: Repeated pattern detection (always-on, opt-out via config)
-    const repeatedPatternConfig = (this.config.drift?.types?.["repeated-pattern"] ?? {}) as {
+    const repeatedPatternConfig = (this.config.drift?.types?.[
+      "repeated-pattern"
+    ] ?? {}) as {
       enabled?: boolean;
       minOccurrences?: number;
       matching?: "exact" | "tight" | "loose";
     };
     if (repeatedPatternConfig.enabled !== false) {
       onProgress?.("Detecting repeated patterns...");
-      const patternDrifts = await this.detectRepeatedPatterns(repeatedPatternConfig);
+      const patternDrifts = await this.detectRepeatedPatterns(
+        repeatedPatternConfig,
+      );
       drifts.push(...patternDrifts);
       if (patternDrifts.length > 0) {
-        onProgress?.(
-          `Found ${patternDrifts.length} repeated pattern issues`,
-        );
+        onProgress?.(`Found ${patternDrifts.length} repeated pattern issues`);
       }
     }
 
     // Step 2.7: Phase 4.1 - Cross-Variant Consistency Checking
-    const variantCheckEnabled = checkVariants ?? this.config.drift?.types?.["value-divergence"]?.checkVariants;
+    const variantCheckEnabled =
+      checkVariants ??
+      this.config.drift?.types?.["value-divergence"]?.checkVariants;
     if (variantCheckEnabled) {
       onProgress?.("Checking variant consistency...");
       const variantDrifts = checkVariantConsistency(components);
@@ -768,7 +847,9 @@ export class DriftAnalysisService {
     }
 
     // Step 2.8: Phase 4.2 - Token Utility Function Detection
-    const tokenUtilityCheckEnabled = checkTokenUtilities ?? this.config.drift?.types?.["hardcoded-value"]?.checkUtilities;
+    const tokenUtilityCheckEnabled =
+      checkTokenUtilities ??
+      this.config.drift?.types?.["hardcoded-value"]?.checkUtilities;
     if (tokenUtilityCheckEnabled) {
       onProgress?.("Detecting token utility functions...");
       const utilityAnalysis = detectTokenUtilities(components);
@@ -776,18 +857,28 @@ export class DriftAnalysisService {
         onProgress?.(
           `Found ${utilityAnalysis.availableUtilities.length} token utilities: ${utilityAnalysis.availableUtilities.map((u) => u.name).join(", ")}`,
         );
-        const utilityDrifts = checkTokenUtilityUsage(components, utilityAnalysis);
+        const utilityDrifts = checkTokenUtilityUsage(
+          components,
+          utilityAnalysis,
+        );
         if (utilityDrifts.length > 0) {
           drifts.push(
-            ...applySeverityOverrides(utilityDrifts, this.config.drift.severity),
+            ...applySeverityOverrides(
+              utilityDrifts,
+              this.config.drift.severity,
+            ),
           );
-          onProgress?.(`Found ${utilityDrifts.length} hardcoded values that could use utilities`);
+          onProgress?.(
+            `Found ${utilityDrifts.length} hardcoded values that could use utilities`,
+          );
         }
       }
     }
 
     // Step 2.9: Phase 4.3 - Example Code vs Production Code Analysis
-    const exampleCheckEnabled = checkExamples ?? this.config.drift?.types?.["missing-documentation"]?.checkExamples;
+    const exampleCheckEnabled =
+      checkExamples ??
+      this.config.drift?.types?.["missing-documentation"]?.checkExamples;
     if (exampleCheckEnabled) {
       onProgress?.("Analyzing example code compliance...");
       const exampleDrifts = checkExampleCompliance(components);
@@ -795,7 +886,9 @@ export class DriftAnalysisService {
         drifts.push(
           ...applySeverityOverrides(exampleDrifts, this.config.drift.severity),
         );
-        onProgress?.(`Found ${exampleDrifts.length} example/documentation issues`);
+        onProgress?.(
+          `Found ${exampleDrifts.length} example/documentation issues`,
+        );
       }
     }
 
@@ -833,7 +926,7 @@ export class DriftAnalysisService {
     if (!includeIgnored) {
       const { loadIgnoreList, filterIgnored } =
         await import("../commands/ignore.js");
-      const ignoreList = await loadIgnoreList();
+      const ignoreList = await loadIgnoreList(this.projectRoot);
       const filtered = filterIgnored(drifts, ignoreList);
       drifts = filtered.newDrifts;
       ignoredCount = filtered.ignoredCount;
@@ -847,6 +940,7 @@ export class DriftAnalysisService {
       drifts,
       components,
       tokenCount: scannedTokens.length,
+      tokens: scannedTokens,
       ignoredCount,
       summary: calculateDriftSummary(drifts),
     };
@@ -875,7 +969,15 @@ export class DriftAnalysisService {
       tokens,
     } = this.config.sources;
 
-    for (const source of [react, nextjs, vue, svelte, angular, webcomponent, templates]) {
+    for (const source of [
+      react,
+      nextjs,
+      vue,
+      svelte,
+      angular,
+      webcomponent,
+      templates,
+    ]) {
       if (!source?.enabled) continue;
       addMany(include, (source as { include?: string[] }).include);
       addMany(exclude, (source as { exclude?: string[] }).exclude);
@@ -896,15 +998,24 @@ export class DriftAnalysisService {
     };
   }
 
-  private async applyTailwindConfigAliasUsages(tokenUsageMap: Map<string, number>): Promise<void> {
+  private async applyTailwindConfigAliasUsages(
+    tokenUsageMap: Map<string, number>,
+  ): Promise<void> {
     if (!this.config.sources.tailwind?.enabled) return;
 
     const aliasMap = await this.resolveTailwindSemanticAliasMap();
     if (aliasMap.size === 0) return;
 
     const usageGlobs = this.getUsageCollectorGlobs();
-    const include = usageGlobs.include ?? ["**/*.{ts,tsx,js,jsx,vue,svelte,astro,html,mdx,md}"];
-    const exclude = usageGlobs.exclude ?? ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.next/**"];
+    const include = usageGlobs.include ?? [
+      "**/*.{ts,tsx,js,jsx,vue,svelte,astro,html,mdx,md}",
+    ];
+    const exclude = usageGlobs.exclude ?? [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/.next/**",
+    ];
 
     const files = await glob(include, {
       cwd: this.projectRoot,
@@ -935,7 +1046,9 @@ export class DriftAnalysisService {
     }
   }
 
-  private async resolveTailwindSemanticAliasMap(): Promise<Map<string, Set<string>>> {
+  private async resolveTailwindSemanticAliasMap(): Promise<
+    Map<string, Set<string>>
+  > {
     const configFile = this.findTailwindConfigFile();
     if (!configFile) return new Map();
 
@@ -1000,7 +1113,10 @@ export class DriftAnalysisService {
     return [...out];
   }
 
-  private resolveLocalImport(fromFile: string, specifier: string): string | null {
+  private resolveLocalImport(
+    fromFile: string,
+    specifier: string,
+  ): string | null {
     const base = resolve(dirname(fromFile), specifier);
     const candidates = extname(base)
       ? [base]
@@ -1067,28 +1183,38 @@ export class DriftAnalysisService {
    * Scan barrel files (index.ts) for re-exports and count re-exported components as used.
    * Components re-exported from barrel files are part of the public API.
    */
-  private async scanBarrelReExports(componentUsageMap: Map<string, number>): Promise<void> {
+  private async scanBarrelReExports(
+    componentUsageMap: Map<string, number>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
-    const barrelFiles = await glob('**/index.{ts,tsx,js,jsx}', {
+    const barrelFiles = await glob("**/index.{ts,tsx,js,jsx}", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
+      ignore: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/.next/**",
+      ],
       nodir: true,
       maxDepth: 6,
     });
 
     for (const barrelFile of barrelFiles.slice(0, 200)) {
       try {
-        const content = await readFile(resolve(cwd, barrelFile), 'utf-8');
+        const content = await readFile(resolve(cwd, barrelFile), "utf-8");
 
         // Check for named re-exports: export { Button, Card } from './components'
         const namedPattern = /export\s*\{\s*([^}]+)\s*\}\s*from/g;
         let match: RegExpExecArray | null;
         while ((match = namedPattern.exec(content)) !== null) {
-          const names = match[1]!.split(',').map(n => {
-            // Handle "default as Name" and "Name as Alias"
-            const parts = n.trim().split(/\s+as\s+/);
-            return (parts[1] || parts[0] || '').trim();
-          }).filter(n => n && /^[A-Z]/.test(n)); // Only PascalCase (component names)
+          const names = match[1]!
+            .split(",")
+            .map((n) => {
+              // Handle "default as Name" and "Name as Alias"
+              const parts = n.trim().split(/\s+as\s+/);
+              return (parts[1] || parts[0] || "").trim();
+            })
+            .filter((n) => n && /^[A-Z]/.test(n)); // Only PascalCase (component names)
 
           for (const name of names) {
             componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
@@ -1096,7 +1222,8 @@ export class DriftAnalysisService {
         }
 
         // Check for default re-exports: export { default as Button } from './Button'
-        const defaultReExportPattern = /export\s*\{\s*default\s+as\s+([A-Z][a-zA-Z0-9]*)\s*\}\s*from/g;
+        const defaultReExportPattern =
+          /export\s*\{\s*default\s+as\s+([A-Z][a-zA-Z0-9]*)\s*\}\s*from/g;
         while ((match = defaultReExportPattern.exec(content)) !== null) {
           const name = match[1]!;
           componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
@@ -1107,8 +1234,8 @@ export class DriftAnalysisService {
         const wildcardPattern = /export\s*\*\s*from\s*['"]\.\/([^'"]+)['"]/g;
         while ((match = wildcardPattern.exec(content)) !== null) {
           const moduleName = match[1]!;
-          const segments = moduleName.split('/');
-          const last = segments[segments.length - 1] || '';
+          const segments = moduleName.split("/");
+          const last = segments[segments.length - 1] || "";
           if (/^[A-Z]/.test(last)) {
             componentUsageMap.set(last, (componentUsageMap.get(last) || 0) + 1);
           }
@@ -1123,26 +1250,38 @@ export class DriftAnalysisService {
    * Scan source files for dynamic imports and count imported components as used.
    * Handles React.lazy(() => import('./Component')) and next/dynamic patterns.
    */
-  private async scanDynamicImports(componentUsageMap: Map<string, number>): Promise<void> {
+  private async scanDynamicImports(
+    componentUsageMap: Map<string, number>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
-    const sourceFiles = await glob('**/*.{tsx,jsx,ts,js}', {
+    const sourceFiles = await glob("**/*.{tsx,jsx,ts,js}", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.test.*', '**/*.spec.*'],
+      ignore: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/.next/**",
+        "**/*.test.*",
+        "**/*.spec.*",
+      ],
       nodir: true,
       maxDepth: 6,
     });
 
     for (const file of sourceFiles.slice(0, 200)) {
       try {
-        const content = await readFile(resolve(cwd, file), 'utf-8');
-        if (!content.includes('import(')) continue; // Quick check before regex
+        const content = await readFile(resolve(cwd, file), "utf-8");
+        if (!content.includes("import(")) continue; // Quick check before regex
 
         const dynamicPattern = /import\(\s*['"]([^'"]+)['"]\s*\)/g;
         let match: RegExpExecArray | null;
         while ((match = dynamicPattern.exec(content)) !== null) {
           const modulePath = match[1]!;
-          const segments = modulePath.split('/');
-          const last = (segments[segments.length - 1] || '').replace(/\.(tsx?|jsx?)$/, '');
+          const segments = modulePath.split("/");
+          const last = (segments[segments.length - 1] || "").replace(
+            /\.(tsx?|jsx?)$/,
+            "",
+          );
           if (/^[A-Z]/.test(last)) {
             componentUsageMap.set(last, (componentUsageMap.get(last) || 0) + 1);
           }
@@ -1165,9 +1304,14 @@ export class DriftAnalysisService {
   ): Promise<void> {
     if (knownComponents.length === 0) return;
     const cwd = this.projectRoot;
-    const templateFiles = await glob('**/*.{vue,svelte,html}', {
+    const templateFiles = await glob("**/*.{vue,svelte,html}", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
+      ignore: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/.next/**",
+      ],
       nodir: true,
       maxDepth: 8,
     });
@@ -1176,16 +1320,16 @@ export class DriftAnalysisService {
     // Build a kebab-case lookup for Vue/Angular (MyComponent -> my-component)
     const kebabMap = new Map<string, string>();
     for (const name of knownComponents) {
-      const kebab = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+      const kebab = name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
       kebabMap.set(kebab, name);
       // Angular selectors often use app- prefix: ButtonComponent -> app-button
-      const angularSelector = `app-${kebab.replace(/-component$/, '')}`;
+      const angularSelector = `app-${kebab.replace(/-component$/, "")}`;
       kebabMap.set(angularSelector, name);
     }
 
     for (const file of templateFiles.slice(0, 300)) {
       try {
-        const content = await readFile(resolve(cwd, file), 'utf-8');
+        const content = await readFile(resolve(cwd, file), "utf-8");
 
         // Match PascalCase component tags: <MyComponent or <MyComponent>
         const pascalPattern = /<([A-Z][a-zA-Z0-9]*)\s*/g;
@@ -1203,7 +1347,10 @@ export class DriftAnalysisService {
           const kebab = match[1]!;
           const pascal = kebabMap.get(kebab);
           if (pascal) {
-            componentUsageMap.set(pascal, (componentUsageMap.get(pascal) || 0) + 1);
+            componentUsageMap.set(
+              pascal,
+              (componentUsageMap.get(pascal) || 0) + 1,
+            );
           }
         }
       } catch {
@@ -1216,19 +1363,26 @@ export class DriftAnalysisService {
    * Scan for Vue auto-registration patterns.
    * Detects app.component('Name', ...) and Vue.component('Name', ...) calls.
    */
-  private async scanAutoRegistration(componentUsageMap: Map<string, number>): Promise<void> {
+  private async scanAutoRegistration(
+    componentUsageMap: Map<string, number>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
-    const sourceFiles = await glob('**/*.{ts,js,tsx,jsx}', {
+    const sourceFiles = await glob("**/*.{ts,js,tsx,jsx}", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
+      ignore: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/.next/**",
+      ],
       nodir: true,
       maxDepth: 4,
     });
 
     for (const file of sourceFiles.slice(0, 100)) {
       try {
-        const content = await readFile(resolve(cwd, file), 'utf-8');
-        if (!content.includes('.component(')) continue;
+        const content = await readFile(resolve(cwd, file), "utf-8");
+        if (!content.includes(".component(")) continue;
 
         // Match: app.component('Name', ...) or Vue.component('Name', ...)
         const pattern = /\.component\(\s*['"]([A-Z][a-zA-Z0-9]*)['"]/g;
@@ -1247,39 +1401,53 @@ export class DriftAnalysisService {
    * Scan Angular NgModule files for declared components.
    * Components in declarations: [...] are registered and should count as used.
    */
-  private async scanNgModuleDeclarations(componentUsageMap: Map<string, number>): Promise<void> {
+  private async scanNgModuleDeclarations(
+    componentUsageMap: Map<string, number>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
-    const moduleFiles = await glob('**/*.module.ts', {
+    const moduleFiles = await glob("**/*.module.ts", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      ignore: ["**/node_modules/**", "**/dist/**", "**/build/**"],
       nodir: true,
       maxDepth: 8,
     });
 
     for (const file of moduleFiles.slice(0, 50)) {
       try {
-        const content = await readFile(resolve(cwd, file), 'utf-8');
-        if (!content.includes('declarations')) continue;
+        const content = await readFile(resolve(cwd, file), "utf-8");
+        if (!content.includes("declarations")) continue;
 
         // Match declarations: [Component1, Component2, ...]
         const declMatch = content.match(/declarations\s*:\s*\[([\s\S]*?)\]/);
         if (declMatch) {
-          const names = declMatch[1]!.match(/\b([A-Z][a-zA-Z]+(?:Component|Directive|Pipe))\b/g);
+          const names = declMatch[1]!.match(
+            /\b([A-Z][a-zA-Z]+(?:Component|Directive|Pipe))\b/g,
+          );
           if (names) {
             for (const name of names) {
-              componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+              componentUsageMap.set(
+                name,
+                (componentUsageMap.get(name) || 0) + 1,
+              );
             }
           }
         }
 
         // Also match imports: [...] and exports: [...] arrays
-        for (const key of ['imports', 'exports']) {
-          const match = content.match(new RegExp(`${key}\\s*:\\s*\\[([\\s\\S]*?)\\]`));
+        for (const key of ["imports", "exports"]) {
+          const match = content.match(
+            new RegExp(`${key}\\s*:\\s*\\[([\\s\\S]*?)\\]`),
+          );
           if (match) {
-            const names = match[1]!.match(/\b([A-Z][a-zA-Z]+(?:Component|Module))\b/g);
+            const names = match[1]!.match(
+              /\b([A-Z][a-zA-Z]+(?:Component|Module))\b/g,
+            );
             if (names) {
               for (const name of names) {
-                componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+                componentUsageMap.set(
+                  name,
+                  (componentUsageMap.get(name) || 0) + 1,
+                );
               }
             }
           }
@@ -1294,27 +1462,32 @@ export class DriftAnalysisService {
    * Scan Storybook story files for component imports.
    * A component referenced in a .stories file is documented/tested and should count as used.
    */
-  private async scanStoryFileUsages(componentUsageMap: Map<string, number>): Promise<void> {
+  private async scanStoryFileUsages(
+    componentUsageMap: Map<string, number>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
-    const storyFiles = await glob('**/*.stories.{ts,tsx,js,jsx}', {
+    const storyFiles = await glob("**/*.stories.{ts,tsx,js,jsx}", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      ignore: ["**/node_modules/**", "**/dist/**", "**/build/**"],
       nodir: true,
       maxDepth: 8,
     });
 
     for (const file of storyFiles.slice(0, 200)) {
       try {
-        const content = await readFile(resolve(cwd, file), 'utf-8');
+        const content = await readFile(resolve(cwd, file), "utf-8");
 
         // Match named imports: import { Button, Card } from '...'
         const importPattern = /import\s*\{\s*([^}]+)\s*\}\s*from/g;
         let match: RegExpExecArray | null;
         while ((match = importPattern.exec(content)) !== null) {
-          const names = match[1]!.split(',').map(n => {
-            const parts = n.trim().split(/\s+as\s+/);
-            return (parts[0] || '').trim();
-          }).filter(n => n && /^[A-Z]/.test(n));
+          const names = match[1]!
+            .split(",")
+            .map((n) => {
+              const parts = n.trim().split(/\s+as\s+/);
+              return (parts[0] || "").trim();
+            })
+            .filter((n) => n && /^[A-Z]/.test(n));
 
           for (const name of names) {
             componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
@@ -1345,24 +1518,37 @@ export class DriftAnalysisService {
    * customElements.define('my-button', MyButton) and @customElement('my-button')
    * mean the component is registered and used by the browser.
    */
-  private async scanWebComponentRegistrations(componentUsageMap: Map<string, number>): Promise<void> {
+  private async scanWebComponentRegistrations(
+    componentUsageMap: Map<string, number>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
-    const files = await glob('**/*.{ts,js}', {
+    const files = await glob("**/*.{ts,js}", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/*.d.ts', '**/*.spec.*', '**/*.test.*'],
+      ignore: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/*.d.ts",
+        "**/*.spec.*",
+        "**/*.test.*",
+      ],
       nodir: true,
       maxDepth: 8,
     });
 
     for (const file of files.slice(0, 500)) {
       try {
-        const content = await readFile(resolve(cwd, file), 'utf-8');
+        const content = await readFile(resolve(cwd, file), "utf-8");
 
         // Match customElements.define('tag-name', ClassName)
-        const definePattern = /customElements\.define\s*\(\s*['"][^'"]+['"]\s*,\s*([A-Z][a-zA-Z0-9]*)/g;
+        const definePattern =
+          /customElements\.define\s*\(\s*['"][^'"]+['"]\s*,\s*([A-Z][a-zA-Z0-9]*)/g;
         let match: RegExpExecArray | null;
         while ((match = definePattern.exec(content)) !== null) {
-          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          componentUsageMap.set(
+            match[1]!,
+            (componentUsageMap.get(match[1]!) || 0) + 1,
+          );
         }
 
         // Match @customElement('tag-name') decorator
@@ -1371,7 +1557,10 @@ export class DriftAnalysisService {
           // The class following this decorator is registered
           const classPattern = /class\s+([A-Z][a-zA-Z0-9]*)\s+extends/g;
           while ((match = classPattern.exec(content)) !== null) {
-            componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+            componentUsageMap.set(
+              match[1]!,
+              (componentUsageMap.get(match[1]!) || 0) + 1,
+            );
           }
         }
       } catch {
@@ -1384,10 +1573,16 @@ export class DriftAnalysisService {
    * In Nuxt 3, components in the components/ directory are auto-imported globally.
    * If we detect Nuxt (nuxt.config.ts exists), mark all components in components/ as used.
    */
-  private async scanNuxtAutoImports(componentUsageMap: Map<string, number>, componentNames: Set<string>): Promise<void> {
+  private async scanNuxtAutoImports(
+    componentUsageMap: Map<string, number>,
+    componentNames: Set<string>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
     // Check for Nuxt config
-    const nuxtConfigs = await glob('nuxt.config.{ts,js,mjs}', { cwd, nodir: true });
+    const nuxtConfigs = await glob("nuxt.config.{ts,js,mjs}", {
+      cwd,
+      nodir: true,
+    });
     if (nuxtConfigs.length === 0) return;
 
     // In Nuxt, all components in components/ are auto-imported
@@ -1401,27 +1596,32 @@ export class DriftAnalysisService {
    * Scan test files for component imports.
    * Components imported in .test.tsx/.spec.tsx are actively maintained/tested.
    */
-  private async scanTestFileUsages(componentUsageMap: Map<string, number>): Promise<void> {
+  private async scanTestFileUsages(
+    componentUsageMap: Map<string, number>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
-    const testFiles = await glob('**/*.{test,spec}.{ts,tsx,js,jsx}', {
+    const testFiles = await glob("**/*.{test,spec}.{ts,tsx,js,jsx}", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      ignore: ["**/node_modules/**", "**/dist/**", "**/build/**"],
       nodir: true,
       maxDepth: 8,
     });
 
     for (const file of testFiles.slice(0, 300)) {
       try {
-        const content = await readFile(resolve(cwd, file), 'utf-8');
+        const content = await readFile(resolve(cwd, file), "utf-8");
 
         // Match named imports: import { Button, Card } from '...'
         const importPattern = /import\s*\{\s*([^}]+)\s*\}\s*from/g;
         let match: RegExpExecArray | null;
         while ((match = importPattern.exec(content)) !== null) {
-          const names = match[1]!.split(',').map(n => {
-            const parts = n.trim().split(/\s+as\s+/);
-            return (parts[0] || '').trim();
-          }).filter(n => n && /^[A-Z]/.test(n));
+          const names = match[1]!
+            .split(",")
+            .map((n) => {
+              const parts = n.trim().split(/\s+as\s+/);
+              return (parts[0] || "").trim();
+            })
+            .filter((n) => n && /^[A-Z]/.test(n));
 
           for (const name of names) {
             componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
@@ -1446,55 +1646,84 @@ export class DriftAnalysisService {
    * withXxx(Component), Object.assign(Component, { ... }), and
    * compound component patterns like Component.Sub = SubComponent.
    */
-  private async scanHOCWrapperUsages(componentUsageMap: Map<string, number>): Promise<void> {
+  private async scanHOCWrapperUsages(
+    componentUsageMap: Map<string, number>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
-    const sourceFiles = await glob('**/*.{ts,tsx,js,jsx}', {
+    const sourceFiles = await glob("**/*.{ts,tsx,js,jsx}", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.d.ts'],
+      ignore: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/.next/**",
+        "**/*.d.ts",
+      ],
       nodir: true,
       maxDepth: 8,
     });
 
     for (const file of sourceFiles.slice(0, 500)) {
       try {
-        const content = await readFile(resolve(cwd, file), 'utf-8');
+        const content = await readFile(resolve(cwd, file), "utf-8");
 
         // forwardRef(Component) / React.forwardRef(Component)
-        const forwardRefPattern = /(?:React\.)?forwardRef\s*[(<]\s*(?:function\s+)?([A-Z][a-zA-Z0-9]*)/g;
+        const forwardRefPattern =
+          /(?:React\.)?forwardRef\s*[(<]\s*(?:function\s+)?([A-Z][a-zA-Z0-9]*)/g;
         let match: RegExpExecArray | null;
         while ((match = forwardRefPattern.exec(content)) !== null) {
-          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          componentUsageMap.set(
+            match[1]!,
+            (componentUsageMap.get(match[1]!) || 0) + 1,
+          );
         }
 
         // Also: const X = forwardRef(...) — the wrapped result is the component
-        const forwardRefAssignPattern = /const\s+([A-Z][a-zA-Z0-9]*)\s*=\s*(?:React\.)?forwardRef/g;
+        const forwardRefAssignPattern =
+          /const\s+([A-Z][a-zA-Z0-9]*)\s*=\s*(?:React\.)?forwardRef/g;
         while ((match = forwardRefAssignPattern.exec(content)) !== null) {
-          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          componentUsageMap.set(
+            match[1]!,
+            (componentUsageMap.get(match[1]!) || 0) + 1,
+          );
         }
 
         // memo(Component) / React.memo(Component)
         const memoPattern = /(?:React\.)?memo\(\s*([A-Z][a-zA-Z0-9]*)\s*[,)]/g;
         while ((match = memoPattern.exec(content)) !== null) {
-          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          componentUsageMap.set(
+            match[1]!,
+            (componentUsageMap.get(match[1]!) || 0) + 1,
+          );
         }
 
         // styled(Component) / styled.div / emotion patterns
         const styledPattern = /styled\(\s*([A-Z][a-zA-Z0-9]*)\s*\)/g;
         while ((match = styledPattern.exec(content)) !== null) {
-          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          componentUsageMap.set(
+            match[1]!,
+            (componentUsageMap.get(match[1]!) || 0) + 1,
+          );
         }
 
         // withXxx(Component) — HOC patterns
         const hocPattern = /with[A-Z][a-zA-Z]*\(\s*([A-Z][a-zA-Z0-9]*)\s*[,)]/g;
         while ((match = hocPattern.exec(content)) !== null) {
-          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          componentUsageMap.set(
+            match[1]!,
+            (componentUsageMap.get(match[1]!) || 0) + 1,
+          );
         }
 
         // Object.assign(Component, { Sub1, Sub2 }) — compound component pattern
-        const assignPattern = /Object\.assign\(\s*([A-Z][a-zA-Z0-9]*)\s*,\s*\{([^}]+)\}/g;
+        const assignPattern =
+          /Object\.assign\(\s*([A-Z][a-zA-Z0-9]*)\s*,\s*\{([^}]+)\}/g;
         while ((match = assignPattern.exec(content)) !== null) {
           // The base component is used
-          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          componentUsageMap.set(
+            match[1]!,
+            (componentUsageMap.get(match[1]!) || 0) + 1,
+          );
           // Each assigned sub-component is used
           const subs = match[2]!.match(/\b([A-Z][a-zA-Z0-9]*)\b/g);
           if (subs) {
@@ -1505,17 +1734,28 @@ export class DriftAnalysisService {
         }
 
         // Component.Sub = SubComponent — compound component property assignment
-        const compoundPattern = /([A-Z][a-zA-Z0-9]*)\.([A-Z][a-zA-Z0-9]*)\s*=\s*([A-Z][a-zA-Z0-9]*)/g;
+        const compoundPattern =
+          /([A-Z][a-zA-Z0-9]*)\.([A-Z][a-zA-Z0-9]*)\s*=\s*([A-Z][a-zA-Z0-9]*)/g;
         while ((match = compoundPattern.exec(content)) !== null) {
           // Both the parent and the assigned component are used
-          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
-          componentUsageMap.set(match[3]!, (componentUsageMap.get(match[3]!) || 0) + 1);
+          componentUsageMap.set(
+            match[1]!,
+            (componentUsageMap.get(match[1]!) || 0) + 1,
+          );
+          componentUsageMap.set(
+            match[3]!,
+            (componentUsageMap.get(match[3]!) || 0) + 1,
+          );
         }
 
         // React.createElement(Component, ...) — non-JSX rendering
-        const createElementPattern = /React\.createElement\(\s*([A-Z][a-zA-Z0-9]*)/g;
+        const createElementPattern =
+          /React\.createElement\(\s*([A-Z][a-zA-Z0-9]*)/g;
         while ((match = createElementPattern.exec(content)) !== null) {
-          componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+          componentUsageMap.set(
+            match[1]!,
+            (componentUsageMap.get(match[1]!) || 0) + 1,
+          );
         }
       } catch {
         // ignore unreadable files
@@ -1528,65 +1768,88 @@ export class DriftAnalysisService {
    * If package.json has a "main" or "exports" field pointing to a barrel file,
    * all components re-exported from that barrel are the product's public API.
    */
-  private async scanPackageExports(componentUsageMap: Map<string, number>): Promise<void> {
+  private async scanPackageExports(
+    componentUsageMap: Map<string, number>,
+  ): Promise<void> {
     const cwd = this.projectRoot;
     try {
-      const pkgContent = await readFile(resolve(cwd, 'package.json'), 'utf-8');
+      const pkgContent = await readFile(resolve(cwd, "package.json"), "utf-8");
       const pkg = JSON.parse(pkgContent);
 
       // Detect if this is a component library by checking for:
       // - exports field with ./ entries
       // - main/module pointing to index file
       // - "react" or "vue" in peerDependencies (library pattern)
-      const hasPeerReact = pkg.peerDependencies?.react || pkg.peerDependencies?.vue;
-      const hasExports = pkg.exports && typeof pkg.exports === 'object';
-      const mainEntry = pkg.main || pkg.module || '';
+      const hasPeerReact =
+        pkg.peerDependencies?.react || pkg.peerDependencies?.vue;
+      const hasExports = pkg.exports && typeof pkg.exports === "object";
+      const mainEntry = pkg.main || pkg.module || "";
       const isLibraryPattern = hasPeerReact && (hasExports || mainEntry);
 
       if (!isLibraryPattern) return;
 
       // Scan the root barrel file(s) for exports — these are the public API
-      const rootBarrels = await glob('src/index.{ts,tsx,js,jsx}', { cwd, nodir: true });
+      const rootBarrels = await glob("src/index.{ts,tsx,js,jsx}", {
+        cwd,
+        nodir: true,
+      });
 
       for (const barrel of rootBarrels) {
         try {
-          const content = await readFile(resolve(cwd, barrel), 'utf-8');
+          const content = await readFile(resolve(cwd, barrel), "utf-8");
 
           // Named exports: export { Button, Card } from '...'
           const namedPattern = /export\s*\{\s*([^}]+)\s*\}\s*from/g;
           let match: RegExpExecArray | null;
           while ((match = namedPattern.exec(content)) !== null) {
-            const names = match[1]!.split(',').map(n => {
-              const parts = n.trim().split(/\s+as\s+/);
-              return (parts[1] || parts[0] || '').trim();
-            }).filter(n => n && /^[A-Z]/.test(n));
+            const names = match[1]!
+              .split(",")
+              .map((n) => {
+                const parts = n.trim().split(/\s+as\s+/);
+                return (parts[1] || parts[0] || "").trim();
+              })
+              .filter((n) => n && /^[A-Z]/.test(n));
 
             for (const name of names) {
-              componentUsageMap.set(name, (componentUsageMap.get(name) || 0) + 1);
+              componentUsageMap.set(
+                name,
+                (componentUsageMap.get(name) || 0) + 1,
+              );
             }
           }
 
           // Default re-exports: export { default as Button } from '...'
-          const defaultPattern = /export\s*\{\s*default\s+as\s+([A-Z][a-zA-Z0-9]*)\s*\}\s*from/g;
+          const defaultPattern =
+            /export\s*\{\s*default\s+as\s+([A-Z][a-zA-Z0-9]*)\s*\}\s*from/g;
           while ((match = defaultPattern.exec(content)) !== null) {
-            componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+            componentUsageMap.set(
+              match[1]!,
+              (componentUsageMap.get(match[1]!) || 0) + 1,
+            );
           }
 
           // Wildcard re-exports: export * from './Button'
           const wildcardPattern = /export\s*\*\s*from\s*['"]\.\/([^'"]+)['"]/g;
           while ((match = wildcardPattern.exec(content)) !== null) {
             const moduleName = match[1]!;
-            const segments = moduleName.split('/');
-            const last = segments[segments.length - 1] || '';
+            const segments = moduleName.split("/");
+            const last = segments[segments.length - 1] || "";
             if (/^[A-Z]/.test(last)) {
-              componentUsageMap.set(last, (componentUsageMap.get(last) || 0) + 1);
+              componentUsageMap.set(
+                last,
+                (componentUsageMap.get(last) || 0) + 1,
+              );
             }
           }
 
           // Direct exports: export const Button = ... or export function Button
-          const directExportPattern = /export\s+(?:const|function|class)\s+([A-Z][a-zA-Z0-9]*)/g;
+          const directExportPattern =
+            /export\s+(?:const|function|class)\s+([A-Z][a-zA-Z0-9]*)/g;
           while ((match = directExportPattern.exec(content)) !== null) {
-            componentUsageMap.set(match[1]!, (componentUsageMap.get(match[1]!) || 0) + 1);
+            componentUsageMap.set(
+              match[1]!,
+              (componentUsageMap.get(match[1]!) || 0) + 1,
+            );
           }
         } catch {
           // ignore
@@ -1610,9 +1873,15 @@ export class DriftAnalysisService {
   ): Promise<void> {
     if (knownComponents.length === 0) return;
     const cwd = this.projectRoot;
-    const sourceFiles = await glob('**/*.{tsx,jsx,ts,js}', {
+    const sourceFiles = await glob("**/*.{tsx,jsx,ts,js}", {
       cwd,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.d.ts'],
+      ignore: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/.next/**",
+        "**/*.d.ts",
+      ],
       nodir: true,
       maxDepth: 8,
     });
@@ -1622,7 +1891,7 @@ export class DriftAnalysisService {
 
     for (const file of sourceFiles.slice(0, 500)) {
       try {
-        const content = await readFile(resolve(cwd, file), 'utf-8');
+        const content = await readFile(resolve(cwd, file), "utf-8");
 
         // Match component names used as values in these contexts:
         // 1. JSX prop value:  ={ComponentName}  or ={ComponentName}
@@ -1657,7 +1926,12 @@ export class DriftAnalysisService {
 
     // Find all source files
     const patterns = ["**/*.tsx", "**/*.jsx", "**/*.vue", "**/*.svelte"];
-    const ignore = ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/build/**"];
+    const ignore = [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "**/build/**",
+    ];
 
     const files = await glob(patterns, { cwd, ignore, absolute: true });
 

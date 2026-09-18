@@ -7,6 +7,7 @@ import {
   createAhoyCommand,
   createDesignMdCommand,
   createSystemCommand,
+  createRescueCommand,
 } from "./commands/index.js";
 
 export function createCli(): Command {
@@ -25,6 +26,7 @@ export function createCli(): Command {
       `
 Command Groups:
   View               show (components, tokens, drift, health, history, config, skills, agents, context, hooks, commands, graph, plugins, all), system
+  Product Journey    rescue (plan, apply, verify, guard, report, rollback)
   Drift Actions      drift (scan, check, fix, ignore)
   Setup              dock (config, skills, agents, context, hooks, commands, plugins, tokens, graph)
   Cloud              ahoy (login, logout, status, github, gitlab, billing, plans)
@@ -33,6 +35,7 @@ Command Groups:
 Quick Start:
   $ buoy show all           # everything an AI agent needs
   $ buoy show drift         # design system violations
+  $ buoy rescue plan        # baseline and safe repair plan
   $ buoy dock               # set up config, skills, agents, hooks
 `,
     );
@@ -40,6 +43,9 @@ Quick Start:
   // === View (read-only) ===
   program.addCommand(createShowCommand());
   program.addCommand(createSystemCommand());
+
+  // === Complete product journey ===
+  program.addCommand(createRescueCommand());
 
   // === Drift Actions ===
   program.addCommand(createDriftCommand());

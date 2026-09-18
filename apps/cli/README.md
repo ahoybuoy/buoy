@@ -5,10 +5,10 @@ Catch design drift before it ships. Buoy scans your codebase to find where AI-ge
 ## Quick Start
 
 ```bash
-npx ahoybuoy begin
+npx ahoybuoy show all
 ```
 
-This scans your project and walks you through setup.
+This scans your project without requiring configuration.
 
 ## What It Finds
 
@@ -18,34 +18,50 @@ This scans your project and walks you through setup.
 
 ## Commands
 
-| Command | Purpose |
-|---------|---------|
-| `buoy begin` | Interactive setup wizard |
-| `buoy show all` | Scan for components, tokens, and drift |
-| `buoy check` | Pre-commit drift validation |
-| `buoy fix` | Auto-fix drift issues |
-| `buoy dock` | Configure project (agents, hooks, etc.) |
-| `buoy ahoy` | Cloud features (login, GitHub bot, billing) |
+| Command            | Purpose                                       |
+| ------------------ | --------------------------------------------- |
+| `buoy show all`    | Scan for components, tokens, and drift        |
+| `buoy drift check` | Pre-commit drift validation                   |
+| `buoy drift fix`   | Preview or apply drift fixes                  |
+| `buoy rescue`      | Measure, repair, guard, and prove improvement |
+| `buoy dock`        | Configure project (agents, hooks, etc.)       |
+| `buoy ahoy`        | Cloud features (login, GitHub bot, billing)   |
 
 ## Fix Command
 
-The `buoy fix` command suggests and applies fixes for design drift:
+The `buoy drift fix` command suggests and applies fixes for design drift:
 
 ```bash
-buoy fix                    # Preview fixable issues
-buoy fix --dry-run          # Show detailed diffs
-buoy fix --apply            # Apply high-confidence fixes
-buoy fix --confidence=exact # Only exact matches (safest)
+buoy drift fix                    # Preview fixable issues
+buoy drift fix --dry-run          # Show detailed diffs
+buoy drift fix --apply            # Apply high-confidence fixes
+buoy drift fix --confidence=high  # Require high-confidence matches
 ```
+
+## Rescue workflow
+
+For an existing codebase, Rescue turns the commands into one reviewable journey:
+
+```bash
+buoy rescue plan
+# Review .buoy/rescue/runs/<run-id>/report.html
+buoy rescue apply --run <run-id> --approve
+buoy rescue guard --run <run-id> --reason "Reviewed legacy baseline"
+buoy rescue report --run <run-id>
+```
+
+Apply requires a clean Git worktree and creates a new `buoy/<run-id>` branch.
+Buoy never commits, pushes, merges, or uploads source code. Ambiguous changes stay
+review-required, and `buoy rescue rollback` restores local backups.
 
 ### Confidence Levels
 
-| Level | Score | Description |
-|-------|-------|-------------|
-| **exact** | 100% | Value exactly matches a design token |
-| **high** | 95-99% | Very close match, safe to auto-apply |
-| **medium** | 70-94% | Close match, review recommended |
-| **low** | <70% | Ambiguous, manual review required |
+| Level      | Score  | Description                          |
+| ---------- | ------ | ------------------------------------ |
+| **exact**  | 100%   | Value exactly matches a design token |
+| **high**   | 95-99% | Very close match, safe to auto-apply |
+| **medium** | 70-94% | Close match, review recommended      |
+| **low**    | <70%   | Ambiguous, manual review required    |
 
 ## AI Integration
 

@@ -2,7 +2,9 @@ import { Command } from "commander";
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { join, dirname } from "path";
+import { createHash } from "node:crypto";
 import { loadConfig } from "../config/loader.js";
+import { DriftAnalysisService } from "../services/drift-analysis.js";
 import {
   spinner,
   success,
@@ -27,12 +29,14 @@ export interface IgnoreEntry {
 }
 
 export interface IgnoreList {
-  version: 1;
+  version: 1 | 2;
   createdAt: string;
   updatedAt: string;
   reason: string;
   driftIds: string[];
-  /** Per-drift reasons (drift ID -> entry) */
+  /** Stable fingerprints survive harmless line-number and generated-ID changes. */
+  fingerprints?: string[];
+  /** Per-drift reasons (fingerprint for v2, drift ID for v1 -> entry) */
   entries?: Record<string, IgnoreEntry>;
   summary: {
     critical: number;
@@ -91,24 +95,57 @@ export async function saveIgnoreList(
 /**
  * Create ignore list from current drift signals
  */
-export function createIgnoreList(drifts: DriftSignal[], reason: string): IgnoreList {
+export function fingerprintDrift(drift: DriftSignal): string {
+  const location = (drift.source.location || "")
+    .replace(/:\d+(?::\d+)?$/, "")
+    .replaceAll("\\", "/");
+  const details = drift.details || {};
+  const suggestions = Array.isArray(details.suggestions)
+    ? [...details.suggestions].map(String).sort()
+    : [];
+  const identity = JSON.stringify({
+    type: drift.type,
+    file: location,
+    entityType: drift.source.entityType,
+    entityName: drift.source.entityName,
+    actual: details.actual ?? null,
+    expected: details.expected ?? null,
+    suggestions,
+    message:
+      details.actual == null &&
+      details.expected == null &&
+      suggestions.length === 0
+        ? drift.message.replace(/\s+/g, " ").trim()
+        : null,
+  });
+  return createHash("sha256").update(identity).digest("hex").slice(0, 24);
+}
+
+export function createIgnoreList(
+  drifts: DriftSignal[],
+  reason: string,
+  createdBy?: string,
+): IgnoreList {
   const now = new Date().toISOString();
+  const fingerprints = drifts.map(fingerprintDrift);
 
   // Create per-drift entries with the reason
   const entries: Record<string, IgnoreEntry> = {};
-  for (const drift of drifts) {
-    entries[drift.id] = {
+  for (const fingerprint of fingerprints) {
+    entries[fingerprint] = {
       reason,
       createdAt: now,
+      createdBy,
     };
   }
 
   return {
-    version: 1,
+    version: 2,
     createdAt: now,
     updatedAt: now,
     reason,
     driftIds: drifts.map((d) => d.id),
+    fingerprints,
     entries,
     summary: {
       critical: drifts.filter((d) => d.severity === "critical").length,
@@ -133,11 +170,31 @@ export function filterIgnored(
     return { newDrifts: drifts, ignoredCount: 0 };
   }
 
-  const ignoreSet = new Set(ignoreList.driftIds);
-  const newDrifts = drifts.filter((d) => !ignoreSet.has(d.id));
+  const ignoreSet = new Set(ignoreList.driftIds || []);
+  const fingerprintSet = new Set(ignoreList.fingerprints || []);
+  const newDrifts = drifts.filter(
+    (d) => !ignoreSet.has(d.id) && !fingerprintSet.has(fingerprintDrift(d)),
+  );
   const ignoredCount = drifts.length - newDrifts.length;
 
   return { newDrifts, ignoredCount };
+}
+
+export function preserveIgnoreEntries(
+  next: IgnoreList,
+  existing: IgnoreList,
+  currentDrifts: DriftSignal[],
+): void {
+  if (!next.entries || !existing.entries) return;
+  const fingerprintById = new Map(
+    currentDrifts.map((drift) => [drift.id, fingerprintDrift(drift)]),
+  );
+
+  for (const [key, entry] of Object.entries(existing.entries)) {
+    const migratedKey =
+      existing.version === 1 ? fingerprintById.get(key) || key : key;
+    if (next.entries[migratedKey]) next.entries[migratedKey] = entry;
+  }
 }
 
 export function createIgnoreCommand(): Command {
@@ -148,11 +205,10 @@ export function createIgnoreCommand(): Command {
   // ignore all
   cmd
     .command("all")
-    .description(
-      "Ignore all current drift signals (hides existing issues)",
-    )
+    .description("Ignore all current drift signals (hides existing issues)")
     .option("--json", "Output as JSON")
     .option("-f, --force", "Overwrite existing ignore list without prompting")
+    .option("--actor <name>", "Person or team accepting the baseline")
     .requiredOption(
       "-r, --reason <reason>",
       "Reason for ignoring these drift signals (required)",
@@ -164,10 +220,11 @@ export function createIgnoreCommand(): Command {
       const spin = spinner("Loading configuration...");
 
       try {
-        const { config } = await loadConfig();
+        const { config, configPath } = await loadConfig();
+        const projectRoot = configPath ? dirname(configPath) : process.cwd();
 
         // Check for existing ignore list
-        const existing = await loadIgnoreList();
+        const existing = await loadIgnoreList(projectRoot);
         if (existing && !options.force) {
           spin.stop();
           warning(
@@ -181,45 +238,22 @@ export function createIgnoreCommand(): Command {
 
         spin.text = "Scanning for current drift...";
 
-        // Import required modules
-        const { ReactComponentScanner } =
-          await import("@buoy-design/scanners/git");
-        const { SemanticDiffEngine } =
-          await import("@buoy-design/core/analysis");
-
-        // Scan components
-        const components: Awaited<
-          ReturnType<typeof ReactComponentScanner.prototype.scan>
-        >["items"] = [];
-
-        if (config.sources.react?.enabled) {
-          spin.text = "Scanning React components...";
-          const scanner = new ReactComponentScanner({
-            projectRoot: process.cwd(),
-            include: config.sources.react.include,
-            exclude: config.sources.react.exclude,
-            designSystemPackage: config.sources.react.designSystemPackage,
-          });
-
-          const result = await scanner.scan();
-          components.push(...result.items);
-        }
-
-        spin.text = "Analyzing drift...";
-
-        // Run analysis
-        const engine = new SemanticDiffEngine();
-        const diffResult = engine.analyzeComponents(components, {
-          checkDeprecated: true,
-          checkNaming: true,
-          checkDocumentation: true,
+        const service = new DriftAnalysisService(config, projectRoot);
+        const result = await service.analyze({
+          includeIgnored: true,
+          onProgress: (message) => {
+            spin.text = message;
+          },
         });
-
-        const drifts = diffResult.drifts;
+        const drifts = result.drifts;
 
         // Create and save ignore list
-        const ignoreList = createIgnoreList(drifts, options.reason);
-        await saveIgnoreList(ignoreList);
+        const ignoreList = createIgnoreList(
+          drifts,
+          options.reason,
+          options.actor,
+        );
+        await saveIgnoreList(ignoreList, projectRoot);
 
         spin.stop();
 
@@ -241,7 +275,7 @@ export function createIgnoreCommand(): Command {
         keyValue("Warning", String(ignoreList.summary.warning));
         keyValue("Info", String(ignoreList.summary.info));
         newline();
-        success(`Ignore list saved to ${IGNORE_DIR}/${IGNORE_FILE}`);
+        success(`Ignore list saved to ${getIgnorePath(projectRoot)}`);
         info(
           "Future drift checks will only show NEW issues not in this ignore list.",
         );
@@ -267,7 +301,9 @@ export function createIgnoreCommand(): Command {
       }
 
       try {
-        const ignoreList = await loadIgnoreList();
+        const { configPath } = await loadConfig();
+        const projectRoot = configPath ? dirname(configPath) : process.cwd();
+        const ignoreList = await loadIgnoreList(projectRoot);
 
         if (options.json) {
           console.log(formatJson({ ignoreList }));
@@ -292,7 +328,7 @@ export function createIgnoreCommand(): Command {
         keyValue("Warning", String(ignoreList.summary.warning));
         keyValue("Info", String(ignoreList.summary.info));
         newline();
-        info(`Ignore file: ${getIgnorePath()}`);
+        info(`Ignore file: ${getIgnorePath(projectRoot)}`);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         error(`Failed to read ignore list: ${message}`);
@@ -305,6 +341,7 @@ export function createIgnoreCommand(): Command {
     .command("add")
     .description("Add current drift signals to the ignore list")
     .option("--json", "Output as JSON")
+    .option("--actor <name>", "Person or team accepting the baseline")
     .requiredOption(
       "-r, --reason <reason>",
       "Reason for ignoring these drift signals (required)",
@@ -316,64 +353,32 @@ export function createIgnoreCommand(): Command {
       const spin = spinner("Loading configuration...");
 
       try {
-        const { config } = await loadConfig();
-        const existing = await loadIgnoreList();
+        const { config, configPath } = await loadConfig();
+        const projectRoot = configPath ? dirname(configPath) : process.cwd();
+        const existing = await loadIgnoreList(projectRoot);
 
         spin.text = "Scanning for current drift...";
 
-        // Import required modules
-        const { ReactComponentScanner } =
-          await import("@buoy-design/scanners/git");
-        const { SemanticDiffEngine } =
-          await import("@buoy-design/core/analysis");
-
-        // Scan components
-        const components: Awaited<
-          ReturnType<typeof ReactComponentScanner.prototype.scan>
-        >["items"] = [];
-
-        if (config.sources.react?.enabled) {
-          spin.text = "Scanning React components...";
-          const scanner = new ReactComponentScanner({
-            projectRoot: process.cwd(),
-            include: config.sources.react.include,
-            exclude: config.sources.react.exclude,
-            designSystemPackage: config.sources.react.designSystemPackage,
-          });
-
-          const result = await scanner.scan();
-          components.push(...result.items);
-        }
-
-        spin.text = "Analyzing drift...";
-
-        // Run analysis
-        const engine = new SemanticDiffEngine();
-        const diffResult = engine.analyzeComponents(components, {
-          checkDeprecated: true,
-          checkNaming: true,
-          checkDocumentation: true,
+        const service = new DriftAnalysisService(config, projectRoot);
+        const result = await service.analyze({
+          includeIgnored: true,
+          onProgress: (message) => {
+            spin.text = message;
+          },
         });
-
-        const drifts = diffResult.drifts;
+        const drifts = result.drifts;
 
         // Create updated ignore list, preserving existing entries
-        const ignoreList = createIgnoreList(drifts, options.reason);
+        const ignoreList = createIgnoreList(
+          drifts,
+          options.reason,
+          options.actor,
+        );
         if (existing) {
           ignoreList.createdAt = existing.createdAt;
-          // Preserve existing per-drift entries, only add new ones with the new reason
-          if (existing.entries) {
-            for (const [id, entry] of Object.entries(existing.entries)) {
-              if (ignoreList.entries && !ignoreList.entries[id]) {
-                // This drift was removed, don't preserve
-              } else if (ignoreList.entries && existing.driftIds.includes(id)) {
-                // Preserve original entry for existing drifts
-                ignoreList.entries[id] = entry;
-              }
-            }
-          }
+          preserveIgnoreEntries(ignoreList, existing, drifts);
         }
-        await saveIgnoreList(ignoreList);
+        await saveIgnoreList(ignoreList, projectRoot);
 
         spin.stop();
 
@@ -421,7 +426,9 @@ export function createIgnoreCommand(): Command {
 
       try {
         const { unlink } = await import("fs/promises");
-        const ignorePath = getIgnorePath();
+        const { configPath } = await loadConfig();
+        const projectRoot = configPath ? dirname(configPath) : process.cwd();
+        const ignorePath = getIgnorePath(projectRoot);
 
         if (!existsSync(ignorePath)) {
           if (options.json) {

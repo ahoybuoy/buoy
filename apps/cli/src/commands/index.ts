@@ -4,6 +4,7 @@ export { createDockCommand } from "./dock.js";
 export { createAhoyCommand } from "./ahoy.js";
 export { createDesignMdCommand } from "./designmd/index.js";
 export { createSystemCommand } from "./system.js";
+export { createRescueCommand } from "./rescue.js";
 
 // Re-exports for internal use (subcommands within groups)
 export { createCheckCommand } from "./check.js";

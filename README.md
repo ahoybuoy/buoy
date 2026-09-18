@@ -49,28 +49,28 @@ attributed to a repository path and owner.
 ## Quick Start
 
 ```bash
-# Interactive setup wizard
-npx ahoybuoy begin
-
-# Or see your design system immediately (zero config!)
+# See your design system immediately (zero config)
 npx ahoybuoy show all
+
+# Add project configuration and local integrations when ready
+npx ahoybuoy dock
 ```
 
 No config needed. Buoy auto-detects your framework and starts working immediately.
 
 ## What It Catches
 
-| Issue                       | Example                                     |
-| --------------------------- | ------------------------------------------- |
-| **Hardcoded colors**        | `#ff0000` instead of `var(--color-primary)` |
-| **Arbitrary spacing**       | `padding: 17px` instead of design scale     |
-| **Tailwind escape hatches** | `p-[13px]` instead of `p-4`                 |
-| **Naming inconsistencies**  | `ButtonNew`, `ButtonV2`, `ButtonOld`        |
-| **Unused components**       | Defined but never imported or rendered      |
+| Issue                       | Example                                              |
+| --------------------------- | ---------------------------------------------------- |
+| **Hardcoded colors**        | `#ff0000` instead of `var(--color-primary)`          |
+| **Arbitrary spacing**       | `padding: 17px` instead of design scale              |
+| **Tailwind escape hatches** | `p-[13px]` instead of `p-4`                          |
+| **Naming inconsistencies**  | `ButtonNew`, `ButtonV2`, `ButtonOld`                 |
+| **Unused components**       | Defined but never imported or rendered               |
 | **Semantic mismatches**     | Same prop typed `string` in one, `number` in another |
-| **Repeated patterns**       | Same Tailwind classes copy-pasted 5+ times  |
-| **Framework sprawl**        | React + Vue + jQuery in same codebase       |
-| **Detached components**     | Instances without main component            |
+| **Repeated patterns**       | Same Tailwind classes copy-pasted 5+ times           |
+| **Framework sprawl**        | React + Vue + jQuery in same codebase                |
+| **Detached components**     | Instances without main component                     |
 
 ## Commands
 
@@ -100,7 +100,13 @@ buoy
 │       ├── show            # View ignored drift signals
 │       ├── add             # Add new drift to ignore list (requires --reason)
 │       └── clear           # Remove ignore list
-├── begin                   # Interactive wizard
+├── rescue                  # Complete measure → repair → guard → prove journey
+│   ├── plan                # Build a local baseline and repair plan
+│   ├── apply               # Apply reviewed safe fixes on a new branch
+│   ├── verify              # Run detected typecheck/test scripts
+│   ├── guard               # Record reviewed legacy drift with reasons
+│   ├── report              # Generate JSON, Markdown, and HTML evidence
+│   └── rollback            # Restore local pre-Rescue backups
 ├── dock                    # Dock tools into your project
 │   ├── config              # Create .buoy.yaml
 │   ├── skills              # Create AI agent skills
@@ -155,19 +161,20 @@ Example output:
 
 ## Getting Started
 
-### Interactive Wizard
+### Complete a Rescue journey
 
 ```bash
-buoy begin
+buoy rescue plan
+# Review .buoy/rescue/runs/<run-id>/report.html
+buoy rescue apply --run <run-id> --approve
+buoy rescue guard --run <run-id> --reason "Reviewed legacy baseline" --actor "Design systems team"
+buoy rescue report --run <run-id>
 ```
 
-Walks you through:
-
-- **Framework detection** — Confirms what Buoy found
-- **Token discovery** — Shows your design tokens
-- **Quick scan** — Immediate drift report
-- **CI setup** — GitHub Actions configuration
-- **Figma connection** — Link your design files
+Rescue keeps ambiguous findings review-only, runs detected project checks after
+applying high-confidence changes, and retains local backups for rollback. It does
+not commit, push, open a pull request, or upload source code. See
+[docs/rescue.md](docs/rescue.md) for the complete workflow.
 
 ### Configure Your Project
 
@@ -254,7 +261,7 @@ buoy show drift
 ```bash
 buoy drift fix                    # Interactive fix suggestions
 buoy drift fix --dry-run          # Preview changes
-buoy drift fix --auto             # Auto-apply safe fixes
+buoy drift fix --apply            # Apply reviewed high-confidence fixes
 ```
 
 ### Ignore Existing Drift
