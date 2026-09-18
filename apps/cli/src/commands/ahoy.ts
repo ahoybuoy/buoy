@@ -38,6 +38,7 @@ import { createLoginCommand } from './login.js';
 import { createLogoutCommand } from './logout.js';
 import { createBillingCommand } from './billing.js';
 import { createPlansCommand } from './plans.js';
+import { createTelemetryCommand } from './telemetry.js';
 
 export function createAhoyCommand(): Command {
   const cmd = new Command('ahoy');
@@ -50,7 +51,8 @@ export function createAhoyCommand(): Command {
     .addCommand(createGitHubCommand())
     .addCommand(createGitLabCommand())
     .addCommand(createBillingCommand())
-    .addCommand(createPlansCommand());
+    .addCommand(createPlansCommand())
+    .addCommand(createTelemetryCommand());
 
   // Default action shows status
   cmd.action(async () => {

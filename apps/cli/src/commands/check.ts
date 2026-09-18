@@ -15,6 +15,7 @@ import {
   classifyCheckInput,
   runSingleSourceOrRemoteCheck,
 } from "../services/remote-check.js";
+import { askForConsent, sendFirstRunOnce, sendTelemetry } from '../telemetry/index.js';
 import { formatUpgradeHint } from "../utils/upgrade-hints.js";
 import { generatePRCommentPreview } from "../output/pr-comment-preview.js";
 import {
@@ -611,7 +612,21 @@ export function createCheckCommand(): Command {
           if (hint) {
             console.log('');
             console.log(hint);
+            await sendTelemetry('cli_hint_shown');
           }
+        }
+
+        // Opt-in telemetry: ask once (interactive only), then send counts.
+        if (!options.quiet) {
+          await askForConsent();
+          await sendFirstRunOnce();
+          await sendTelemetry(summary.total > 0 ? 'cli_drift_found' : 'cli_check_clean', {
+            total: summary.total,
+            critical: summary.critical,
+            warning: summary.warning,
+            info: summary.info,
+            files: new Set(drifts.map((d) => (d.source.location || '').split(':')[0]).filter(Boolean)).size,
+          });
         }
 
         process.exit(exitCode);

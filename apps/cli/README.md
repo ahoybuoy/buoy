@@ -79,6 +79,19 @@ buoy dock context
 
 Buoy auto-detects your framework (React, Vue, Svelte, Angular, Astro) and scans standard paths. No configuration required to get started.
 
+## Telemetry
+
+Off by default. After your first drift result in an interactive terminal, Buoy asks once whether it may send anonymous usage pings. Say no and it never asks again.
+
+If you opt in, it sends event names (`cli_first_run`, `cli_drift_found`, `cli_check_clean`, `cli_hint_shown`, `cli_login_started`) with counts, the CLI version, and your OS. Never file paths, repository names, code, or account details. A random id in `~/.buoy/config.json` groups pings from one install and is not tied to you.
+
+```bash
+buoy ahoy telemetry          # show the setting and the exact payload
+buoy ahoy telemetry off      # or on
+```
+
+`BUOY_TELEMETRY=0`, `DO_NOT_TRACK=1`, or `CI` in the environment disables it regardless of the setting. JSON and quiet output never send.
+
 ## Links
 
 - [Documentation](https://buoy.design/docs)

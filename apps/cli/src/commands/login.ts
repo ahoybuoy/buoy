@@ -17,6 +17,7 @@ import {
   readCloudConfig,
 } from '../cloud/config.js';
 import { getMe, getGitHubInstallUrl, listGitHubInstallations } from '../cloud/client.js';
+import { sendTelemetry } from '../telemetry/index.js';
 import { spinner, error, info, warning, keyValue, newline } from '../output/reporters.js';
 
 const execAsync = promisify(exec);
@@ -175,6 +176,7 @@ export function createLoginCommand(): Command {
         // Interactive login/signup flow. The dashboard's /cli-auth page mints
         // an API key and POSTs it back to a loopback listener, so pasting is
         // only the fallback.
+        await sendTelemetry('cli_login_started');
         const endpoint = getApiEndpoint();
         const appOrigin = endpoint.replace('api.', 'app.');
         const listener = waitForTokenOnLoopback();

@@ -27,6 +27,13 @@ export interface CloudConfig {
     lastShownAt?: string;
     disabled?: boolean;
   };
+  /** Opt-in anonymous usage telemetry. See src/telemetry/index.ts. */
+  telemetry?: {
+    enabled?: boolean;
+    anonymousId?: string;
+    askedAt?: string;
+    firstRunSentAt?: string;
+  };
 }
 
 /**
