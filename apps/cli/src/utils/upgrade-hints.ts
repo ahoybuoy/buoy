@@ -25,7 +25,7 @@ const HINTS: Record<HintContext, UpgradeHint[]> = {
   'after-drift-found': [
     {
       condition: () => !isLoggedIn(),
-      message: 'Get PR comments that catch drift before it ships',
+      message: 'Get this review on your team\'s PRs before drift ships',
       cta: 'buoy ahoy login',
     },
   ],
@@ -39,7 +39,7 @@ const HINTS: Record<HintContext, UpgradeHint[]> = {
   'after-check-fail': [
     {
       condition: () => !isLoggedIn(),
-      message: 'Block PRs with drift automatically',
+      message: 'Catch this on every PR, for the whole team',
       cta: 'buoy ahoy login',
     },
   ],

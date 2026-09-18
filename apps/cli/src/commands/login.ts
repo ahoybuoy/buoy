@@ -16,7 +16,7 @@ import {
   getApiEndpoint,
   readCloudConfig,
 } from '../cloud/config.js';
-import { getMe } from '../cloud/client.js';
+import { getMe, getGitHubInstallUrl, listGitHubInstallations } from '../cloud/client.js';
 import { spinner, error, info, warning, keyValue, newline } from '../output/reporters.js';
 
 const execAsync = promisify(exec);
@@ -242,6 +242,34 @@ export function createLoginCommand(): Command {
       keyValue('Account', validation.account?.name || 'Unknown');
       keyValue('Email', validation.user?.email || 'Unknown');
       keyValue('Plan', validation.account?.plan || 'free');
+
+      // Collapse the two-step funnel: most people who log in from a drift
+      // hint want PR reviews, so offer the GitHub App install right here.
+      let hasInstall = false;
+      try {
+        const installs = await listGitHubInstallations();
+        hasInstall = !!installs.ok && (installs.data?.installations || []).length > 0;
+      } catch { /* treat as no install */ }
+
+      if (!hasInstall && options.browser !== false && process.stdin.isTTY) {
+        newline();
+        const answer = await promptOrLoopback(
+          'Set up the GitHub PR bot now so every pull request gets reviewed? [Y/n] ',
+          new Promise<string>(() => {}),
+        );
+        if (answer === '' || /^y/i.test(answer)) {
+          const installUrl = getGitHubInstallUrl(getApiEndpoint());
+          try {
+            await openBrowser(installUrl);
+            info('Browser opened. Choose the repositories Buoy should review.');
+          } catch {
+            info(`Open this URL to install the GitHub App: ${installUrl}`);
+          }
+          newline();
+          info('After installing, run `buoy ahoy status` to verify.');
+          return;
+        }
+      }
 
       newline();
       info('You can now use:');
