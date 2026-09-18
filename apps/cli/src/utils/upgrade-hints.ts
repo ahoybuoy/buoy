@@ -1,6 +1,6 @@
 // apps/cli/src/utils/upgrade-hints.ts
 import chalk from 'chalk';
-import { isLoggedIn } from '../cloud/index.js';
+import { isLoggedIn, readCloudConfig, updateCloudConfig } from '../cloud/config.js';
 
 export type HintContext =
   | 'after-drift-found'
@@ -15,6 +15,12 @@ interface UpgradeHint {
   cta: string;
 }
 
+/** Show at most one hint per day per machine. */
+const HINT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+// Every hint targets logged-out users, so every CTA must be reachable while
+// logged out. `buoy ahoy github` requires login and used to be the CTA here,
+// which sent people straight into a "Not logged in" error.
 const HINTS: Record<HintContext, UpgradeHint[]> = {
   'after-drift-found': [
     {
@@ -34,7 +40,7 @@ const HINTS: Record<HintContext, UpgradeHint[]> = {
     {
       condition: () => !isLoggedIn(),
       message: 'Block PRs with drift automatically',
-      cta: 'buoy ahoy github',
+      cta: 'buoy ahoy login',
     },
   ],
   'after-scan': [
@@ -52,6 +58,33 @@ const HINTS: Record<HintContext, UpgradeHint[]> = {
     },
   ],
 };
+
+export interface HintEnvironment {
+  isTTY: boolean;
+  ci: boolean;
+  now: Date;
+}
+
+function defaultEnvironment(): HintEnvironment {
+  return {
+    isTTY: Boolean(process.stdout.isTTY),
+    ci: Boolean(process.env.CI) || Boolean(process.env.GITHUB_ACTIONS) || process.env.BUOY_HINTS === '0',
+    now: new Date(),
+  };
+}
+
+/**
+ * Decide whether a hint may be shown right now. Pure apart from reading the
+ * config file, so it can be tested with an explicit environment.
+ */
+export function shouldShowHint(env: HintEnvironment = defaultEnvironment()): boolean {
+  if (!env.isTTY || env.ci) return false;
+  const config = readCloudConfig();
+  if (config.hints?.disabled) return false;
+  const last = config.hints?.lastShownAt ? Date.parse(config.hints.lastShownAt) : NaN;
+  if (!Number.isNaN(last) && env.now.getTime() - last < HINT_INTERVAL_MS) return false;
+  return true;
+}
 
 /**
  * Get a random applicable hint for the given context
@@ -71,11 +104,21 @@ export function getUpgradeHint(context: HintContext): { message: string; cta: st
 }
 
 /**
- * Format an upgrade hint for CLI output
+ * Format an upgrade hint for CLI output, honouring the once-a-day cap and
+ * the user's opt-out. Records the time it was shown.
  */
-export function formatUpgradeHint(context: HintContext): string | undefined {
+export function formatUpgradeHint(context: HintContext, env?: HintEnvironment): string | undefined {
+  if (!shouldShowHint(env)) return undefined;
   const hintData = getUpgradeHint(context);
   if (!hintData) return undefined;
 
-  return chalk.dim(`Tip: ${hintData.message} → ${chalk.cyan(hintData.cta)}`);
+  const now = (env ?? defaultEnvironment()).now;
+  try {
+    const config = readCloudConfig();
+    updateCloudConfig({ hints: { ...config.hints, lastShownAt: now.toISOString() } });
+  } catch {
+    // Config write failures must never break command output.
+  }
+
+  return chalk.dim(`Tip: ${hintData.message} → ${chalk.cyan(hintData.cta)}  (BUOY_HINTS=0 to silence)`);
 }

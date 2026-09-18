@@ -8,6 +8,8 @@ import { Command } from 'commander';
 import { createInterface } from 'readline';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { createServer } from 'http';
+import { hostname } from 'os';
 import {
   updateCloudConfig,
   isLoggedIn,
@@ -38,23 +40,6 @@ async function openBrowser(url: string): Promise<void> {
   }
 
   await execAsync(command);
-}
-
-/**
- * Prompt for input
- */
-function prompt(question: string): Promise<string> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
 }
 
 /**
@@ -92,6 +77,75 @@ async function validateToken(token: string): Promise<{
   };
 }
 
+/**
+ * Listen on a random loopback port for the dashboard to POST the token.
+ * Resolves with the token, or null if the server could not start.
+ */
+function waitForTokenOnLoopback(): { url: string | null; token: Promise<string>; close: () => void } {
+  let resolveToken: (t: string) => void = () => {};
+  const token = new Promise<string>((resolve) => { resolveToken = resolve; });
+
+  const server = createServer((req, res) => {
+    // Only the dashboard origin should be talking to us; answer preflight so
+    // the browser allows the cross-origin POST from app.buoy.design.
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    if (req.method !== 'POST' || req.url !== '/token') { res.writeHead(404); res.end(); return; }
+
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; if (body.length > 4096) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const parsed = JSON.parse(body) as { token?: string };
+        if (parsed.token && parsed.token.startsWith('buoy_')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end('{"ok":true}');
+          resolveToken(parsed.token);
+          return;
+        }
+      } catch { /* fall through */ }
+      res.writeHead(400); res.end();
+    });
+  });
+
+  let url: string | null = null;
+  try {
+    server.listen(0, '127.0.0.1');
+    const addr = server.address();
+    if (addr && typeof addr === 'object') url = `http://127.0.0.1:${addr.port}/token`;
+  } catch {
+    url = null;
+  }
+
+  return { url, token, close: () => { try { server.close(); } catch { /* ignore */ } } };
+}
+
+/**
+ * Race a terminal prompt against the loopback listener. Whichever supplies a
+ * token first wins; the readline prompt is closed either way.
+ */
+function promptOrLoopback(question: string, loopbackToken: Promise<string>): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (value: string) => {
+      if (done) return;
+      done = true;
+      rl.close();
+      resolve(value.trim());
+    };
+    rl.question(question, finish);
+    loopbackToken.then((t) => {
+      if (!done) {
+        process.stdout.write('\n');
+        finish(t);
+      }
+    });
+  });
+}
+
 export function createLoginCommand(): Command {
   const cmd = new Command('login');
 
@@ -118,36 +172,43 @@ export function createLoginCommand(): Command {
         // Token provided directly
         token = options.token;
       } else {
-        // Interactive login/signup flow
+        // Interactive login/signup flow. The dashboard's /cli-auth page mints
+        // an API key and POSTs it back to a loopback listener, so pasting is
+        // only the fallback.
         const endpoint = getApiEndpoint();
-        const isSignup = options.signup;
-        const authPath = isSignup ? '/signup?source=cli' : '/cli-auth';
-        const authUrl = `${endpoint.replace('api.', 'app.')}${authPath}`;
+        const appOrigin = endpoint.replace('api.', 'app.');
+        const listener = waitForTokenOnLoopback();
+        const params = new URLSearchParams({ host: hostname() });
+        if (listener.url) params.set('callback', listener.url);
+        const cliAuthPath = `/cli-auth?${params.toString()}`;
+        const authUrl = options.signup
+          ? `${appOrigin}/sign-up?redirect_url=${encodeURIComponent(cliAuthPath)}`
+          : `${appOrigin}${cliAuthPath}`;
 
         newline();
-        if (isSignup) {
-          info('Opening browser to create your Buoy account...');
-          info('After signup, you\'ll get an API token to paste here.');
-        } else {
-          info('Opening browser to authenticate with Buoy Cloud...');
-        }
+        info(options.signup
+          ? 'Opening browser to create your Buoy account...'
+          : 'Opening browser to connect the CLI to Buoy Cloud...');
         newline();
 
         if (options.browser !== false) {
           try {
             await openBrowser(authUrl);
-            info('Browser opened. Complete authentication there.');
+            info('Browser opened. Approve the key there and this terminal will continue.');
           } catch {
             warning('Could not open browser automatically.');
           }
         }
 
         newline();
-        info(`If browser didn't open, visit: ${authUrl}`);
+        info(`If the browser didn't open, visit: ${authUrl}`);
         newline();
 
-        // Prompt for token
-        token = await prompt('Paste your API token here: ');
+        try {
+          token = await promptOrLoopback('Waiting for the browser (or paste the key here): ', listener.token);
+        } finally {
+          listener.close();
+        }
 
         if (!token) {
           error('No token provided. Login cancelled.');
@@ -184,9 +245,9 @@ export function createLoginCommand(): Command {
 
       newline();
       info('You can now use:');
-      info('  buoy link     - Connect this project to Buoy Cloud');
-      info('  buoy whoami   - Show current user');
-      info('  buoy logout   - Sign out');
+      info('  buoy ahoy github  - Set up the GitHub PR bot');
+      info('  buoy ahoy status  - Show current account');
+      info('  buoy ahoy logout  - Sign out');
     });
 
   return cmd;

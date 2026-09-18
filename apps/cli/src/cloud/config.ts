@@ -22,6 +22,11 @@ export interface CloudConfig {
   accountId?: string;
   accountName?: string;
   email?: string;
+  /** Upgrade-hint state: last time a hint was shown, and whether the user turned them off. */
+  hints?: {
+    lastShownAt?: string;
+    disabled?: boolean;
+  };
 }
 
 /**
