@@ -1,5 +1,6 @@
 import type { RawSignal, SignalContext } from '../types.js';
 import { createSignalId } from '../types.js';
+import { isIdiomaticLength } from './idioms.js';
 
 const RADIUS_PATTERN = /^(\d+\.?\d*)(px|rem|em|%|vw|vh)$/;
 
@@ -28,6 +29,7 @@ export function extractRadiusSignals(
   if (!match) return [];
 
   const [, numStr, unit] = match;
+  if (isIdiomaticLength('radius', parseFloat(numStr!), unit!)) return [];
   return [{
     id: createSignalId('radius-value', path, line, value),
     type: 'radius-value',

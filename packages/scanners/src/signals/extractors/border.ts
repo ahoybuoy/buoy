@@ -1,5 +1,6 @@
 import type { RawSignal, SignalContext } from '../types.js';
 import { createSignalId } from '../types.js';
+import { isIdiomaticLength } from './idioms.js';
 
 const BORDER_WIDTH_PATTERN = /^(\d+\.?\d*)(px|rem|em)$/;
 
@@ -45,6 +46,7 @@ export function extractBorderWidthSignals(
   if (!match) return [];
 
   const [, numStr, unit] = match;
+  if (isIdiomaticLength('border-width', parseFloat(numStr!), unit!)) return [];
   return [{
     id: createSignalId('border-width', path, line, value),
     type: 'border-width',

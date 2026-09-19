@@ -1,5 +1,6 @@
 import type { RawSignal, SignalContext } from '../types.js';
 import { createSignalId } from '../types.js';
+import { isIdiomaticLength } from './idioms.js';
 
 // Spacing value pattern: number + unit
 const SPACING_PATTERN = /^(-?\d+\.?\d*)(px|rem|em|%|vh|vw|vmin|vmax|ch|ex)$/;
@@ -89,6 +90,7 @@ export function extractSpacingSignals(
 
   const [, numStr, unit] = match;
   const numericValue = parseFloat(numStr!);
+  if (isIdiomaticLength('spacing', Math.abs(numericValue), unit!)) return [];
 
   const signal: RawSignal = {
     id: createSignalId('spacing-value', path, line, value),

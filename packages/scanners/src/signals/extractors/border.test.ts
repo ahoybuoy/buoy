@@ -11,11 +11,11 @@ describe('extractBorderWidthSignals', () => {
   };
 
   it('extracts px border width', () => {
-    const signals = extractBorderWidthSignals('1px', 'Card.tsx', 10, 'borderWidth', ctx);
+    const signals = extractBorderWidthSignals('2px', 'Card.tsx', 10, 'borderWidth', ctx);
     expect(signals).toHaveLength(1);
     expect(signals[0].type).toBe('border-width');
-    expect(signals[0].value).toBe('1px');
-    expect(signals[0].metadata.numericValue).toBe(1);
+    expect(signals[0].value).toBe('2px');
+    expect(signals[0].metadata.numericValue).toBe(2);
     expect(signals[0].metadata.unit).toBe('px');
   });
 

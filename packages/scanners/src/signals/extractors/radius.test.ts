@@ -25,11 +25,18 @@ describe('extractRadiusSignals', () => {
     expect(signals[0].metadata.unit).toBe('rem');
   });
 
-  it('extracts percentage radius', () => {
-    const signals = extractRadiusSignals('50%', 'Avatar.tsx', 5, 'borderRadius', ctx);
+  it('extracts percentage radius below the circle threshold', () => {
+    const signals = extractRadiusSignals('25%', 'Avatar.tsx', 5, 'borderRadius', ctx);
     expect(signals).toHaveLength(1);
-    expect(signals[0].metadata.numericValue).toBe(50);
+    expect(signals[0].metadata.numericValue).toBe(25);
     expect(signals[0].metadata.unit).toBe('%');
+  });
+
+  it('skips idioms: circles, pills, hairlines, and zero', () => {
+    for (const v of ['50%', '100%', '999px', '9999px', '1px', '0.5px', '0px']) {
+      expect(extractRadiusSignals(v, 'Avatar.tsx', 5, 'borderRadius', ctx), v).toHaveLength(0);
+    }
+    expect(extractRadiusSignals('2px', 'Card.tsx', 5, 'borderRadius', ctx)).toHaveLength(1);
   });
 
   it('skips token references', () => {
