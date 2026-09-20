@@ -8,6 +8,7 @@ import {
   createDesignMdCommand,
   createSystemCommand,
   createRescueCommand,
+  createMcpCommand,
 } from "./commands/index.js";
 
 export function createCli(): Command {
@@ -58,6 +59,9 @@ Quick Start:
 
   // === Design ===
   program.addCommand(createDesignMdCommand());
+
+  // Agent integration: MCP server, client config, Claude Code hook
+  program.addCommand(createMcpCommand());
 
   return program;
 }

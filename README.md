@@ -132,6 +132,17 @@ buoy
 
 ## For AI Agents
 
+Coding agents hardcode values because they never read your token file. Give them Buoy as an MCP server:
+
+```bash
+npx @buoy-design/cli mcp install claude   # or cursor, codex, windsurf, all
+```
+
+Claude Code (and any MCP client) gets four tools: `list_design_tokens`, `find_token_for_value`
+(`#1a73e8` → `--color-primary`), `check_design_drift` (line-level, with the token to use instead)
+and `design_system_context`. Claude Code also gets a `PostToolUse` hook that checks every style
+file it edits and hands the fixes back before it moves on. See [docs/integrations/mcp](https://buoy.design/docs/integrations/mcp).
+
 The `show` command outputs JSON for AI agents to consume:
 
 ```bash
@@ -326,7 +337,8 @@ Creates:
 Turn Claude Code into a self-correcting agent. When Claude writes a component, Buoy checks it and feeds corrections back automatically:
 
 ```bash
-buoy dock hooks --claude
+buoy mcp install claude     # MCP server + line-level hook (recommended)
+buoy dock hooks --claude    # hook only, component-level
 ```
 
 This installs a PostToolUse hook that:
