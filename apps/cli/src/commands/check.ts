@@ -28,6 +28,17 @@ import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { calculateHealthScorePillar } from "@buoy-design/core";
 import { gatherHealthMetrics } from "./show.js";
 
+/**
+ * process.exit() right after a large console.log truncates piped stdout at
+ * the pipe buffer (64 KiB on macOS), so `buoy drift check --json | jq` got
+ * cut off on any real repo. Wait for stdout to drain before exiting.
+ */
+export function flushAndExit(code: number): never {
+  process.stdout.write("", () => process.exit(code));
+  // Keep the calling code's control flow: nothing after this should run.
+  return new Promise(() => {}) as never;
+}
+
 export type OutputFormat = "text" | "json" | "ai-feedback";
 
 /**
@@ -286,7 +297,7 @@ export function createCheckCommand(): Command {
 
           if (format === "ai-feedback") {
             console.log(formatAiFeedback(drifts, exitCode, summary));
-            process.exit(exitCode);
+            flushAndExit(exitCode);
             return;
           }
 
@@ -304,7 +315,7 @@ export function createCheckCommand(): Command {
               summary,
               sourceContext: remoteResult.sourceContext,
             }, null, 2));
-            process.exit(exitCode);
+            flushAndExit(exitCode);
             return;
           }
 
@@ -343,7 +354,7 @@ export function createCheckCommand(): Command {
             }
           }
 
-          process.exit(exitCode);
+          flushAndExit(exitCode);
           return;
         }
 
@@ -374,7 +385,7 @@ export function createCheckCommand(): Command {
 
           if (scannableStaged.length === 0) {
             log("No scannable files staged, skipping check");
-            process.exit(0);
+            flushAndExit(0);
           }
 
           log(`Checking ${scannableStaged.length} staged file(s)...`);
@@ -514,7 +525,7 @@ export function createCheckCommand(): Command {
         // Handle --preview-comment flag
         if (options.previewComment) {
           console.log(generatePRCommentPreview(drifts, summary));
-          process.exit(exitCode);
+          flushAndExit(exitCode);
           return;
         }
 
@@ -523,7 +534,7 @@ export function createCheckCommand(): Command {
 
         if (format === "ai-feedback") {
           console.log(formatAiFeedback(drifts, exitCode, summary));
-          process.exit(exitCode);
+          flushAndExit(exitCode);
           return;
         }
 
@@ -550,7 +561,7 @@ export function createCheckCommand(): Command {
           }
 
           console.log(JSON.stringify(jsonOutput, null, 2));
-          process.exit(exitCode);
+          flushAndExit(exitCode);
           return;
         }
 
@@ -629,13 +640,13 @@ export function createCheckCommand(): Command {
           });
         }
 
-        process.exit(exitCode);
+        flushAndExit(exitCode);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (!options.quiet) {
           console.error(`Error: ${message}`);
         }
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 

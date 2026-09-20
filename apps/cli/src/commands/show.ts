@@ -250,7 +250,7 @@ export function createShowCommand(): Command {
       } catch (err) {
         spin.stop();
         error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
@@ -285,7 +285,7 @@ export function createShowCommand(): Command {
       } catch (err) {
         spin.stop();
         error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
@@ -645,7 +645,7 @@ export function createShowCommand(): Command {
       } catch (err) {
         spin.stop();
         error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
@@ -776,7 +776,7 @@ export function createShowCommand(): Command {
       } catch (err) {
         spin.stop();
         error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
@@ -807,7 +807,7 @@ export function createShowCommand(): Command {
             spin.stop();
             error(`Scan not found: ${scanId}`);
             store.close();
-            process.exit(1);
+            flushAndExit(1);
           }
 
           const components = await store.getComponents(scanId);
@@ -1040,11 +1040,11 @@ export function createShowCommand(): Command {
           const msg = storeErr instanceof Error ? storeErr.message : String(storeErr);
           error(`Failed to load history: ${msg}`);
           info("Run " + chalk.cyan("buoy show all") + " first to start tracking history.");
-          process.exit(1);
+          flushAndExit(1);
         }
       } catch (err) {
         error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
@@ -1132,7 +1132,7 @@ export function createShowCommand(): Command {
         spin.stop();
         const message = err instanceof Error ? err.message : String(err);
         error(`Compare failed: ${message}`);
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
@@ -1184,7 +1184,7 @@ export function createShowCommand(): Command {
         }
       } catch (err) {
         error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
@@ -1233,7 +1233,7 @@ export function createShowCommand(): Command {
         }
       } catch (err) {
         error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
@@ -1575,7 +1575,7 @@ export function createShowCommand(): Command {
         }
       } catch (err) {
         error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
@@ -1788,7 +1788,7 @@ export function createShowCommand(): Command {
       } catch (err) {
         spin.stop();
         error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        flushAndExit(1);
       }
     });
 
