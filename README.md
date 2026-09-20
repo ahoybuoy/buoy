@@ -307,6 +307,16 @@ jobs:
       - run: npx ahoybuoy drift check
 ```
 
+### Design health badge
+
+Repos scanned by Buoy Cloud get a live score badge for the README:
+
+```markdown
+[![design health](https://api.buoy.design/badges/OWNER/REPO.svg)](https://buoy.design)
+```
+
+Green at 80+, yellow at 60+, red below. It updates within five minutes of each scan.
+
 ### PR Comments with Buoy Cloud
 
 ```bash
