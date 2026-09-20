@@ -1,4 +1,5 @@
 import { Command, Option } from "commander";
+import { flushAndExit } from "./check.js";
 import chalk from "chalk";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { writeFileSync } from "fs";
