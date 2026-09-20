@@ -3,12 +3,12 @@
   "name": "io.github.ahoybuoy/buoy",
   "description": "Design tokens and drift checks for coding agents: stop hardcoding values that already have a token.",
   "repository": { "url": "https://github.com/ahoybuoy/buoy", "source": "github" },
-  "version": "0.7.0",
+  "version": "0.7.1",
   "packages": [
     {
       "registry_type": "npm",
       "identifier": "@buoy-design/cli",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "transport": { "type": "stdio" },
       "package_arguments": [
         { "type": "positional", "value": "mcp" },
