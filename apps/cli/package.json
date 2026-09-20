@@ -2,6 +2,7 @@
   "name": "@buoy-design/cli",
   "version": "0.7.0",
   "description": "Catch design drift before it ships",
+  "mcpName": "io.github.ahoybuoy/buoy",
   "type": "module",
   "license": "MIT",
   "author": "Buoy <hello@buoy.design>",
