@@ -65,6 +65,13 @@ describe("drift issues", () => {
       ["8px", "var(--space-2)"],
     ]);
     expect(extractFileSignals("# hi", "README.md")).toEqual([]);
+
+    // Mantine/Chakra style props and theme-object keys
+    const props = "const SEV = { info: { bg: '#ffffff', fg: 'var(--x)' } };\n<Box p={8} radius=\"4px\" />\n";
+    const propIssues = issuesFromSignals(extractFileSignals(props, "src/B.tsx"), tokens);
+    expect(propIssues.map((i) => [i.line, i.current, i.suggested ?? null])).toEqual([
+      [1, "#ffffff", "var(--color-white)"],
+    ]);
   });
 
   it("flattens a drift into an agent-friendly issue", () => {

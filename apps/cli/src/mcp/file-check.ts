@@ -82,6 +82,17 @@ const CSS_PROPERTY_EXTRACTORS: Record<string, Extractor> = {
   "border-right": "colorShorthand", "border-bottom": "colorShorthand", "border-left": "colorShorthand", outline: "colorShorthand",
 };
 
+// Style-prop shorthands from Mantine and Chakra (bg="#fff", p={8}); theme
+// objects use the same keys. Same list as the cloud scanner container.
+const JSX_STYLE_PROP_ALIASES: Record<string, Extractor> = {
+  bg: "color", c: "color", bd: "colorShorthand",
+  p: "spacing", px: "spacing", py: "spacing", pt: "spacing", pr: "spacing", pb: "spacing", pl: "spacing",
+  m: "spacing", mx: "spacing", my: "spacing", mt: "spacing", mr: "spacing", mb: "spacing", ml: "spacing",
+  gap: "spacing", rowGap: "spacing", columnGap: "spacing",
+  fz: "fontSize", fw: "fontWeight", lh: "lineHeight", ff: "fontFamily", lts: "letterSpacing",
+  radius: "radius", rounded: "radius", shadow: "shadow", opacity: "opacity",
+};
+
 const JSX_PROPERTY_EXTRACTORS: Record<string, Extractor> = Object.fromEntries(
   Object.entries(CSS_PROPERTY_EXTRACTORS).map(([prop, extractor]) => [
     prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()),
@@ -150,10 +161,10 @@ export function extractFileSignals(content: string, path: string): RawSignal[] {
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
-    // Already tokenised: var(--x), theme.x, tokens.x, $scss-var
-    if (line.includes("var(--") || line.includes("theme.") || line.includes("tokens.") || line.includes("$")) continue;
+    // A line can mix a token reference and a literal (`fg: 'var(--x)', bg: '#fff'`);
+    // the extractors skip var()/$ references per value, so the line is examined.
     const pattern = isCss ? CSS_PROP : JSX_PROP;
-    const table = isCss ? CSS_PROPERTY_EXTRACTORS : JSX_PROPERTY_EXTRACTORS;
+    const table = isCss ? CSS_PROPERTY_EXTRACTORS : { ...JSX_STYLE_PROP_ALIASES, ...JSX_PROPERTY_EXTRACTORS };
     pattern.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = pattern.exec(line)) !== null) {
