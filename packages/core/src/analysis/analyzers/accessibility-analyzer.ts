@@ -103,25 +103,27 @@ export function checkColorContrast(component: Component): DriftSignal[] {
     (h) => h.type === "color",
   );
 
-  // Group colors by property
-  const colorsByProperty = new Map<string, typeof colorValues>();
-  for (const cv of colorValues) {
-    const prop = cv.property.toLowerCase();
-    if (!colorsByProperty.has(prop)) {
-      colorsByProperty.set(prop, []);
-    }
-    colorsByProperty.get(prop)!.push(cv);
-  }
+  // backgroundColor (JSX), background-color (CSS) and bg (style props) are all backgrounds.
+  const kebab = (prop: string) => prop.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+  const BACKGROUND_PROPS = new Set(["background-color", "background", "bg"]);
+  const foregroundColors = colorValues.filter((cv) => kebab(cv.property) === "color");
+  const backgroundColors = colorValues.filter((cv) => BACKGROUND_PROPS.has(kebab(cv.property)));
 
-  const foregroundColors = colorsByProperty.get("color") || [];
-  const backgroundColors =
-    colorsByProperty.get("background-color") ||
-    colorsByProperty.get("background") ||
-    [];
+  // Only colours on the same element render against each other. Pairing every
+  // text colour with every background in the component flagged twenty's
+  // "#888 on #fafafa", where the two were on sibling elements.
+  const sameElement = (fg: (typeof colorValues)[number], bg: (typeof colorValues)[number]): boolean => {
+    if (fg.elements?.length && bg.elements?.length) {
+      return fg.elements.some((el) => bg.elements!.includes(el));
+    }
+    // Scanners without element data: only a declaration on the same line is a pair.
+    return !fg.elements?.length && !bg.elements?.length && fg.location === bg.location;
+  };
 
   // Check contrast ratio for each foreground/background pair
   for (const fg of foregroundColors) {
     for (const bg of backgroundColors) {
+      if (!sameElement(fg, bg)) continue;
       const fgRgb = colorToRgb(fg.value);
       const bgRgb = colorToRgb(bg.value);
 

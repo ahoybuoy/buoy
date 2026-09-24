@@ -13,7 +13,7 @@
 export type ExemptFileContext = "artwork" | "email" | "og-image" | "test-or-story" | "third-party";
 
 const ARTWORK_PATH = /(^|\/)(icons?|logos?|illustrations?|svgs?|brand(ing)?|flags?|emojis?|avatars?\/presets?)(\/|$)|(^|\/)[\w.-]*(icon|logo|illustration|flag)s?\.(tsx|jsx|vue|svelte|astro)$|\.svg\.(tsx|jsx)$/i;
-const TEST_PATH = /(^|\/)(__tests__|__mocks__|mocks?|fixtures?|storybook|\.storybook|stories)(\/|$)|\.(test|spec|stories|story)\.[jt]sx?$|(^|\/)routes\/storybook[./]/i;
+const TEST_PATH = /(^|\/)(__tests__|__mocks__|__stories__|mocks?|fixtures?|storybook|\.storybook|stories)(\/|$)|\.(test|spec|stories|story)\.[jt]sx?$|(^|\/)routes\/storybook[./]/i;
 const EMAIL_PATH = /(^|\/)(emails?|email-templates|mail-templates)(\/|$)/i;
 const EMAIL_IMPORT = /from\s+['"](@react-email\/[\w-]+|react-email|jsx-email|mjml|mjml-react|@mjmlio\/[\w-]+)['"]/;
 const OG_PATH = /(^|\/)(opengraph-image|twitter-image|og-image|og)(\.[\w]+)?\.(tsx|jsx|ts|js)$|(^|\/)og(\/|$)/i;
@@ -148,6 +148,8 @@ export function isDesignDeclaration(property: string, value: string): boolean {
   if (NOT_A_LITERAL.test(v) || CSS_KEYWORD.test(v)) return false;
   if (/^-?(0|0?\.5|1)(px)?$/.test(v)) return false; // resets and hairlines
   if (/radius/.test(prop) && PILL_RADIUS.test(v)) return false;
+  // 400 and 700 are the numeric spellings of the `normal` and `bold` keywords.
+  if (prop === "font-weight" && /^(400|700)$/.test(v)) return false;
   return true;
 }
 

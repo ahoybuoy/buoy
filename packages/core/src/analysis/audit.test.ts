@@ -269,148 +269,103 @@ describe('calculateHealthScorePillar', () => {
   });
 
   describe('Pillar 2: Token Health (0-20)', () => {
-    it('scores based on used/total ratio when tokens exist', () => {
-      const result = calculateHealthScorePillar(makeMetrics({
-        tokenCount: 100,
-        unusedTokenCount: 20,
-      }));
-      // utility=0, library=0, coverage=5 (100/20 capped at 1), usage=round(5*80/100)=4 → 9
-      expect(result.pillars.tokenHealth.score).toBe(9);
+    const th = (overrides: Partial<HealthMetrics>) =>
+      calculateHealthScorePillar(makeMetrics(overrides)).pillars.tokenHealth.score;
+
+    it('gives full marks to a repo with its own tokens, all in use, and no framework', () => {
+      // n8n: 637 tokens, no Tailwind. It used to top out at 15.
+      expect(th({ tokenCount: 637 })).toBe(20);
     });
 
-    it('scores 20 when all tokens are used with full ecosystem', () => {
-      const result = calculateHealthScorePillar(makeMetrics({
-        tokenCount: 50,
-        unusedTokenCount: 0,
-        hasUtilityFramework: true,
-        hasDesignSystemLibrary: true,
-      }));
-      // utility=5, library=5, coverage=5 (50/20 capped at 1), usage=5 → 20
-      expect(result.pillars.tokenHealth.score).toBe(20);
+    it('does not require a component library', () => {
+      // Plane: 82 tokens and Tailwind, no Radix/MUI. It used to top out at 15.
+      expect(th({ tokenCount: 82, hasUtilityFramework: true })).toBe(20);
     });
 
-    it('scores 8 for clean Tailwind projects without tokens', () => {
-      const result = calculateHealthScorePillar(makeMetrics({
-        hasUtilityFramework: true,
-        hardcodedValueCount: 5,
-        componentCount: 50, // density = 0.1 < 0.5
-      }));
-      // utility=3 (no tokens), library=0, coverage=0, usage=5 (density < 0.5) → 8
-      expect(result.pillars.tokenHealth.score).toBe(8);
+    it("counts Tailwind's theme as a token system", () => {
+      expect(th({ hasUtilityFramework: true })).toBe(20);
     });
 
-    it('scores 6 for leaky Tailwind projects', () => {
-      const result = calculateHealthScorePillar(makeMetrics({
-        hasUtilityFramework: true,
-        hardcodedValueCount: 40,
-        componentCount: 50, // density = 0.8 (between 0.5 and 1.0)
-      }));
-      // utility=3 (no tokens), library=0, coverage=0, usage=3 (density 0.5-1.0) → 6
-      expect(result.pillars.tokenHealth.score).toBe(6);
+    it('gives half the system credit to a component library alone', () => {
+      expect(th({ hasDesignSystemLibrary: true })).toBe(15);
     });
 
-    it('scores 3 for implied system (very low density, no tokens)', () => {
-      const result = calculateHealthScorePillar(makeMetrics({
-        componentCount: 100,
-        hardcodedValueCount: 5, // density = 0.05 < 0.1
-      }));
-      // utility=0, library=0, coverage=0, usage=3 (density < 0.1) → 3
-      expect(result.pillars.tokenHealth.score).toBe(3);
+    it('scales own-token credit up to 20 tokens', () => {
+      expect(th({ tokenCount: 10 })).toBe(15);
+      expect(th({ tokenCount: 20 })).toBe(20);
     });
 
-    it('scores 0 when no system detected and values are hardcoded', () => {
-      const result = calculateHealthScorePillar(makeMetrics({
-        componentCount: 10,
-        hardcodedValueCount: 20,
-      }));
-      expect(result.pillars.tokenHealth.score).toBe(0);
-    });
-
-    it('achieves score 100 when all four sub-factors are present', () => {
-      const result = calculateHealthScorePillar(makeMetrics({
-        componentCount: 100,
-        tokenCount: 50,
-        unusedTokenCount: 0,
-        hardcodedValueCount: 0,
-        hasUtilityFramework: true,
-        hasDesignSystemLibrary: true,
-      }));
-      expect(result.score).toBe(100);
-      expect(result.pillars.tokenHealth.score).toBe(20);
-    });
-
-    it('gives partial credit for utility framework without tokens', () => {
-      const result = calculateHealthScorePillar(makeMetrics({
-        componentCount: 50,
-        hasUtilityFramework: true,
-        hasDesignSystemLibrary: false,
-      }));
-      expect(result.pillars.tokenHealth.score).toBeGreaterThan(0);
-      expect(result.pillars.tokenHealth.score).toBeLessThan(20);
-    });
-
-    it('gives more credit for library + framework than framework alone', () => {
-      const fwOnly = calculateHealthScorePillar(makeMetrics({
-        componentCount: 50,
-        hasUtilityFramework: true,
-        hasDesignSystemLibrary: false,
-      }));
-      const both = calculateHealthScorePillar(makeMetrics({
-        componentCount: 50,
-        hasUtilityFramework: true,
-        hasDesignSystemLibrary: true,
-      }));
-      expect(both.pillars.tokenHealth.score).toBeGreaterThan(fwOnly.pillars.tokenHealth.score);
+    it('scores 0 with no token system at all', () => {
+      expect(th({ hardcodedValueCount: 20 })).toBe(0);
+      expect(th({})).toBe(0);
     });
 
     it('penalizes unused tokens proportionally', () => {
-      const halfUnused = calculateHealthScorePillar(makeMetrics({
-        tokenCount: 100,
-        unusedTokenCount: 50,
-        hasUtilityFramework: true,
-        hasDesignSystemLibrary: true,
-      }));
-      const allUsed = calculateHealthScorePillar(makeMetrics({
-        tokenCount: 100,
-        unusedTokenCount: 0,
-        hasUtilityFramework: true,
-        hasDesignSystemLibrary: true,
-      }));
-      expect(allUsed.pillars.tokenHealth.score).toBeGreaterThan(halfUnused.pillars.tokenHealth.score);
+      expect(th({ tokenCount: 40, unusedTokenCount: 20 })).toBe(15);
+      expect(th({ tokenCount: 40, unusedTokenCount: 40 })).toBe(10);
     });
 
-    it('gives token coverage credit proportionally', () => {
-      const fewTokens = calculateHealthScorePillar(makeMetrics({
-        tokenCount: 5,
-        unusedTokenCount: 0,
-      }));
-      const manyTokens = calculateHealthScorePillar(makeMetrics({
-        tokenCount: 50,
-        unusedTokenCount: 0,
-      }));
-      // Both have usage=5, but coverage differs: 5*5/20=1.25 vs 5*50/20=5
-      expect(manyTokens.pillars.tokenHealth.score).toBeGreaterThan(fewTokens.pillars.tokenHealth.score);
+    it('does not reward extra dependencies once a token system exists', () => {
+      expect(th({ tokenCount: 40, hasUtilityFramework: true, hasDesignSystemLibrary: true }))
+        .toBe(th({ tokenCount: 40 }));
     });
 
-    it('produces granular scores between utility-only and utility+tokens', () => {
-      // With framework only (no tokens): utility=3, coverage=0, usage=5 → 8
-      const fwOnly = calculateHealthScorePillar(makeMetrics({
-        hasUtilityFramework: true,
-        componentCount: 50,
-        hardcodedValueCount: 5,
+    it('subtracts value divergence', () => {
+      expect(th({ tokenCount: 40, valueDivergenceCount: 6 })).toBe(18);
+    });
+
+    it('does not charge hardcoded density twice', () => {
+      // Density lowers Value Discipline; token health measures the system only.
+      expect(th({ hasUtilityFramework: true, hardcodedValueCount: 40 })).toBe(20);
+    });
+  });
+
+  describe('Critical Issues without double counting', () => {
+    it('keeps full marks when files are dense with hardcoded values but nothing is critical', () => {
+      // Ghost: 13 dense files, zero critical findings, scored 2/10.
+      const result = calculateHealthScorePillar(makeMetrics({ highDensityFileCount: 13, hardcodedValueCount: 10 }));
+      expect(result.pillars.criticalIssues.score).toBe(10);
+    });
+  });
+
+  describe('pathTo100', () => {
+    it('is empty at 100', () => {
+      const result = calculateHealthScorePillar(makeMetrics({ tokenCount: 40 }));
+      expect(result.score).toBe(100);
+      expect(result.pathTo100).toEqual([]);
+    });
+
+    it('names the findings to fix when only value discipline is short (Formbricks)', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 353, tokenCount: 73, hasUtilityFramework: true, hardcodedValueCount: 16,
       }));
-      // With framework + some tokens: utility=5, coverage=5*3/20=0.75, usage=5*3/3=5 → round(10.75)=11
-      const fwWithTokens = calculateHealthScorePillar(makeMetrics({
-        hasUtilityFramework: true,
-        tokenCount: 3,
-        unusedTokenCount: 0,
-        componentCount: 50,
-        hardcodedValueCount: 5,
+      expect(result.pathTo100).toEqual([
+        { pillar: 'valueDiscipline', points: 100 - result.score!, action: expect.stringContaining('all 16 findings') },
+      ]);
+    });
+
+    it('lets a few findings stay in a large codebase', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 2000, tokenCount: 40, hardcodedValueCount: 12,
       }));
-      // Framework+tokens should score higher than framework-only
-      expect(fwWithTokens.pillars.tokenHealth.score).toBeGreaterThan(fwOnly.pillars.tokenHealth.score);
-      // And the scores should differ by more than 0 (not all snapping to same bucket)
-      expect(fwWithTokens.pillars.tokenHealth.score - fwOnly.pillars.tokenHealth.score).toBeGreaterThanOrEqual(1);
+      // 2000 components allow 5 findings before the pillar loses half a point.
+      expect(result.pathTo100?.[0]?.action).toContain('7 of the 12 findings');
+    });
+
+    it('lists every short pillar and the steps add up to the gap', () => {
+      const result = calculateHealthScorePillar(makeMetrics({
+        componentCount: 100, tokenCount: 8, hardcodedValueCount: 5,
+        namingInconsistencyCount: 6, criticalCount: 1, colorContrastCount: 1, deprecatedPatternCount: 2,
+      }));
+      const steps = result.pathTo100!;
+      expect(steps.map((s) => s.pillar)).toEqual(['valueDiscipline', 'tokenHealth', 'consistency', 'criticalIssues']);
+      expect(steps.reduce((sum, s) => sum + s.points, 0)).toBe(100 - result.score!);
+      expect(steps[1]!.action).toContain('Define 12 more design tokens');
+      expect(steps[3]!.action).toBe('Fix 1 colour contrast failure, migrate 2 deprecated patterns');
+    });
+
+    it('is absent when the repo is not scored', () => {
+      expect(calculateHealthScorePillar(makeMetrics({ componentCount: 2 })).pathTo100).toBeUndefined();
     });
   });
 
@@ -620,10 +575,10 @@ describe('calculateHealthScorePillar', () => {
 
     it('provides aspirational suggestion for near-perfect project', () => {
       const result = calculateHealthScorePillar(makeMetrics({
-        tokenCount: 50,
+        tokenCount: 10,
         unusedTokenCount: 0,
       }));
-      // Score is 90 (no utility framework or DS library), so gets aspirational suggestion
+      // Score is 95 (10 of the 20 tokens that earn full credit), so gets aspirational suggestion
       expect(result.suggestions).toHaveLength(1);
       expect(result.suggestions[0]).toContain('to reach 100');
     });

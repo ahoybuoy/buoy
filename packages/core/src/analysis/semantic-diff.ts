@@ -420,8 +420,12 @@ export class SemanticDiffEngine {
           });
         }
 
-        // Check color contrast
-        drifts.push(...checkColorContrast(component));
+        // Check color contrast. Stories, tests, artwork and email templates are
+        // exempt here as they are from hardcoded-value checks: a demo's colours
+        // are not the product's (twenty's __stories__ showcase, 2026-09).
+        const contrastPath = "path" in component.source ? component.source.path : undefined;
+        const exempt = contrastPath && (options.classifyFile ?? ((p: string) => classifyFileContext(p)))(contrastPath);
+        if (!exempt) drifts.push(...checkColorContrast(component));
       }
 
       // Check hardcoded values

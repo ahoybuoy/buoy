@@ -164,8 +164,25 @@ export function extractFileSignals(content: string, path: string): RawSignal[] {
   };
   const signals: RawSignal[] = [];
   const lines = content.split("\n");
+  // Tailwind v4 `@utility` and `@theme` blocks are where a repo defines its
+  // design values; their declarations are the system, not drift from it.
+  let depth = 0;
+  let definitionDepth: number | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
+    if (isCss) {
+      const opensDefinition = definitionDepth === null && /@(utility|theme)\b/.test(line);
+      if (opensDefinition) definitionDepth = depth;
+      for (const ch of line) {
+        if (ch === "{") depth++;
+        else if (ch === "}") depth--;
+      }
+      if (definitionDepth !== null) {
+        if (depth <= definitionDepth && !opensDefinition) definitionDepth = null;
+        else if (depth <= definitionDepth && opensDefinition && line.includes("}")) definitionDepth = null;
+        continue;
+      }
+    }
     // A line can mix a token reference and a literal (`fg: 'var(--x)', bg: '#fff'`);
     // the extractors skip var()/$ references per value, so the line is examined.
     const patterns = isCss ? [CSS_PROP] : [JSX_PROP, JSX_ATTR];

@@ -764,6 +764,7 @@ export function createShowCommand(): Command {
               criticalIssues: { score: result.pillars.criticalIssues.score, max: 10 },
             },
             suggestions: result.suggestions,
+            ...(result.pathTo100 ? { pathTo100: result.pathTo100 } : {}),
             metrics: result.metrics,
             ...(inputMode !== "project" ? { source: resolvedTarget || options.url, context: inputMode } : {}),
           }, null, 2));
@@ -1780,6 +1781,7 @@ export function createShowCommand(): Command {
               criticalIssues: { score: healthResult.pillars.criticalIssues.score, max: 10 },
             },
             suggestions: healthResult.suggestions,
+            ...(healthResult.pathTo100 ? { pathTo100: healthResult.pathTo100 } : {}),
             metrics: healthResult.metrics,
           },
           setup,
@@ -2179,6 +2181,14 @@ function printPillarHealthReport(result: HealthScoreResult): void {
   }
 
   newline();
+
+  if (result.pathTo100 && result.pathTo100.length > 0) {
+    console.log("  Path to 100:");
+    for (const step of result.pathTo100) {
+      console.log(`    ${chalk.green(`+${step.points}`.padStart(4))}  ${step.action}`);
+    }
+    newline();
+  }
 
   // Improvement suggestions
   if (result.suggestions.length > 0) {

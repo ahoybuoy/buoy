@@ -200,4 +200,20 @@ describe("design-value rules in the agent hook", () => {
     const card = 'export const C = () => (<div style={{ color: "#333333" }}><svg><path fill="#ff0000" /></svg></div>);\n';
     expect(extractFileSignals(card, "src/Card.tsx").map((s) => s.value)).toEqual(["#333333"]);
   });
+
+  it("treats Tailwind @utility and @theme blocks as definitions, not drift", () => {
+    // Formbricks globals.css: `@utility bg-auth-backdrop { background-color: #d9f6f4; }`
+    const css = [
+      "@utility bg-auth-backdrop {",
+      "  background-color: #d9f6f4;",
+      "}",
+      "@theme { --color-brand: #123456; }",
+      "@utility tight { margin: 3px; }",
+      ".card {",
+      "  color: #333333;",
+      "  font-weight: 700;",
+      "}",
+    ].join("\n");
+    expect(extractFileSignals(css, "src/globals.css").map((s) => s.value)).toEqual(["#333333"]);
+  });
 });

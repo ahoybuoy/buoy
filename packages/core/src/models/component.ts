@@ -80,6 +80,9 @@ export const HardcodedValueSchema = z.object({
   value: z.string(),
   property: z.string(), // e.g., 'backgroundColor', 'padding', 'color'
   location: z.string(), // line:column or description
+  // JSX elements (or other style scopes) this value was set on. Colour
+  // contrast only pairs a foreground and a background on the same element.
+  elements: z.array(z.string()).optional(),
 });
 
 // Component metadata

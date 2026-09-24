@@ -1234,12 +1234,17 @@ export class ReactComponentScanner extends SignalAwareScanner<
       if (ts.isJsxAttribute(n)) {
         const attrName = n.name.getText(sourceFile);
 
+        // The element the attribute sits on: style={{...}} and color="..."
+        // on the same element are one visual pair; siblings are not.
+        const elementId = `el@${n.parent.parent.getStart(sourceFile)}`;
+
         // style={{ color: '#fff', padding: '8px' }}
         if (attrName === "style" && n.initializer) {
           const styleValues = this.extractStyleObjectValues(
             n.initializer,
             sourceFile,
             signalCollector,
+            elementId,
           );
           hardcoded.push(...styleValues);
         }
@@ -1260,6 +1265,7 @@ export class ReactComponentScanner extends SignalAwareScanner<
               value,
               property: attrName,
               location: `line ${line}`,
+              elements: [elementId],
             });
             // Emit signal for hardcoded color
             signalCollector?.collectFromValue(value, attrName, line);
@@ -1294,12 +1300,16 @@ export class ReactComponentScanner extends SignalAwareScanner<
 
     visit(node);
 
-    // Deduplicate by value+property
-    const seen = new Set<string>();
+    // Deduplicate by value+property, keeping every element the value was on
+    const seen = new Map<string, HardcodedValue>();
     return hardcoded.filter((h) => {
       const key = `${h.property}:${h.value}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
+      const kept = seen.get(key);
+      if (kept) {
+        if (h.elements?.length) kept.elements = [...new Set([...(kept.elements ?? []), ...h.elements])];
+        return false;
+      }
+      seen.set(key, h);
       return true;
     });
   }
@@ -1308,6 +1318,7 @@ export class ReactComponentScanner extends SignalAwareScanner<
     initializer: ts.JsxAttributeValue,
     sourceFile: ts.SourceFile,
     signalCollector?: ScannerSignalCollector,
+    elementId?: string,
   ): HardcodedValue[] {
     const values: HardcodedValue[] = [];
 
@@ -1329,6 +1340,7 @@ export class ReactComponentScanner extends SignalAwareScanner<
                 value,
                 property: propName,
                 location: `line ${line}`,
+                ...(elementId ? { elements: [elementId] } : {}),
               });
               // Emit signal for the hardcoded value
               signalCollector?.collectFromValue(value, propName, line);

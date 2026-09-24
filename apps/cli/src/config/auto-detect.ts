@@ -434,6 +434,13 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
     '**/theme.css',
     '**/_variables.scss',
     '**/_tokens.scss',
+    // Unprefixed Sass partials hold CSS custom properties too (excalidraw's
+    // theme.scss defines 186); the token scanner already knows these names.
+    '**/theme.scss',
+    '**/_theme.scss',
+    '**/tokens.scss',
+    '**/variables.scss',
+    '**/design-tokens.scss',
     '**/styles/variables.css',
     '**/styles/tokens.css',
 

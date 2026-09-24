@@ -683,12 +683,14 @@ describe("SemanticDiffEngine", () => {
             value: "#777",
             property: "color",
             location: "Button.tsx:10",
+            elements: ["el@1"],
           },
           {
             type: "color",
             value: "#999",
             property: "background-color",
             location: "Button.tsx:11",
+            elements: ["el@1"],
           },
         ],
       });
@@ -703,6 +705,42 @@ describe("SemanticDiffEngine", () => {
       expect(contrastDrifts.length).toBeGreaterThan(0);
       expect(contrastDrifts[0]!.severity).toBe("critical");
       expect(contrastDrifts[0]!.message).toContain("insufficient color contrast");
+    });
+
+    it("does not pair colours set on different elements", () => {
+      // twenty: #888 text on one span, #fafafa background on a sibling link.
+      const component = createMockComponentWithMetadata("MainPage", {
+        hardcodedValues: [
+          { type: "color", value: "#888", property: "color", location: "line 10", elements: ["el@1"] },
+          { type: "color", value: "#fafafa", property: "background", location: "line 20", elements: ["el@2"] },
+          { type: "color", value: "#333", property: "color", location: "line 19", elements: ["el@2"] },
+        ],
+      });
+      const result = engine.analyzeComponents([component], { checkAccessibility: true });
+      expect(result.drifts.filter((d) => d.type === "color-contrast")).toHaveLength(0);
+    });
+
+    it("skips contrast in stories, like other value checks", () => {
+      const component = createMockComponentWithMetadata("Showcase", {
+        hardcodedValues: [
+          { type: "color", value: "#2b6cb0", property: "color", location: "line 55", elements: ["el@1"] },
+          { type: "color", value: "#bee3f8", property: "backgroundColor", location: "line 54", elements: ["el@1"] },
+        ],
+      });
+      (component.source as { path: string }).path = "src/__stories__/showcase/lifecycle.tsx";
+      const result = engine.analyzeComponents([component], { checkAccessibility: true });
+      expect(result.drifts.filter((d) => d.type === "color-contrast")).toHaveLength(0);
+    });
+
+    it("pairs a camelCase backgroundColor with text on the same element", () => {
+      const component = createMockComponentWithMetadata("Badge", {
+        hardcodedValues: [
+          { type: "color", value: "#999", property: "color", location: "line 3", elements: ["el@1"] },
+          { type: "color", value: "#aaa", property: "backgroundColor", location: "line 3", elements: ["el@1"] },
+        ],
+      });
+      const result = engine.analyzeComponents([component], { checkAccessibility: true });
+      expect(result.drifts.filter((d) => d.type === "color-contrast")).toHaveLength(1);
     });
 
     it("does not flag sufficient color contrast", () => {

@@ -119,8 +119,22 @@ export interface HealthScoreResult {
   };
   /** Actionable improvement suggestions */
   suggestions: string[];
+  /**
+   * What stands between this score and 100: one step per pillar that is short
+   * of full marks (plus the drift-density cap when it applies). The points add
+   * up to 100 - score. Empty at 100; absent when the repo is not scored.
+   */
+  pathTo100?: PathTo100Step[];
   /** Raw metrics used for scoring */
   metrics: HealthMetrics;
+}
+
+export interface PathTo100Step {
+  pillar: HealthPillarKey | "driftCap";
+  /** Points this step is worth. */
+  points: number;
+  /** The concrete change that earns them. */
+  action: string;
 }
 
 export type HealthPillarKey = "valueDiscipline" | "tokenHealth" | "consistency" | "criticalIssues";
@@ -490,57 +504,35 @@ export function calculateHealthScorePillar(
   }
 
   // Pillar 2: Token Health (0-20)
-  // Four sub-factors, each 0-5 points:
-  //   1. Utility framework (0-5): Has Tailwind, CSS-in-JS, etc.
-  //   2. Design system library (0-5): Has MUI, Chakra, Mantine, etc.
-  //   3. Token definition coverage (0-5): Has tokens across categories
-  //   4. Token usage ratio (0-5): What fraction of defined tokens are used
+  //   1. A token system (0-10): the repo's own tokens (full credit at 20), or a
+  //      utility framework whose theme is a token scale (Tailwind). A component
+  //      library alone gives partial credit.
+  //   2. Token hygiene (0-10): defined tokens are used, not left stale.
+  // How much of the code actually uses tokens is Value Discipline's job; it is
+  // not counted twice here. Until 2026-09 half of this pillar was "has
+  // Tailwind" plus "has a component library", so n8n (637 tokens, no Tailwind)
+  // and Plane (82 tokens, no Radix) could never pass 15/20.
+  const ownTokenPoints = metrics.tokenCount > 0 ? 10 * clamp(metrics.tokenCount / 20, 0, 1) : 0;
+  const frameworkPoints = metrics.hasUtilityFramework ? 10 : metrics.hasDesignSystemLibrary ? 5 : 0;
+  const systemPoints = Math.max(ownTokenPoints, frameworkPoints);
 
-  // Sub-factor 1: Utility framework (0-5)
-  // Scaled: 3 for having the framework, +2 when tokens are also defined
-  const utilityPoints = metrics.hasUtilityFramework
-    ? (metrics.tokenCount > 0 ? 5 : 3)
-    : 0;
-
-  // Sub-factor 2: Design system library (0-5)
-  // Scaled: 3 for having the library, +2 when tokens are also defined
-  const libraryPoints = metrics.hasDesignSystemLibrary
-    ? (metrics.tokenCount > 0 ? 5 : 3)
-    : 0;
-
-  // Sub-factor 3: Token definition coverage (0-5)
-  // More tokens = more structured. Cap at 20 tokens for full credit.
-  // Continuous (not rounded) for granular scoring.
-  const tokenCoveragePoints = metrics.tokenCount > 0
-    ? 5 * clamp(metrics.tokenCount / 20, 0, 1)
-    : 0;
-
-  // Sub-factor 4: Token usage ratio (0-5)
-  // What fraction of tokens are actually used? All used = 5, all unused = 0.
-  let tokenUsagePoints: number;
+  let hygienePoints: number;
   if (metrics.tokenCount > 0) {
     const effectiveUnusedTokenCount = Math.min(
       metrics.tokenCount,
       metrics.unusedTokenCount + (metrics.orphanedTokenCount ?? 0),
     );
-    const usedTokens = metrics.tokenCount - effectiveUnusedTokenCount;
-    tokenUsagePoints = 5 * clamp(usedTokens / metrics.tokenCount, 0, 1);
-  } else if (metrics.hasUtilityFramework || metrics.hasDesignSystemLibrary) {
-    // No explicit tokens but has a framework/library — give partial credit
-    // because the framework handles tokenization internally
-    tokenUsagePoints = density < 0.5 ? 5 : density < 1.0 ? 3 : 1;
-  } else if (density < 0.1) {
-    // No explicit system but very few hardcoded values = implied system
-    tokenUsagePoints = 3;
+    hygienePoints = 10 * clamp((metrics.tokenCount - effectiveUnusedTokenCount) / metrics.tokenCount, 0, 1);
   } else {
-    tokenUsagePoints = 0;
+    // No tokens of its own: a framework's theme has nothing to go stale.
+    hygienePoints = systemPoints > 0 ? 10 : 0;
   }
 
   // Round the combined score for integer totals
   const valueDivergencePenalty = Math.min(3, Math.ceil((metrics.valueDivergenceCount ?? 0) / 5));
   const tokenHealthScore = Math.max(
     0,
-    Math.round(utilityPoints + libraryPoints + tokenCoveragePoints + tokenUsagePoints) - valueDivergencePenalty,
+    Math.round(systemPoints + hygienePoints) - valueDivergencePenalty,
   );
 
   // Token health suggestions (threshold-based)
@@ -612,7 +604,6 @@ export function calculateHealthScorePillar(
   const accessibilityConflictCount = metrics.accessibilityConflictCount ?? 0;
   const colorContrastCount = metrics.colorContrastCount ?? 0;
   const missingDocumentationCount = metrics.missingDocumentationCount ?? 0;
-  const highDensityFiles = metrics.highDensityFileCount ?? 0;
   const otherCriticalCount = Math.max(
     0,
     metrics.criticalCount - accessibilityConflictCount - colorContrastCount,
@@ -621,8 +612,9 @@ export function calculateHealthScorePillar(
     + accessibilityConflictCount
     + colorContrastCount
     + Math.ceil(deprecatedCount / 2)
-    + Math.ceil(missingDocumentationCount / 10)
-    + Math.floor(highDensityFiles / 3);
+    + Math.ceil(missingDocumentationCount / 10);
+  // Files dense with hardcoded values used to count here too (floor(n / 3)),
+  // charging them twice: Ghost scored 2/10 on "critical issues" with none.
   // Use 2-point steps for finer granularity (was 3-point)
   const criticalRaw = Math.max(0, 10 - effectiveCriticalCount * 2);
 
@@ -675,12 +667,39 @@ export function calculateHealthScorePillar(
   // 69), which put every large codebase on exactly 69 whatever its quality:
   // 11 of 20 public reports in 2026-09. Size is not drift; density is.
   const totalDrift = metrics.totalDriftCount ?? metrics.hardcodedValueCount;
+  let driftCap: number | null = null;
   if (totalDrift > 0 && metrics.componentCount > 0) {
     const driftPerComponent = totalDrift / metrics.componentCount;
-    if (driftPerComponent > 1) total = Math.min(total, 69);
-    else if (driftPerComponent > 0.5) total = Math.min(total, 79);
-    else if (driftPerComponent > 0.3) total = Math.min(total, 89);
+    if (driftPerComponent > 1) driftCap = 69;
+    else if (driftPerComponent > 0.5) driftCap = 79;
+    else if (driftPerComponent > 0.3) driftCap = 89;
+    if (driftCap !== null) total = Math.min(total, driftCap);
   }
+
+  const pathTo100 = buildPathTo100({
+    total,
+    pillarScores: {
+      valueDiscipline: valueDisciplineScore,
+      tokenHealth: tokenHealthScore,
+      consistency: scaledConsistencyScore,
+      criticalIssues: scaledCriticalScore,
+    },
+    metrics,
+    userHardcodedCount,
+    deadCodeCount,
+    systemPoints,
+    hygienePoints,
+    inconsistencyCount,
+    critical: {
+      contrast: colorContrastCount,
+      accessibility: accessibilityConflictCount,
+      other: otherCriticalCount,
+      deprecated: deprecatedCount,
+      undocumented: missingDocumentationCount,
+    },
+    driftCap,
+    totalDrift,
+  });
 
   // Ensure every scored app gets at least 1 suggestion
   if (suggestions.length === 0) {
@@ -751,8 +770,113 @@ export function calculateHealthScorePillar(
       },
     },
     suggestions,
+    pathTo100,
     metrics,
   };
+}
+
+/** Findings per component at which each pillar or cap stops costing points. */
+const FULL_VALUE_DISCIPLINE_DENSITY = VALUE_DENSITY_FLOOR / 120; // under half a point lost
+const DRIFT_CAP_DENSITY = 0.3;
+
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function buildPathTo100(input: {
+  total: number;
+  pillarScores: Record<HealthPillarKey, number>;
+  metrics: HealthMetrics;
+  userHardcodedCount: number;
+  deadCodeCount: number;
+  systemPoints: number;
+  hygienePoints: number;
+  inconsistencyCount: number;
+  critical: { contrast: number; accessibility: number; other: number; deprecated: number; undocumented: number };
+  driftCap: number | null;
+  totalDrift: number;
+}): PathTo100Step[] {
+  const { total, pillarScores, metrics } = input;
+  const max: Record<HealthPillarKey, number> = { valueDiscipline: 60, tokenHealth: 20, consistency: 10, criticalIssues: 10 };
+  const steps: PathTo100Step[] = [];
+
+  const vdGap = max.valueDiscipline - pillarScores.valueDiscipline;
+  if (vdGap > 0) {
+    const allowed = Math.floor(metrics.componentCount * FULL_VALUE_DISCIPLINE_DENSITY);
+    const toFix = Math.max(0, input.userHardcodedCount - allowed);
+    const parts: string[] = [];
+    if (toFix > 0) {
+      parts.push(allowed === 0
+        ? `Replace the hardcoded values in all ${plural(input.userHardcodedCount, "finding")} with tokens or scale steps`
+        : `Replace the hardcoded values in ${toFix} of the ${plural(input.userHardcodedCount, "finding")} with tokens or scale steps`);
+    }
+    if (input.deadCodeCount > 0) {
+      parts.push(`remove or reuse ${plural(input.deadCodeCount, "unused component or repeated pattern", "unused components and repeated patterns")}`);
+    }
+    steps.push({ pillar: "valueDiscipline", points: vdGap, action: parts.length ? parts.join(", and ") : "Clear the remaining drift findings" });
+  }
+
+  const thGap = max.tokenHealth - pillarScores.tokenHealth;
+  if (thGap > 0) {
+    const parts: string[] = [];
+    if (input.systemPoints < 10) {
+      if (metrics.tokenCount > 0) {
+        parts.push(`Define ${20 - metrics.tokenCount} more design tokens (${metrics.tokenCount} of the 20 that earn full credit)`);
+      } else if (metrics.hasDesignSystemLibrary) {
+        parts.push("Add a token system: CSS custom properties, a tokens file or a Tailwind theme (a component library alone earns half)");
+      } else {
+        parts.push("Add a token system: CSS custom properties, a tokens file or a Tailwind theme");
+      }
+    }
+    const unused = Math.min(metrics.tokenCount, metrics.unusedTokenCount + (metrics.orphanedTokenCount ?? 0));
+    if (input.hygienePoints < 10 && unused > 0) parts.push(`use or remove ${plural(unused, "unused token")}`);
+    const divergence = metrics.valueDivergenceCount ?? 0;
+    if (divergence > 0) parts.push(`sync ${plural(divergence, "token value")} that differ from the design source`);
+    steps.push({ pillar: "tokenHealth", points: thGap, action: parts.join(", and ") || "Tidy the token system" });
+  }
+
+  const coGap = max.consistency - pillarScores.consistency;
+  if (coGap > 0) {
+    steps.push({
+      pillar: "consistency",
+      points: coGap,
+      action: input.inconsistencyCount > 0
+        ? `Resolve ${plural(input.inconsistencyCount, "naming or semantic inconsistency", "naming or semantic inconsistencies")}`
+        : "Scan more components: tiny codebases cannot earn full consistency credit",
+    });
+  }
+
+  const ciGap = max.criticalIssues - pillarScores.criticalIssues;
+  if (ciGap > 0) {
+    const c = input.critical;
+    const parts = [
+      c.contrast > 0 ? `fix ${plural(c.contrast, "colour contrast failure")}` : "",
+      c.accessibility > 0 ? `fix ${plural(c.accessibility, "accessibility conflict")}` : "",
+      c.other > 0 ? `fix ${plural(c.other, "other critical finding")}` : "",
+      c.deprecated > 0 ? `migrate ${plural(c.deprecated, "deprecated pattern")}` : "",
+      c.undocumented > 0 ? `document ${plural(c.undocumented, "component")}` : "",
+    ].filter(Boolean);
+    const action = parts.join(", ");
+    steps.push({ pillar: "criticalIssues", points: ciGap, action: action ? action[0]!.toUpperCase() + action.slice(1) : "Scan more components: tiny codebases cannot earn full critical-issues credit" });
+  }
+
+  const pillarSum = Object.values(pillarScores).reduce((a, b) => a + b, 0);
+  if (input.driftCap !== null && total < pillarSum) {
+    const limit = Math.floor(metrics.componentCount * DRIFT_CAP_DENSITY);
+    steps.push({
+      pillar: "driftCap",
+      points: pillarSum - total,
+      action: `Findings per component cap this score at ${input.driftCap}. Get from ${input.totalDrift} findings to ${limit} or fewer to lift the cap`,
+    });
+  }
+
+  // Pillars round separately from the total; keep the steps summing to 100 - score.
+  const remainder = (100 - total) - steps.reduce((sum, step) => sum + step.points, 0);
+  if (remainder !== 0 && steps.length > 0) {
+    const largest = steps.reduce((a, b) => (b.points > a.points ? b : a));
+    largest.points += remainder;
+  }
+  return steps.filter((step) => step.points > 0);
 }
 
 function clamp(value: number, min: number, max: number): number {

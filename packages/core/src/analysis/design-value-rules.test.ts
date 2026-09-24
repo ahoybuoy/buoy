@@ -18,6 +18,7 @@ describe("classifyFileContext", () => {
     expect(classifyFileContext("app/blog/[slug]/opengraph-image.tsx")).toBe("og-image");
     expect(classifyFileContext("app/api/share/route.tsx", `import { ImageResponse } from 'next/og';`)).toBe("og-image");
     expect(classifyFileContext("src/Button.stories.tsx")).toBe("test-or-story");
+    expect(classifyFileContext("src/__stories__/showcase/lifecycle.front-component.tsx")).toBe("test-or-story");
     expect(classifyFileContext("apps/webapp/app/routes/storybook.colors/route.tsx")).toBe("test-or-story");
     expect(classifyFileContext("src/components/Button.tsx", "export const Button = () => <button/>")).toBeNull();
     for (const p of ["packages/surveys/src/styles/preflight.css", "src/normalize.css", "packages/editor/src/styles/github-dark.css", "styles/prism-okaidia.css"]) {
@@ -63,14 +64,14 @@ describe("isTailwindDesignValue", () => {
 describe("isDesignDeclaration", () => {
   it("keeps colour, spacing, type and radius literals", () => {
     for (const [p, v] of [["color", "#333"], ["backgroundColor", "rgba(0,0,0,.5)"], ["padding", "12px"], ["fontSize", "15px"], ["borderRadius", "6px"], ["gap", "0.75rem"],
-      ["color", "#e2e8f0 !important"], ["box-shadow", "0 1px 2px rgba(0,0,0,.1)"]]) {
+      ["color", "#e2e8f0 !important"], ["box-shadow", "0 1px 2px rgba(0,0,0,.1)"], ["font-weight", "600"]]) {
       expect(isDesignDeclaration(p!, v!), `${p}: ${v}`).toBe(true);
     }
   });
   it("drops layout geometry, keywords, maths, hairlines and SVG paint", () => {
     for (const [p, v] of [["height", "100vh"], ["left", "260px"], ["width", "340px"], ["height", "1px"], ["padding", "0"], ["margin", "auto"],
       ["width", "calc(100% - 2rem)"], ["fill", "#fbf0df"], ["stroke", "#000"], ["maxWidth", "70ch"], ["padding", "5%"],
-      ["background-color", "rgba(0, 0, 0, 0)"], ["color", "#0000"], ["box-shadow", "none !important"], ["font-weight", "bold"],
+      ["background-color", "rgba(0, 0, 0, 0)"], ["color", "#0000"], ["box-shadow", "none !important"], ["font-weight", "bold"], ["font-weight", "700"], ["font-weight", "400 !important"],
       ["border-radius", "99px"], ["border-radius", "9999px"]]) {
       expect(isDesignDeclaration(p!, v!), `${p}: ${v}`).toBe(false);
     }

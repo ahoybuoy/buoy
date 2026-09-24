@@ -155,6 +155,26 @@ describe('ReactComponentScanner', () => {
     });
   });
 
+  describe('element scope for colour pairs', () => {
+    it('records which element each colour is on, so siblings are not paired', async () => {
+      vol.fromJSON({
+        '/project/src/MainPage.tsx': `export const MainPage = () => (
+  <div>
+    <span style={{ color: '#888' }}>Installed</span>
+    <a style={{ color: '#333', background: '#fafafa' }}>Settings</a>
+  </div>
+);`,
+      });
+      const scanner = new ReactComponentScanner({ projectRoot: '/project', include: ['src/**/*.tsx'] });
+      const result = await scanner.scan();
+      const values = result.items[0]!.metadata.hardcodedValues || [];
+      const el = (value: string) => values.find((v) => v.value === value)?.elements;
+      expect(el('#888')).toHaveLength(1);
+      expect(el('#fafafa')).toEqual(el('#333'));
+      expect(el('#888')).not.toEqual(el('#fafafa'));
+    });
+  });
+
   describe('deprecation detection', () => {
     it('detects @deprecated JSDoc tag', async () => {
       vol.fromJSON({
