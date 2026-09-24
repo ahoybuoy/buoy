@@ -374,7 +374,7 @@ export class ScanOrchestrator {
 
     // tokens.css_variables: give JSON token paths their CSS variable twins so
     // fixes and MCP answers name something a stylesheet can resolve.
-    result.tokens = withCssVariableAliases(result.tokens, this.config.sources?.tokens?.cssVariables ?? this.config.sources?.tokens?.css_variables);
+    result.tokens = withCssVariableAliases(result.tokens, this.config.sources?.tokens?.cssVariables ?? this.config.sources?.tokens?.css_variables ?? this.config.tokens?.css_variables ?? this.config.tokens?.cssVariables);
     return result;
   }
 

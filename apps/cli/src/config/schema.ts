@@ -271,6 +271,14 @@ export const ExperimentalConfigSchema = z.object({
 // Main config schema
 export const BuoyConfigSchema = z.object({
   project: ProjectConfigSchema,
+  /**
+   * Top-level `tokens` block, as the GitHub App reads it. Only css_variables
+   * is shared with the CLI; the same .buoy.yaml serves both.
+   */
+  tokens: z.object({
+    css_variables: CssVariablesSchema.optional(),
+    cssVariables: CssVariablesSchema.optional(),
+  }).passthrough().optional(),
   system: SystemConfigSchema.default({}),
   preset: z.enum(['strict', 'relaxed', 'default']).optional(),
   sources: SourcesConfigSchema.default({}),
