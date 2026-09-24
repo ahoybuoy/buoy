@@ -1,0 +1,58 @@
+name: Publish to the MCP Registry
+
+# Lists `buoy mcp serve` (io.github.ahoybuoy/buoy) in the official MCP
+# Registry. GitHub OIDC grants this repository's io.github.ahoybuoy/*
+# namespace, so no personal login or secret is needed. The registry checks
+# that the npm package's mcpName matches server.json's name, so the npm
+# version being listed must already be published.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref whose apps/cli version is already on npm
+        required: true
+        default: main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: apps/cli
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Sync server.json to the package version
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          test "$(node -p "require('./package.json').mcpName")" = "$(node -p "require('./server.json').name")"
+          test "$(npm view "@buoy-design/cli@${version}" mcpName)" = "$(node -p "require('./server.json').name")"
+          node -e '
+            const fs = require("fs");
+            const s = JSON.parse(fs.readFileSync("server.json", "utf8"));
+            s.version = process.argv[1];
+            for (const p of s.packages) p.version = process.argv[1];
+            fs.writeFileSync("server.json", JSON.stringify(s, null, 2) + "\n");
+          ' "${version}"
+          cat server.json
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Authenticate
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        run: ./mcp-publisher publish

@@ -134,3 +134,13 @@ jobs:
           npm install "ahoybuoy@${release_version}" "buoy-design@${release_version}" --ignore-scripts
           test "$(npx --no-install ahoybuoy --version)" = "${release_version}"
           test "$(npx --no-install buoy-design --version)" = "${release_version}"
+
+  # List `buoy mcp serve` in the official MCP Registry once npm is live.
+  mcp-registry:
+    needs: publish
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/mcp-registry.yml
+    with:
+      ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.ref }}

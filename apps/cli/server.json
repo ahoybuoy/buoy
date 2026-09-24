@@ -1,16 +1,16 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.ahoybuoy/buoy",
-  "description": "Design tokens and drift checks for coding agents: stop hardcoding values that already have a token.",
+  "description": "Design tokens and drift checks for coding agents: use the token, not the hardcoded value.",
   "repository": { "url": "https://github.com/ahoybuoy/buoy", "source": "github" },
   "version": "0.7.3",
   "packages": [
     {
-      "registry_type": "npm",
+      "registryType": "npm",
       "identifier": "@buoy-design/cli",
       "version": "0.7.3",
       "transport": { "type": "stdio" },
-      "package_arguments": [
+      "packageArguments": [
         { "type": "positional", "value": "mcp" },
         { "type": "positional", "value": "serve" }
       ]
