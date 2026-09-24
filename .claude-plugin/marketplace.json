@@ -1,0 +1,15 @@
+{
+  "name": "buoy",
+  "owner": {
+    "name": "Buoy",
+    "url": "https://buoy.design"
+  },
+  "description": "Buoy's plugins for Claude Code: design-system guardrails for AI-written UI code.",
+  "plugins": [
+    {
+      "name": "buoy",
+      "source": "./plugins/buoy",
+      "description": "Keeps Claude on your design system: token lookup before writing styles, drift check after every edit."
+    }
+  ]
+}

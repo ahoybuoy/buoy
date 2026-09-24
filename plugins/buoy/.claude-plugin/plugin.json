@@ -1,0 +1,11 @@
+{
+  "name": "buoy",
+  "displayName": "Buoy",
+  "version": "0.7.3",
+  "description": "Keeps Claude on your design system: looks up your tokens before writing styles and flags hardcoded values after every edit.",
+  "author": { "name": "Buoy", "url": "https://buoy.design" },
+  "homepage": "https://buoy.design/docs/integrations/mcp",
+  "repository": "https://github.com/ahoybuoy/buoy",
+  "license": "MIT",
+  "keywords": ["design-system", "design-tokens", "css", "tailwind", "react", "lint"]
+}
