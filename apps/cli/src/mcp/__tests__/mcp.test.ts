@@ -7,6 +7,7 @@ import { findTokensByValue, normalizeValue, toIssue } from "../project.js";
 import { extractFileSignals, issuesFromSignals } from "../file-check.js";
 import { filePathFromHookPayload, formatHookFeedback, isStyleFile } from "../hook.js";
 import { installClient, mergeClaudeHook, mergeMcpServers } from "../install.js";
+import { cssVariableFor, withCssVariableAliases } from "../../scan/token-aliases.js";
 
 function token(name: string, value: DesignToken["value"], category: DesignToken["category"]): DesignToken {
   return { id: name, name, category, value, source: { type: "css", path: "src/tokens.css" }, aliases: [], usedBy: [], metadata: {}, scannedAt: new Date() };
@@ -67,10 +68,13 @@ describe("drift issues", () => {
     expect(extractFileSignals("# hi", "README.md")).toEqual([]);
 
     // Mantine/Chakra style props and theme-object keys
-    const props = "const SEV = { info: { bg: '#ffffff', fg: 'var(--x)' } };\n<Box p={8} radius=\"4px\" />\n";
+    const props = "const SEV = { info: { bg: '#ffffff', fg: 'var(--x)' } };\n<Text c=\"#1a73e8\" p={8} radius=\"4px\" />\n";
     const propIssues = issuesFromSignals(extractFileSignals(props, "src/B.tsx"), tokens);
     expect(propIssues.map((i) => [i.line, i.current, i.suggested ?? null])).toEqual([
       [1, "#ffffff", "var(--color-white)"],
+      [2, "#1a73e8", "var(--color-primary)"],
+      [2, "8px", "var(--space-2)"],
+      [2, "4px", "var(--radius-sm)"],
     ]);
   });
 
@@ -121,5 +125,16 @@ describe("install", () => {
     expect(settings.permissions.allow).toEqual(["Bash"]);
     expect(JSON.stringify(settings.hooks.PostToolUse)).toContain("mcp hook");
     expect(JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8")).mcpServers.buoy.args).toContain("serve");
+  });
+});
+
+describe("css variable aliases", () => {
+  it("gives JSON token paths a --prefix twin the agent can use", () => {
+    expect(cssVariableFor("color.gray.2", { prefix: "cds", separator: "-" })).toBe("--cds-color-gray-2");
+    expect(cssVariableFor("--x", { prefix: "cds", separator: "-" })).toBeNull();
+    const json = [token("color.white", { type: "color", hex: "#ffffff" }, "color")];
+    const out = withCssVariableAliases(json, { prefix: "cds", separator: "-" });
+    expect(out.map((t) => t.name)).toEqual(["color.white", "--cds-color-white"]);
+    expect(findTokensByValue(out, "#fff").map((t) => t.name)).toContain("--cds-color-white");
   });
 });

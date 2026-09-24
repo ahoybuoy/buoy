@@ -95,10 +95,24 @@ export const StorybookConfigSchema = z.object({
 });
 
 // Token source config
+const CssVariablesSchema = z.object({
+  /** Without leading dashes; empty means --<path>. */
+  prefix: z.string().default(''),
+  /** What replaces the dots of a token path (default "-"). */
+  separator: z.string().min(1).default('-'),
+});
+
 export const TokenConfigSchema = z.object({
   enabled: z.boolean().default(true),
   files: z.array(z.string()).default([]),
   cssVariablePrefix: z.string().optional(),
+  /**
+   * How tokens.json paths become CSS custom properties, e.g. { prefix: "cds" }
+   * makes color.white also known as --cds-color-white. Same setting the
+   * GitHub App reads as tokens.css_variables; both spellings are accepted.
+   */
+  cssVariables: CssVariablesSchema.optional(),
+  css_variables: CssVariablesSchema.optional(),
   /** Glob patterns for canonical (source-of-truth) token files */
   canonical: z.array(z.string()).default([]),
 });

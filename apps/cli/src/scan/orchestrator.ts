@@ -5,6 +5,7 @@ import type { Component, DesignToken } from "@buoy-design/core";
 import { parseDesignMd, designMdToTokens } from "@buoy-design/core";
 import type { ScanCache } from "@buoy-design/scanners";
 import type { BuoyConfig, SourcesConfig } from "../config/schema.js";
+import { withCssVariableAliases } from "./token-aliases.js";
 
 /**
  * Result of a scan operation
@@ -371,6 +372,9 @@ export class ScanOrchestrator {
     (result as ScanResult & { designMdApplied?: boolean }).designMdApplied =
       designMdResult.applied;
 
+    // tokens.css_variables: give JSON token paths their CSS variable twins so
+    // fixes and MCP answers name something a stylesheet can resolve.
+    result.tokens = withCssVariableAliases(result.tokens, this.config.sources?.tokens?.cssVariables ?? this.config.sources?.tokens?.css_variables);
     return result;
   }
 

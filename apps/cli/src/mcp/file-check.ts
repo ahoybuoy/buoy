@@ -120,6 +120,8 @@ const SIGNAL_CATEGORY: Record<string, DesignToken["category"] | undefined> = {
 
 const CSS_PROP = /([a-z-]+)\s*:\s*([^;{}]+)/g;
 const JSX_PROP = /(\w+)\s*:\s*(?:'([^']*)'|"([^"]*)"|(\d+\.?\d*)(?=[,}\s]))/g;
+// JSX attributes: c="#2563eb", bg='#1a1a18', p={16}
+const JSX_ATTR = /\b(\w+)=(?:"([^"]*)"|'([^']*)'|\{(\d+\.?\d*)\})/g;
 
 function route(extractor: Extractor, value: string, path: string, line: number, property: string, ctx: SignalContext): RawSignal[] {
   switch (extractor) {
@@ -163,19 +165,21 @@ export function extractFileSignals(content: string, path: string): RawSignal[] {
     const line = lines[i] ?? "";
     // A line can mix a token reference and a literal (`fg: 'var(--x)', bg: '#fff'`);
     // the extractors skip var()/$ references per value, so the line is examined.
-    const pattern = isCss ? CSS_PROP : JSX_PROP;
+    const patterns = isCss ? [CSS_PROP] : [JSX_PROP, JSX_ATTR];
     const table = isCss ? CSS_PROPERTY_EXTRACTORS : { ...JSX_STYLE_PROP_ALIASES, ...JSX_PROPERTY_EXTRACTORS };
-    pattern.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = pattern.exec(line)) !== null) {
-      const property = (m[1] ?? "").trim();
-      const extractor = table[property];
-      if (!extractor) continue;
-      let value = isCss ? (m[2] ?? "").trim() : (m[2] ?? m[3] ?? m[4]);
-      if (value === undefined || value === "") continue;
-      // Bare numbers in JSX style objects are pixels.
-      if (isJsx && m[4] !== undefined) value = `${value}px`;
-      signals.push(...route(extractor, value, path, i + 1, property, ctx));
+    for (const pattern of patterns) {
+      pattern.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = pattern.exec(line)) !== null) {
+        const property = (m[1] ?? "").trim();
+        const extractor = table[property];
+        if (!extractor) continue;
+        let value = isCss ? (m[2] ?? "").trim() : (m[2] ?? m[3] ?? m[4]);
+        if (value === undefined || value === "") continue;
+        // Bare numbers in JSX style objects and props are pixels.
+        if (isJsx && m[4] !== undefined) value = `${value}px`;
+        signals.push(...route(extractor, value, path, i + 1, property, ctx));
+      }
     }
   }
   return signals;
