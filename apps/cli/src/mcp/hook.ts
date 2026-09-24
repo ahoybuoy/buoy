@@ -5,6 +5,7 @@
  */
 import { isAbsolute, relative, resolve } from "node:path";
 import { checkDrift, loadProject, type DriftCheck } from "./project.js";
+import { fileChangedLines } from "../services/changed-lines.js";
 
 const STYLE_FILE = /\.(tsx|jsx|vue|svelte|css|scss|html)$/;
 /** Dependencies and build output: an agent may touch them, but they are not the repo's UI code. */
@@ -52,7 +53,27 @@ export async function runHook(cwd: string, file: string | null): Promise<HookRes
   if (inProject.startsWith("..") || isAbsolute(inProject) || NOT_SOURCE.test(inProject.split("\\").join("/"))) {
     return { exitCode: 0, message: null };
   }
-  const check = await checkDrift(project, [absolute]);
+  const full = await checkDrift(project, [absolute]);
+  // Only what this edit changed: an agent touching one line of an old file
+  // should not be sent after every literal already in it.
+  const changed = fileChangedLines(project.projectRoot, absolute);
+  const check = changed === null ? full : onlyLines(full, changed);
   if (check.summary.total === 0) return { exitCode: 0, message: null };
   return { exitCode: 2, message: formatHookFeedback(file, check) };
+}
+
+/** The same check restricted to the given lines, with the summary recounted. */
+export function onlyLines(check: DriftCheck, lines: Set<number>): DriftCheck {
+  const issues = check.issues.filter((issue) => issue.line !== undefined && lines.has(issue.line));
+  return {
+    ...check,
+    issues,
+    summary: {
+      total: issues.length,
+      critical: issues.filter((i) => i.severity === "critical").length,
+      warning: issues.filter((i) => i.severity === "warning").length,
+      info: issues.filter((i) => i.severity === "info").length,
+      fixable: issues.filter((i) => i.suggested || i.tokenSuggestions).length,
+    },
+  };
 }

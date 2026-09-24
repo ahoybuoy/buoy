@@ -63,6 +63,9 @@ export function isDriftTypeEnabled(config: BuoyConfig, type: string): boolean {
 }
 
 /** Content-aware file classification (email imports, SVG-only files), cached per path. */
+/** Truthy stand-in for "skip this value" where a scanner expects intent evidence. */
+const SKIPPED = { kind: "allowlisted" as const, reason: "skipped" };
+
 /** 1-based line of a hardcoded value's location: `line 12`, `src/a.tsx:12` or `src/a.tsx:12:4`. */
 export function lineOfLocation(location: string): number | null {
   const m = /\bline (\d+)/.exec(location) ?? /:(\d+)(?::\d+)?$/.exec(location);
@@ -76,7 +79,7 @@ export function withoutDeliberateValues(component: Component, judge: IntentJudge
   if (!values?.length || !path) return component;
   const kept = values.filter((v) => {
     const line = lineOfLocation(v.location);
-    return line === null || !judge.judge(path, line, { property: v.property, value: v.value });
+    return line === null || !judge.skip(path, line, { property: v.property, value: v.value });
   });
   if (kept.length === values.length) return component;
   return { ...component, metadata: { ...component.metadata, hardcodedValues: kept.length ? kept : undefined } };
@@ -111,6 +114,11 @@ export function createFileClassifier(projectRoot: string): (path: string) => Exe
 }
 
 export interface DriftAnalysisOptions {
+  /**
+   * Only report hardcoded values on these lines (repo-relative path -> 1-based
+   * lines), e.g. the staged hunks. Other drift types keep their file-level rules.
+   */
+  changedLines?: Map<string, Set<number>>;
   /** Callback for progress updates */
   onProgress?: (message: string) => void;
   /** Include ignored drifts (default: false) */
@@ -636,6 +644,7 @@ export class DriftAnalysisService {
     // finding is built from them, so messages and counts never include them.
     const judge = new IntentJudge(this.projectRoot, {
       history: this.config.drift?.history !== false,
+      scope: options.changedLines,
     });
     const judgedComponents = components.map((component) => withoutDeliberateValues(component, judge));
 
@@ -881,7 +890,7 @@ export class DriftAnalysisService {
         exclude: this.config.sources.tailwind.exclude,
         detectArbitraryValues: true,
         judge: (file, line, fullClass, lines) =>
-          judge.judge(file, line, { value: fullClass, fullClass }, lines),
+          judge.skip(file, line, { value: fullClass, fullClass }, lines) ? SKIPPED : null,
       });
 
       const tailwindResult = await tailwindScanner.scan();

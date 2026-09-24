@@ -19,6 +19,12 @@ export interface IntentCandidate {
 }
 
 export interface IntentJudgeOptions {
+  /**
+   * Only these lines are in scope (repo-relative path -> 1-based lines), e.g.
+   * the staged hunks for a pre-commit check. Values elsewhere are skipped
+   * silently: they are not deliberate, just not part of this change.
+   */
+  scope?: Map<string, Set<number>>;
   /** Look up the commit that introduced each flagged line (default true). */
   history?: boolean;
   /** Stop history lookups after this many milliseconds in total (default 5000). */
@@ -34,9 +40,18 @@ export class IntentJudge {
   private historyEnabled: boolean;
   private readonly historyBudgetMs: number;
 
+  private readonly scope?: Map<string, Set<number>>;
+
   constructor(private readonly projectRoot: string, options: IntentJudgeOptions = {}) {
+    this.scope = options.scope;
     this.historyBudgetMs = options.historyBudgetMs ?? 5000;
     this.historyEnabled = options.history !== false && process.env.BUOY_HISTORY !== "0" && this.hasFullHistory();
+  }
+
+  /** True when the value should not become a finding: out of scope, or deliberate (recorded in `noted`). */
+  skip(file: string, line: number, candidate: IntentCandidate, lines?: readonly string[]): boolean {
+    if (this.scope && !this.scope.get(this.relativePath(file))?.has(line)) return true;
+    return this.judge(file, line, candidate, lines) !== null;
   }
 
   /** Evidence that the value at `file:line` (1-based) is deliberate, or null. Records hits in `noted`. */

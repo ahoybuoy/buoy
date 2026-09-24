@@ -1,4 +1,5 @@
 // apps/cli/src/commands/check.ts
+import { stagedChangedLines } from "../services/changed-lines.js";
 import { formatNotedLine, summarizeNoted } from "../services/intent-judge.js";
 import { Command } from "commander";
 import { dirname } from "node:path";
@@ -396,9 +397,13 @@ export function createCheckCommand(): Command {
 
         // Use consolidated drift analysis service
         const service = new DriftAnalysisService(config, projectRoot);
+        // --staged: judge only the staged hunks, not every literal already in
+        // the staged files. Other drift types still filter by file below.
+        const changedLines = options.staged ? stagedChangedLines(projectRoot) ?? undefined : undefined;
         const result = await service.analyze({
           onProgress: log,
           includeIgnored: false,
+          changedLines,
         });
 
         let drifts = result.drifts;

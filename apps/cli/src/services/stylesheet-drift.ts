@@ -68,7 +68,7 @@ export async function checkStylesheets(
     // judge reads comments and history from the source as written.
     const lineJudge = judge
       ? (line: number, property: string, value: string, lines: readonly string[]) =>
-        judge.judge(file, line, { property, value }, lines)
+        (judge.skip(file, line, { property, value }, lines) ? { kind: "allowlisted" as const, reason: "skipped" } : null)
       : undefined;
     const signals = extractFileSignals(css, isComponent ? `${file}.css` : file, lineJudge).map((s) => ({
       ...s,
