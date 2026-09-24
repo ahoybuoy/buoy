@@ -10,7 +10,7 @@
  * so they all agree on what counts.
  */
 
-export type ExemptFileContext = "artwork" | "email" | "og-image" | "test-or-story";
+export type ExemptFileContext = "artwork" | "email" | "og-image" | "test-or-story" | "third-party";
 
 const ARTWORK_PATH = /(^|\/)(icons?|logos?|illustrations?|svgs?|brand(ing)?|flags?|emojis?|avatars?\/presets?)(\/|$)|(^|\/)[\w.-]*(icon|logo|illustration|flag)s?\.(tsx|jsx|vue|svelte|astro)$|\.svg\.(tsx|jsx)$/i;
 const TEST_PATH = /(^|\/)(__tests__|__mocks__|mocks?|fixtures?|storybook|\.storybook|stories)(\/|$)|\.(test|spec|stories|story)\.[jt]sx?$|(^|\/)routes\/storybook[./]/i;
@@ -18,6 +18,9 @@ const EMAIL_PATH = /(^|\/)(emails?|email-templates|mail-templates)(\/|$)/i;
 const EMAIL_IMPORT = /from\s+['"](@react-email\/[\w-]+|react-email|jsx-email|mjml|mjml-react|@mjmlio\/[\w-]+)['"]/;
 const OG_PATH = /(^|\/)(opengraph-image|twitter-image|og-image|og)(\.[\w]+)?\.(tsx|jsx|ts|js)$|(^|\/)og(\/|$)/i;
 const OG_IMPORT = /from\s+['"](next\/og|@vercel\/og|satori)['"]/;
+// CSS resets and syntax-highlighting themes copied into a repo are someone
+// else's design, not the project's.
+const THIRD_PARTY_CSS = /(^|\/)(normalize|reset|preflight|sanitize|modern-normalize|prism[\w-]*|hljs[\w-]*|highlight[\w-]*|github-(dark|light)[\w-]*|one-(dark|light)|dracula|monokai|solarized[\w-]*|nord)\.(css|scss)$/i;
 
 // SVG drawing elements. A file whose markup is only these is artwork.
 const SVG_TAGS = new Set([
@@ -41,6 +44,7 @@ function intrinsicTags(content: string): Set<string> {
 export function classifyFileContext(path: string, content?: string): ExemptFileContext | null {
   const p = path.replace(/\\/g, "/");
   if (TEST_PATH.test(p)) return "test-or-story";
+  if (THIRD_PARTY_CSS.test(p)) return "third-party";
   if (EMAIL_PATH.test(p) || (content && EMAIL_IMPORT.test(content))) return "email";
   if (OG_PATH.test(p) || (content && OG_IMPORT.test(content))) return "og-image";
   if (ARTWORK_PATH.test(p)) return "artwork";
@@ -105,7 +109,7 @@ export function isTailwindDesignValue(fullClass: string): boolean {
   if (COLOR_UTILITIES.test(utility) && COLOR_LITERAL.test(v)) return true;
   if (BORDER_WIDTH_UTILITIES.test(utility)) return LENGTH_LITERAL.test(v) && !/^(0|1)(px)?$/.test(v) && v !== "0.5px";
   if (SPACING_UTILITIES.test(utility)) return isNonTrivialLength(v);
-  if (RADIUS_UTILITIES.test(utility)) return isNonTrivialLength(v) && !/^(9999|999)px$/.test(v);
+  if (RADIUS_UTILITIES.test(utility)) return isNonTrivialLength(v) && !PILL_RADIUS.test(v);
   if (utility === "leading" || utility === "tracking") return /^-?(\d+\.?\d*|\.\d+)(px|rem|em)?$/.test(v);
   if (utility === "font") return /^[1-9]\d{2}$/.test(v);
   return false;
@@ -136,11 +140,20 @@ function kebab(property: string): string {
  */
 export function isDesignDeclaration(property: string, value: string): boolean {
   const prop = kebab(property);
-  const v = String(value).trim();
+  const v = String(value).replace(/\s*!important\s*$/i, "").trim();
   if (isSvgPaintProperty(prop)) return false;
   if (LAYOUT_PROPERTIES.has(prop)) return false;
+  if (FULLY_TRANSPARENT.test(v)) return false;
   if (COLOR_LITERAL.test(v)) return true;
-  if (NOT_A_LITERAL.test(v)) return false;
+  if (NOT_A_LITERAL.test(v) || CSS_KEYWORD.test(v)) return false;
   if (/^-?(0|0?\.5|1)(px)?$/.test(v)) return false; // resets and hairlines
+  if (/radius/.test(prop) && PILL_RADIUS.test(v)) return false;
   return true;
 }
+
+/** rgba(0,0,0,0), hsla(0 0% 0% / 0), #0000 and #00000000: invisible, not a design colour. */
+const FULLY_TRANSPARENT = /^(rgba|hsla)\([^)]*[,/]\s*0(\.0+)?%?\s*\)$|^#(?:[0-9a-f]{3}0|[0-9a-f]{6}00)$/i;
+/** Keywords are the absence of a value, not a hardcoded one. */
+const CSS_KEYWORD = /^(none|normal|bold|bolder|lighter|inherit|initial|unset|revert|auto|transparent|currentcolor|medium|thin|thick)$/i;
+/** 99px, 999px, 9999px, 50%: "fully round" pill idiom, not a radius scale value. */
+const PILL_RADIUS = /^(99|999|9999)px$/;

@@ -29,7 +29,7 @@ import {
   type RawSignal,
   type SignalContext,
 } from "@buoy-design/scanners";
-import { classifyFileContext, isSvgPaintProperty } from "@buoy-design/core";
+import { classifyFileContext, isDesignDeclaration, isSvgPaintProperty } from "@buoy-design/core";
 import { findTokensByValue } from "./project.js";
 
 type Extractor =
@@ -179,10 +179,12 @@ export function extractFileSignals(content: string, path: string): RawSignal[] {
         if (!extractor) continue;
         // fill/stroke/stop-color are SVG artwork, not themed UI colour.
         if (isSvgPaintProperty(property)) continue;
-        let value = isCss ? (m[2] ?? "").trim() : (m[2] ?? m[3] ?? m[4]);
+        let value = isCss ? (m[2] ?? "").replace(/\s*!important\s*$/i, "").trim() : (m[2] ?? m[3] ?? m[4]);
         if (value === undefined || value === "") continue;
         // Bare numbers in JSX style objects and props are pixels.
         if (isJsx && m[4] !== undefined) value = `${value}px`;
+        // Layout geometry (width, top, ...), keywords, maths and hairlines are not drift.
+        if (!isDesignDeclaration(property, value)) continue;
         signals.push(...route(extractor, value, path, i + 1, property, ctx));
       }
     }

@@ -18,6 +18,7 @@ import type {
 import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { consolidateRepeatedPatterns } from "./repeated-patterns.js";
+import { checkStylesheets, stylesheetIssuesToDrifts } from "./stylesheet-drift.js";
 import { getSeverityWeight, classifyFileContext, type ExemptFileContext } from "@buoy-design/core";
 import { readFileSync } from "fs";
 import {
@@ -850,6 +851,17 @@ export class DriftAnalysisService {
           `Found ${tailwindResult.drifts.length} Tailwind arbitrary value issues`,
         );
       }
+    }
+
+    // Step 2.55: Hardcoded values in stylesheets and <style> blocks, with the
+    // same per-line rules the agent hook and PR reviews apply.
+    if (isDriftTypeEnabled(this.config, "hardcoded-value")) {
+      onProgress?.("Checking stylesheets...");
+      const stylesheetDrifts = stylesheetIssuesToDrifts(
+        await checkStylesheets(this.projectRoot, scannedTokens),
+        this.projectRoot,
+      );
+      drifts.push(...applySeverityOverrides(stylesheetDrifts, this.config.drift.severity));
     }
 
     // Step 2.6: Repeated pattern detection (always-on, opt-out via config)

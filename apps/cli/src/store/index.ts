@@ -25,6 +25,8 @@ import { LocalScanStore, type LocalStoreConfig } from './local-store.js';
 import { CloudScanStore, type CloudStoreConfig } from './cloud-store.js';
 import type { ScanStore } from './types.js';
 import { isLoggedIn, getApiToken } from '../cloud/index.js';
+import { readFileSync } from 'fs';
+import { basename, join } from 'path';
 
 export interface StoreConfig {
   /**
@@ -112,9 +114,6 @@ export function wouldUseCloud(config: StoreConfig = {}): boolean {
  */
 export function getProjectName(cwd: string = process.cwd()): string {
   try {
-    const { readFileSync } = require('fs');
-    const { join, basename } = require('path');
-
     const pkgPath = join(cwd, 'package.json');
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
 
@@ -127,7 +126,6 @@ export function getProjectName(cwd: string = process.cwd()): string {
     return basename(cwd);
   } catch {
     // No package.json or invalid JSON - use directory name
-    const { basename } = require('path');
     return basename(cwd);
   }
 }

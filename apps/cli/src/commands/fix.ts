@@ -37,6 +37,12 @@ import {
 } from "@buoy-design/core";
 import type { BuoyConfig } from "../config/schema.js";
 
+/** --json output when there is nothing to fix: same shape as a result, plus why. */
+function emptyFixesJson(reason: string, message: string): string {
+  const empty = JSON.parse(formatFixesJson([])) as Record<string, unknown>;
+  return JSON.stringify({ ...empty, reason, message }, null, 2);
+}
+
 export function createFixCommand(): Command {
   const cmd = new Command("fix")
     .description("Suggest and apply fixes for design drift issues")
@@ -93,6 +99,10 @@ export function createFixCommand(): Command {
 
         if (tokens.length === 0) {
           spin.stop();
+          if (options.json) {
+            console.log(emptyFixesJson("no-tokens", "No design tokens found to match against"));
+            return;
+          }
           // No Dead Ends: Show what we found and guide next steps
           console.log("");
           warning("No design tokens found to match against");
@@ -143,6 +153,12 @@ export function createFixCommand(): Command {
         if (driftSignals.length === 0) {
           spin.stop();
           
+          if (options.json) {
+            console.log(emptyFixesJson(components.length === 0 ? "no-components" : "no-hardcoded-values",
+              components.length === 0 ? "No components found for analysis" : "No hardcoded values found in components"));
+            return;
+          }
+
           // If no components were found, we might have missed inline styles
           if (components.length === 0) {
             console.log("");
@@ -205,6 +221,10 @@ export function createFixCommand(): Command {
         spin.stop();
 
         if (fixes.length === 0) {
+          if (options.json) {
+            console.log(emptyFixesJson("no-matching-fixes", `Found ${driftSignals.length} hardcoded values, but none match the confidence, type and file filters`));
+            return;
+          }
           // No Dead Ends: Explain what didn't match and suggest alternatives
           console.log("");
           warning("No fixable issues match your criteria");
