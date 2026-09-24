@@ -8,8 +8,11 @@
   "plugins": [
     {
       "name": "buoy",
-      "source": "./plugins/buoy",
-      "description": "Keeps Claude on your design system: token lookup before writing styles, drift check after every edit."
+      "source": {
+        "source": "github",
+        "repo": "ahoybuoy/buoy-plugin"
+      },
+      "description": "Keeps your coding agent on your design system: token lookup before writing styles, drift check after every edit."
     }
   ]
 }

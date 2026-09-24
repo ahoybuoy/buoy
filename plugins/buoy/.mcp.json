@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "buoy": {
-      "command": "npx",
-      "args": ["-y", "@buoy-design/cli@latest", "mcp", "serve"]
-    }
-  }
-}

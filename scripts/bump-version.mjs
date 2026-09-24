@@ -2,8 +2,9 @@
 /**
  * Set one version everywhere a release carries it:
  *   node scripts/bump-version.mjs 0.7.4
- * Root and workspace package.json files, the MCP Registry server.json, and
- * the Claude Code plugin manifest.
+ * Root and workspace package.json files and the MCP Registry server.json.
+ * The Claude Code / Cursor plugin lives in ahoybuoy/buoy-plugin and is
+ * versioned on its own (its MCP server always runs @buoy-design/cli@latest).
  */
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -21,7 +22,6 @@ const files = [
   "packages/ahoybuoy/package.json",
   "packages/buoy-design/package.json",
   "apps/cli/server.json",
-  "plugins/buoy/.claude-plugin/plugin.json",
 ];
 
 for (const file of files) {
