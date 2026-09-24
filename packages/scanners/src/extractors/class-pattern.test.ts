@@ -1666,3 +1666,12 @@ describe('wildcard selector patterns', () => {
     });
   });
 });
+
+describe("extractStaticClassStrings baseClasses", () => {
+  it("keeps only unconditional classes, so branches are not merged into one pattern", () => {
+    const content = `<button className={cn("flex gap-2 p-2 rounded-md", disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer", { "bg-neutral-100": selected }, "text-sm")} />`;
+    const [result] = extractStaticClassStrings(content);
+    expect(result!.baseClasses).toEqual(["flex", "gap-2", "p-2", "rounded-md", "text-sm"]);
+    expect(result!.classes).toContain("cursor-not-allowed");
+  });
+});

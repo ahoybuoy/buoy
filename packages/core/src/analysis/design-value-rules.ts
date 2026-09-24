@@ -67,7 +67,9 @@ const LENGTH_LITERAL = /^-?(\d+\.?\d*|\.\d+)(px|rem|em)$/;
 const NOT_A_LITERAL = /var\(|theme\(|calc\(|min\(|max\(|clamp\(|env\(|%|\b\d*\.?\d+(vh|vw|dvh|svh|lvh|dvw|svw|lvw|vmin|vmax|ch|ex|fr|cqw|cqh)\b|minmax|repeat\(|gradient|url\(|^(inherit|initial|unset|revert|auto|none|currentcolor|transparent|full|screen|fit|min|max)$/i;
 
 const COLOR_UTILITIES = /^(text|bg|border(-[xytrblse])?|fill|stroke|from|via|to|accent|caret|decoration|outline|ring|divide|placeholder|shadow)$/;
-const SPACING_UTILITIES = /^(p[xytrblse]?|m[xytrblse]?|gap(-[xy])?|space-[xy]|inset(-[xy])?|top|right|bottom|left|start|end|scroll-[mp][xytrblse]?|outline-offset|ring-offset)$/;
+// Padding, margin and gaps. Positioning offsets (top, left, inset, ...) are
+// layout, the same rule isDesignDeclaration applies to component styles.
+const SPACING_UTILITIES = /^(p[xytrblse]?|m[xytrblse]?|gap(-[xy])?|space-[xy]|scroll-[mp][xytrblse]?|outline-offset|ring-offset)$/;
 const RADIUS_UTILITIES = /^rounded(-(t|r|b|l|tl|tr|bl|br|s|e|ss|se|es|ee))?$/;
 const BORDER_WIDTH_UTILITIES = /^(border(-[xytrblse])?|outline|ring|divide-[xy])$/;
 

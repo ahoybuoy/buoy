@@ -43,7 +43,7 @@ describe("isTailwindDesignValue", () => {
       "transition-[transform,opacity]", "min-h-[100dvh]", "w-[calc(100%-2rem)]", "grid-cols-[minmax(440px,1fr)_1fr]", "rounded-[inherit]",
       "aspect-[900/580]", "w-[340px]", "max-w-[370px]", "scale-x-[1.6]", "blur-[50px]", "duration-[250ms]", "z-[1]",
       "bg-[conic-gradient(from_90deg,#F00_5deg,#EAB308_63deg)]", "data-[state=open]:bg-white", "[&_input]:p-2",
-      "p-[0px]", "border-[1px]", "rounded-[9999px]", "gap-[1px]", "bg-[url(/x.png)]",
+      "p-[0px]", "border-[1px]", "right-[-10px]", "top-[3px]", "inset-x-[12px]", "rounded-[9999px]", "gap-[1px]", "bg-[url(/x.png)]",
       "shadow-[0_0_0_1px_hsl(var(--sidebar-border))]", "w-[hsl(1,2%,3%)]"]) {
       expect(isTailwindDesignValue(c), c).toBe(false);
     }

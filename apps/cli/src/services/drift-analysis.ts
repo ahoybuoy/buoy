@@ -17,6 +17,7 @@ import type {
 } from "@buoy-design/core";
 import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
+import { consolidateRepeatedPatterns } from "./repeated-patterns.js";
 import { getSeverityWeight, classifyFileContext, type ExemptFileContext } from "@buoy-design/core";
 import { readFileSync } from "fs";
 import {
@@ -52,8 +53,6 @@ import { dirname, extname, resolve } from "path";
  */
 export const OPT_IN_DRIFT_TYPES = new Set(["unused-component", "semantic-mismatch", "naming-inconsistency", "unused-token"]);
 
-/** Repeated class strings are only worth a finding when they are long and widespread. */
-export const REPEATED_PATTERN_MIN = { occurrences: 4, files: 3, classes: 4 };
 
 export function isDriftTypeEnabled(config: BuoyConfig, type: string): boolean {
   const configured = (config.drift?.types as Record<string, { enabled?: boolean }> | undefined)?.[type]?.enabled;
@@ -863,16 +862,15 @@ export class DriftAnalysisService {
     };
     if (repeatedPatternConfig.enabled !== false) {
       onProgress?.("Detecting repeated patterns...");
-      const patternDrifts = (await this.detectRepeatedPatterns(repeatedPatternConfig)).filter((d) => {
-        // An explicit minOccurrences means the repo chose its own bar.
-        if (repeatedPatternConfig.minOccurrences !== undefined) return true;
-        const locations = (d.details?.locations as string[] | undefined) ?? [];
-        const files = new Set(locations.map((l) => l.split(":")[0]));
-        const classes = (d.source.entityName ?? "").split(/\s+/).filter(Boolean).length;
-        return ((d.details?.occurrences as number | undefined) ?? locations.length) >= REPEATED_PATTERN_MIN.occurrences
-          && files.size >= REPEATED_PATTERN_MIN.files
-          && classes >= REPEATED_PATTERN_MIN.classes;
-      });
+      // Detect with a low bar, then merge near-duplicates and apply the real
+      // thresholds (an explicit minOccurrences is the repo's own bar).
+      const rawPatterns = await this.detectRepeatedPatterns({ ...repeatedPatternConfig, minOccurrences: 2 });
+      const patternDrifts = consolidateRepeatedPatterns(
+        rawPatterns,
+        repeatedPatternConfig.minOccurrences !== undefined
+          ? { occurrences: repeatedPatternConfig.minOccurrences, files: 1, classes: 1, stylingClasses: 0 }
+          : undefined,
+      );
       drifts.push(...patternDrifts);
       if (patternDrifts.length > 0) {
         onProgress?.(`Found ${patternDrifts.length} repeated pattern issues`);
@@ -1990,13 +1988,16 @@ export class DriftAnalysisService {
       try {
         const content = await readFile(file, "utf-8");
         const relativePath = file.replace(cwd + "/", "");
+        // Tests, stories, email templates and artwork are not the product UI.
+        if (classifyFileContext(relativePath, content)) continue;
 
         // Extract static class strings using existing extractor
         const classStrings = extractStaticClassStrings(content);
 
         for (const cs of classStrings) {
-          // Combine all classes into a single string
-          const allClasses = cs.classes.join(" ");
+          // Only classes that are always applied: merging conditional
+          // branches invents markup that never renders.
+          const allClasses = (cs.baseClasses ?? cs.classes).join(" ");
           if (allClasses.trim()) {
             occurrences.push({
               classes: allClasses,

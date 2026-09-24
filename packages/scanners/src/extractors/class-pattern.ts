@@ -870,8 +870,10 @@ function isSemanticToken(name: string): boolean {
 export interface StaticClassStrings {
   /** The utility function used (cn, clsx, classNames, etc.) */
   utility: string;
-  /** All static class names extracted */
+  /** All static class names extracted, including conditional branches */
   classes: string[];
+  /** Only the classes that are always applied (plain string arguments) */
+  baseClasses: string[];
   /** Semantic tokens found in the classes */
   semanticTokens: string[];
   /** Line number where pattern was found */
@@ -882,6 +884,32 @@ export interface StaticClassStrings {
  * Extract static class strings from className utility function calls
  * Handles: cn("static-classes"), classNames("...", variable), clsx("...", ...)
  */
+/** Split a call's argument list at top-level commas (ignoring nested (), [], {} and strings). */
+function splitTopLevelArgs(args: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let current = "";
+  for (const ch of args) {
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+    else if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    if (ch === "," && depth === 0) {
+      out.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) out.push(current);
+  return out;
+}
+
 export function extractStaticClassStrings(content: string): StaticClassStrings[] {
   const results: StaticClassStrings[] = [];
   const utilities = ['cn', 'clsx', 'classnames', 'classNames', 'cx', 'twMerge'];
@@ -912,6 +940,15 @@ export function extractStaticClassStrings(content: string): StaticClassStrings[]
         allClasses.push(...classes);
       }
 
+      // Classes that are always applied: top-level arguments that are a plain
+      // string. `cond && "x"`, `a ? "b" : "c"` and `{ x: cond }` are branches;
+      // merging them produced patterns like "cursor-pointer cursor-not-allowed"
+      // that never appear together in the rendered markup.
+      const baseClasses = splitTopLevelArgs(parenContent)
+        .map((arg) => arg.trim())
+        .filter((arg) => /^(["'])[^"'`]*\1$/.test(arg) || /^`[^`$]*`$/.test(arg))
+        .flatMap((arg) => arg.slice(1, -1).split(/\s+/).filter(Boolean));
+
       if (allClasses.length > 0) {
         // Extract semantic tokens
         const semanticTokens = new Set<string>();
@@ -923,6 +960,7 @@ export function extractStaticClassStrings(content: string): StaticClassStrings[]
         results.push({
           utility,
           classes: allClasses,
+          baseClasses,
           semanticTokens: Array.from(semanticTokens),
           line: lineNum,
         });

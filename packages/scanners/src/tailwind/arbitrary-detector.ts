@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { glob } from 'glob';
 import { relative } from 'path';
 import type { DriftSignal, DriftSource } from '@buoy-design/core';
-import { classifyFileContext, isTailwindDesignValue } from '@buoy-design/core';
+import { classifyFileContext, isTailwindDesignValue, parseArbitraryClass } from '@buoy-design/core';
 
 export interface ArbitraryValue {
   type: 'color' | 'spacing' | 'size' | 'timing' | 'grid' | 'css-property' | 'border' | 'layout' | 'transform' | 'filter' | 'typography' | 'visual' | 'other';
@@ -1045,7 +1045,7 @@ export class ArbitraryValueDetector {
     valueType: string,
     file: string,
     values: ArbitraryValue[],
-    message: string
+    _legacyMessage: string
   ): DriftSignal {
     const source: DriftSource = {
       entityType: 'component',
@@ -1053,10 +1053,7 @@ export class ArbitraryValueDetector {
       entityName: file,
       location: `${file}:${values[0]!.line}`,
     };
-
-    const examples = values.slice(0, 5).map(v =>
-      `${v.fullClass} at line ${v.line}`
-    );
+    const { message, fix } = describeArbitraryValues(values);
 
     return {
       id: `drift:hardcoded-value:tailwind:${file}:${valueType}`,
@@ -1066,17 +1063,43 @@ export class ArbitraryValueDetector {
       message,
       details: {
         expected: 'Use Tailwind theme tokens',
-        actual: `${values.length} arbitrary ${valueType} values`,
-        affectedFiles: [file],
-        suggestions: [
-          valueType === 'color'
-            ? 'Replace arbitrary colors with theme colors: text-primary, bg-secondary, etc.'
-            : 'Replace arbitrary values with theme tokens: p-4, gap-2, w-full, etc.',
-          'Add missing values to tailwind.config.js theme.extend if needed',
-          `Examples: ${examples.slice(0, 3).join(', ')}`,
-        ],
+        actual: `${values.length} arbitrary ${valueType} value${values.length === 1 ? '' : 's'}`,
+        // One entry per class, so reports and reviewers can see exactly what was found.
+        affectedFiles: values.map((v) => `${v.fullClass} (line ${v.line})`),
+        suggestions: [fix, 'Add the value to your Tailwind theme if it is a real part of the design'],
       },
       detectedAt: new Date(),
     };
   }
+}
+
+/** What kind of design value an arbitrary class sets, in plain words. */
+export function arbitraryValueKind(fullClass: string): { kind: string; fix: string } {
+  const parsed = parseArbitraryClass(fullClass);
+  const u = parsed?.utility ?? '';
+  const v = parsed?.value ?? '';
+  const isColour = /^(#|rgb|hsl|oklch|oklab|lab|lch|hwb)/i.test(v.replace(/^color:/, ''));
+  if (isColour) return { kind: 'colour', fix: 'a theme colour (bg-primary, text-muted-foreground) or a --color token' };
+  if (/^rounded/.test(u)) return { kind: 'radius', fix: 'a theme radius (rounded-sm, rounded-md) or a --radius token' };
+  if (u === 'text') return { kind: 'font size', fix: 'a type scale step (text-xs, text-sm) or a font-size token' };
+  if (u === 'leading') return { kind: 'line height', fix: 'a leading step (leading-tight, leading-6) or a line-height token' };
+  if (u === 'tracking') return { kind: 'letter spacing', fix: 'a tracking step (tracking-tight) or a letter-spacing token' };
+  if (u === 'font') return { kind: 'font weight', fix: 'a weight step (font-medium, font-semibold)' };
+  if (u === 'shadow' || u === 'drop-shadow') return { kind: 'shadow', fix: 'a theme shadow (shadow-sm, shadow-md) or a --shadow token' };
+  if (/^(border|outline|ring|divide)/.test(u) && !/offset/.test(u)) return { kind: 'border width', fix: 'a border width step (border-2) or a token' };
+  return { kind: 'spacing', fix: 'the spacing scale (p-2, gap-3, mt-4) or a --space token' };
+}
+
+/**
+ * "Hardcoded radius: rounded-[2px], rounded-[3px]. Use a theme radius ..." rather
+ * than "2 arbitrary border values found".
+ */
+export function describeArbitraryValues(values: ArbitraryValue[]): { message: string; fix: string } {
+  const classes = [...new Set(values.map((v) => v.fullClass.replace(/^(?:(?:[^[\]:]|\[[^\]]*\])*:)*/, '')))];
+  const kinds = [...new Set(values.map((v) => arbitraryValueKind(v.fullClass).kind))];
+  const first = arbitraryValueKind(values[0]!.fullClass);
+  const label = kinds.length === 1 ? kinds[0]! : kinds.join(' / ');
+  const shown = classes.slice(0, 4).join(', ') + (classes.length > 4 ? ` and ${classes.length - 4} more` : '');
+  const fix = kinds.length === 1 ? `Use ${first.fix} instead.` : 'Use the matching theme values instead.';
+  return { message: `Hardcoded ${label}: ${shown}. ${fix}`, fix };
 }

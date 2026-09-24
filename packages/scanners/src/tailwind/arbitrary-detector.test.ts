@@ -336,7 +336,21 @@ describe("ArbitraryValueDetector", () => {
       );
 
       expect(colorSignal?.details.suggestions).toBeDefined();
-      expect(colorSignal?.details.suggestions?.[2]).toContain("bg-[#");
+      // Every class is listed with its line, and the message names them.
+      expect(colorSignal?.details.affectedFiles).toHaveLength(6);
+      expect(colorSignal?.details.affectedFiles?.[0]).toBe("bg-[#111] (line 2)");
+      expect(colorSignal?.message).toBe(
+        "Hardcoded colour: bg-[#111], bg-[#222], bg-[#333], bg-[#444] and 2 more. Use a theme colour (bg-primary, text-muted-foreground) or a --color token instead.",
+      );
+    });
+
+    it("names the kind of value in plain words", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Kinds.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`<div className="rounded-[2px] hover:rounded-[3px] text-[13px] tracking-[-0.01em]" />`);
+      const signals = await new ArbitraryValueDetector({ projectRoot: mockProjectRoot }).detectAsDriftSignals();
+      const messages = signals.map((s) => s.message).sort();
+      expect(messages).toContain("Hardcoded radius: rounded-[2px], rounded-[3px]. Use a theme radius (rounded-sm, rounded-md) or a --radius token instead.");
+      expect(messages.some((m) => m.startsWith("Hardcoded font size / letter spacing: text-[13px], tracking-[-0.01em]."))).toBe(true);
     });
 
     it("sets correct source location", async () => {
