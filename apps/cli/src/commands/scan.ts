@@ -20,6 +20,7 @@ import {
 } from "../output/formatters.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import type { BuoyConfig } from "../config/schema.js";
+import { inferDesignSystem, formatInferredSystem, summarizeInferredSystem } from "../services/inferred-system.js";
 import { discoverProject, formatInsightsBlock, promptNextAction, isTTY } from "../insights/index.js";
 import {
   isLoggedIn,
@@ -133,7 +134,7 @@ export function createScanCommand(): Command {
 
           // JSON mode: return empty results
           if (options.json || options.format === "json") {
-            console.log(JSON.stringify({ components: [], tokens: [], errors: [] }, null, 2));
+            console.log(JSON.stringify({ components: [], tokens: [], errors: [], inferredSystem: await inferQuietly(config) }, null, 2));
             return;
           }
 
@@ -149,6 +150,12 @@ export function createScanCommand(): Command {
           console.log(chalk.dim('Components: 0 (no scanners available for your framework)'));
           console.log(chalk.dim('Tokens: 0'));
           newline();
+
+          const inferred = await inferDesignSystem(process.cwd(), config).catch(() => null);
+          if (inferred && inferred.tokens.length > 0) {
+            console.log(formatInferredSystem(inferred, chalk));
+            newline();
+          }
           console.log(formatInsightsBlock(insights));
 
           // Offer interactive next step if TTY
@@ -217,6 +224,9 @@ export function createScanCommand(): Command {
                   (e: ScanError) => `[${e.source}] ${e.file || ""}: ${e.message}`,
                 ),
                 cacheStats: results.cacheStats,
+                ...(results.tokens.length === 0
+                  ? { inferredSystem: await inferQuietly(config) }
+                  : {}),
               },
               null,
               2,
@@ -240,6 +250,12 @@ export function createScanCommand(): Command {
           console.log(chalk.dim('Components: 0 (no scanners matched your framework)'));
           console.log(chalk.dim('Tokens: 0'));
           newline();
+
+          const inferred = await inferDesignSystem(process.cwd(), config).catch(() => null);
+          if (inferred && inferred.tokens.length > 0) {
+            console.log(formatInferredSystem(inferred, chalk));
+            newline();
+          }
 
           // Show what we DID find
           const insights = await discoverProject(process.cwd());
@@ -284,6 +300,12 @@ export function createScanCommand(): Command {
           header("Tokens");
           console.log(formatTokenTable(results.tokens));
           newline();
+        } else {
+          const inferred = await inferDesignSystem(process.cwd(), config).catch(() => null);
+          if (inferred && inferred.tokens.length > 0) {
+            console.log(formatInferredSystem(inferred, chalk));
+            newline();
+          }
         }
 
         if (results.errors.length > 0) {
@@ -383,4 +405,9 @@ export function createScanCommand(): Command {
     });
 
   return cmd;
+}
+
+async function inferQuietly(config: BuoyConfig) {
+  const system = await inferDesignSystem(process.cwd(), config).catch(() => null);
+  return system && system.tokens.length > 0 ? summarizeInferredSystem(system) : null;
 }

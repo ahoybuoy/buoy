@@ -2,8 +2,6 @@ import { Command } from 'commander';
 import { writeFileSync } from 'fs';
 import { resolve, relative } from 'path';
 import chalk from 'chalk';
-import { glob } from 'glob';
-import { readFile } from 'fs/promises';
 import { getConfigPath } from '../config/loader.js';
 import { buildAutoConfig } from '../config/auto-detect.js';
 import { detectFrameworks } from '../detect/frameworks.js';
@@ -16,16 +14,8 @@ import {
   newline,
   keyValue,
 } from '../output/reporters.js';
-import {
-  extractStyles,
-  extractCssFileStyles,
-  type TemplateType,
-} from '@buoy-design/scanners';
-import {
-  parseCssValues,
-  generateTokens,
-  type ExtractedValue,
-} from '@buoy-design/core';
+import { generateTokens } from '@buoy-design/core';
+import { findStyleSources, extractValues } from '../services/inferred-system.js';
 import { createTokensLookupCommand } from './tokens-lookup.js';
 
 export function createTokensCommand(): Command {
@@ -88,56 +78,7 @@ export function createTokensCommand(): Command {
 
         // Collect files to scan
         spin.text = 'Finding source files...';
-        const filesToScan: { path: string; type: TemplateType | 'css' }[] = [];
-        const sources = config.sources || {};
-
-        // Component files (React, Vue, Svelte, etc.)
-        const componentSources = [
-          { key: 'react', patterns: sources.react?.include || ['src/**/*.tsx', 'src/**/*.jsx'] },
-          { key: 'vue', patterns: sources.vue?.include || ['src/**/*.vue'] },
-          { key: 'svelte', patterns: sources.svelte?.include || ['src/**/*.svelte'] },
-        ];
-
-        for (const { key, patterns } of componentSources) {
-          if (sources[key as keyof typeof sources]?.enabled !== false) {
-            for (const pattern of patterns) {
-              const files = await glob(pattern, {
-                cwd,
-                ignore: ['**/node_modules/**', '**/dist/**', '**/*.test.*', '**/*.stories.*'],
-                absolute: true
-              });
-              for (const file of files) {
-                filesToScan.push({ path: file, type: key as TemplateType });
-              }
-            }
-          }
-        }
-
-        // Template files
-        if (sources.templates?.enabled) {
-          const patterns = sources.templates.include || [];
-          for (const pattern of patterns) {
-            const files = await glob(pattern, {
-              cwd,
-              ignore: sources.templates.exclude || [],
-              absolute: true
-            });
-            for (const file of files) {
-              filesToScan.push({ path: file, type: sources.templates.type as TemplateType });
-            }
-          }
-        }
-
-        // CSS/SCSS files (always scan)
-        const cssPatterns = ['**/*.css', '**/*.scss'];
-        const cssIgnore = ['**/node_modules/**', '**/dist/**', '**/build/**', '**/*.min.css'];
-
-        for (const pattern of cssPatterns) {
-          const files = await glob(pattern, { cwd, ignore: cssIgnore, absolute: true });
-          for (const file of files) {
-            filesToScan.push({ path: file, type: 'css' });
-          }
-        }
+        const filesToScan = await findStyleSources(cwd, config);
 
         if (filesToScan.length === 0) {
           spin.stop();
@@ -148,28 +89,7 @@ export function createTokensCommand(): Command {
 
         // Extract values from all files
         spin.text = `Scanning ${filesToScan.length} files...`;
-        const allValues: ExtractedValue[] = [];
-
-        for (const { path: filePath, type } of filesToScan) {
-          try {
-            const content = await readFile(filePath, 'utf-8');
-            const styles = type === 'css'
-              ? extractCssFileStyles(content)
-              : extractStyles(content, type);
-
-            for (const style of styles) {
-              const { values } = parseCssValues(style.css);
-              // Add file path to each extracted value
-              for (const v of values) {
-                v.file = relative(cwd, filePath);
-                if (style.line) v.line = style.line;
-              }
-              allValues.push(...values);
-            }
-          } catch {
-            // Skip files that can't be read
-          }
-        }
+        const allValues = await extractValues(cwd, filesToScan);
 
         if (allValues.length === 0) {
           spin.stop();

@@ -17,6 +17,7 @@ import {
   summarizeToken,
   type ProjectContext,
 } from "./project.js";
+import { inferDesignSystem, normalizeLiteral, summarizeInferredSystem } from "../services/inferred-system.js";
 
 const TOKEN_CACHE_MS = 30_000;
 
@@ -37,6 +38,15 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
     const tokens = await scanTokens(await getProject());
     tokenCache = { at: Date.now(), tokens };
     return tokens;
+  };
+  let inferredCache: { at: number; system: ReturnType<typeof summarizeInferredSystem> | null } | null = null;
+  // Repos with no tokens still have a de facto system: the values they use most.
+  const getInferred = async () => {
+    if (inferredCache && Date.now() - inferredCache.at < TOKEN_CACHE_MS) return inferredCache.system;
+    const proj = await getProject();
+    const system = await inferDesignSystem(proj.projectRoot, proj.config).catch(() => null);
+    inferredCache = { at: Date.now(), system: system && system.tokens.length > 0 ? summarizeInferredSystem(system, 200) : null };
+    return inferredCache.system;
   };
   const json = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] });
 
@@ -65,7 +75,7 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
         byCategory,
         matched: matched.length,
         tokens: matched.slice(0, limit ?? 200).map(summarizeToken),
-        ...(tokens.length === 0 ? { note: "No tokens found. Run `buoy dock tokens` to extract a token set from the values this codebase already uses." } : {}),
+        ...(tokens.length === 0 ? await inferredFallback(category, q) : {}),
       });
     },
   );
@@ -82,7 +92,23 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
       },
     },
     async ({ value, category }) => {
-      const matches = findTokensByValue(await getTokens(), value, category);
+      const tokens = await getTokens();
+      const matches = findTokensByValue(tokens, value, category);
+      if (tokens.length === 0) {
+        const inferred = await getInferred();
+        const wanted = normalizeLiteral(value);
+        const hit = inferred?.tokens.find((t) =>
+          (!category || t.category === category) &&
+          (normalizeLiteral(t.value) === wanted || t.replaces?.includes(wanted)));
+        return json({
+          value,
+          matches: [],
+          inferredMatch: hit ?? null,
+          suggestion: hit
+            ? `This repo has no tokens yet. Its most-used equivalent is ${hit.value} (${hit.uses} uses); write ${hit.value} so values stay consistent.`
+            : null,
+        });
+      }
       return json({ value, matches, suggestion: matches[0] ? `Use ${matches[0].name} instead of ${value}` : null });
     },
   );
@@ -131,6 +157,22 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
       return { content: [{ type: "text" as const, text: result.content }] };
     },
   );
+
+  async function inferredFallback(category?: string, q?: string) {
+    const inferred = await getInferred();
+    if (!inferred) {
+      return { note: "No tokens found and no repeated hardcoded values to infer from." };
+    }
+    return {
+      note: "This repo has no design tokens yet. `inferred` is the system its code already uses (most-used values, near-duplicates merged). Reuse these exact values instead of inventing new ones, and prefer `use` over each `insteadOf` value. `buoy dock tokens` turns them into a tokens file.",
+      inferred: {
+        ...inferred,
+        tokens: inferred.tokens
+          .filter((t) => !category || t.category === category)
+          .filter((t) => !q || t.name.toLowerCase().includes(q)),
+      },
+    };
+  }
 
   return server;
 }
