@@ -4,7 +4,8 @@
  * Both need the same thing: this repo's tokens, and drift for some files.
  * Everything here reuses the CLI's scan pipeline; nothing is re-detected.
  */
-import { dirname } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { BuoyConfig } from "../config/schema.js";
 import { loadConfig, getConfigPath } from "../config/loader.js";
 import { buildAutoConfig } from "../config/auto-detect.js";
@@ -25,8 +26,22 @@ export async function loadProject(cwd: string): Promise<ProjectContext> {
     const loaded = await loadConfig(cwd);
     return { config: loaded.config, projectRoot: loaded.configPath ? dirname(loaded.configPath) : cwd };
   }
-  const auto = await buildAutoConfig(cwd);
-  return { config: auto.config, projectRoot: cwd };
+  // No config: agents and hooks can run from a subdirectory, where the repo's
+  // tokens are out of sight. Use the repository root instead.
+  const root = findRepoRoot(cwd) ?? cwd;
+  const auto = await buildAutoConfig(root);
+  return { config: auto.config, projectRoot: root };
+}
+
+/** The nearest ancestor with a `.git` entry (a directory, or a file in worktrees). */
+export function findRepoRoot(start: string): string | null {
+  let current = resolve(start);
+  while (true) {
+    if (existsSync(join(current, ".git"))) return current;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
 }
 
 export interface TokenSummary {
@@ -70,11 +85,23 @@ export function normalizeValue(value: string): string {
   return v;
 }
 
+/** Root font size used to compare px with rem, matching core's token suggestions. */
+const BASE_FONT_SIZE_PX = 16;
+
+/** `1rem` and `16px` are the same length; compare them as px. */
+function comparableValue(value: string): string {
+  const v = normalizeValue(value);
+  const rem = /^(-?\d*\.?\d+)rem$/.exec(v);
+  if (!rem) return v;
+  const px = Math.round(parseFloat(rem[1]!) * BASE_FONT_SIZE_PX * 1000) / 1000;
+  return px === 0 ? "0" : `${px}px`;
+}
+
 export function findTokensByValue(tokens: DesignToken[], value: string, category?: string): TokenSummary[] {
-  const wanted = normalizeValue(value);
+  const wanted = comparableValue(value);
   return tokens
     .filter((t) => !category || t.category === category)
-    .filter((t) => normalizeValue(formatTokenValue(t)) === wanted)
+    .filter((t) => comparableValue(formatTokenValue(t)) === wanted)
     .map(summarizeToken);
 }
 
@@ -115,6 +142,9 @@ export interface DriftCheck {
   issues: DriftIssue[];
   summary: { total: number; critical: number; warning: number; info: number; fixable: number };
   tokenCount: number;
+  /** Requested paths that do not exist. They were not checked, so they are not "clean". */
+  notFound?: string[];
+  note?: string;
 }
 
 function summarize(issues: DriftIssue[], tokenCount: number): DriftCheck {
@@ -138,10 +168,17 @@ function summarize(issues: DriftIssue[], tokenCount: number): DriftCheck {
  */
 export async function checkDrift(project: ProjectContext, files?: string[], tokens?: DesignToken[]): Promise<DriftCheck> {
   if (files && files.length > 0) {
-    const scannable = filterScannableFiles(files);
+    const notFound = files.filter((file) => !existsSync(isAbsolute(file) ? file : join(project.projectRoot, file)));
+    const scannable = filterScannableFiles(files.filter((file) => !notFound.includes(file)));
     const known = tokens ?? (await scanTokens(project));
     const issues = scannable.length ? await checkFiles(scannable, project.projectRoot, known) : [];
-    return summarize(issues, known.length);
+    const check = summarize(issues, known.length);
+    if (notFound.length === 0) return check;
+    return {
+      ...check,
+      notFound,
+      note: `Not checked, no such file: ${notFound.join(", ")}. Paths are relative to ${project.projectRoot} or absolute.`,
+    };
   }
   const service = new DriftAnalysisService(project.config, project.projectRoot);
   const result = await service.analyze({ includeIgnored: false });

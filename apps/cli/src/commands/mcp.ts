@@ -41,8 +41,14 @@ export function createMcpCommand(): Command {
         }
       }
       for (const c of wanted) {
-        const result = installClient(c, process.cwd(), { hook: options.hook });
-        console.log(`${c}: wrote ${result.files.join(", ")}`);
+        try {
+          const result = installClient(c, process.cwd(), { hook: options.hook });
+          console.log(`${c}: wrote ${result.files.join(", ")}`);
+        } catch (error) {
+          // e.g. an existing config that is not valid JSON: never overwrite it.
+          console.error(`${c}: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
       }
       console.log("");
       console.log("Agents in this repo can now call list_design_tokens, find_token_for_value, check_design_drift and design_system_context.");

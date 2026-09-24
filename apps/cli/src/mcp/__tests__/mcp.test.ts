@@ -3,9 +3,9 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DesignToken, DriftSignal } from "@buoy-design/core";
-import { findTokensByValue, normalizeValue, toIssue } from "../project.js";
+import { checkDrift, findRepoRoot, findTokensByValue, normalizeValue, toIssue } from "../project.js";
 import { extractFileSignals, issuesFromSignals } from "../file-check.js";
-import { filePathFromHookPayload, formatHookFeedback, isStyleFile } from "../hook.js";
+import { filePathFromHookPayload, formatHookFeedback, isStyleFile, runHook } from "../hook.js";
 import { installClient, mergeClaudeHook, mergeMcpServers } from "../install.js";
 import { cssVariableFor, withCssVariableAliases } from "../../scan/token-aliases.js";
 
@@ -33,6 +33,10 @@ describe("value matching", () => {
     expect(findTokensByValue(tokens, "8px").map((t) => t.name)).toEqual(["--space-2"]);
     expect(findTokensByValue(tokens, "4px", "border").map((t) => t.name)).toEqual(["--radius-sm"]);
     expect(findTokensByValue(tokens, "4px", "spacing")).toEqual([]);
+  });
+
+  it("treats rem and px as the same length at the default root size", () => {
+    expect(findTokensByValue(tokens, "0.5rem").map((t) => t.name)).toEqual(["--space-2"]);
   });
 });
 
@@ -103,6 +107,54 @@ describe("Claude Code hook", () => {
     expect(text).toContain("1 design drift issue in src/a.tsx");
     expect(text).toContain("src/a.tsx:4 Hardcoded color #fff -> use var(--color-white)");
   });
+
+  it("does not point to tokens above when none matched", () => {
+    const text = formatHookFeedback("src/a.tsx", {
+      issues: [{ file: "src/a.tsx", line: 4, type: "hardcoded-value", severity: "warning", message: "Hardcoded color #123456 (no matching token)" }],
+      summary: { total: 1, critical: 0, warning: 1, info: 0, fixable: 0 },
+      tokenCount: 4,
+    });
+    expect(text).not.toContain("tokens above");
+    expect(text).toContain("No token holds these values");
+  });
+
+  function repoWithTokens(): string {
+    const dir = mkdtempSync(join(tmpdir(), "buoy-hook-"));
+    mkdirSync(join(dir, ".git"));
+    mkdirSync(join(dir, "src", "deep"), { recursive: true });
+    mkdirSync(join(dir, "node_modules", "x"), { recursive: true });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "h", dependencies: { react: "18" } }));
+    writeFileSync(join(dir, "src", "tokens.css"), ":root { --brand: #2563eb; }\n");
+    const jsx = 'export const A = () => <div style={{ color: "#2563eb" }} />;\n';
+    writeFileSync(join(dir, "src", "deep", "A.tsx"), jsx);
+    writeFileSync(join(dir, "node_modules", "x", "A.tsx"), jsx);
+    return dir;
+  }
+
+  it("finds the repository root from a subdirectory", () => {
+    const dir = repoWithTokens();
+    expect(findRepoRoot(join(dir, "src", "deep"))).toBe(dir);
+  });
+
+  it("uses the repo's tokens when run from a subdirectory with a relative path", async () => {
+    const dir = repoWithTokens();
+    const result = await runHook(join(dir, "src", "deep"), "A.tsx");
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain("var(--brand)");
+  }, 60_000);
+
+  it("reports paths it could not find instead of calling them clean", async () => {
+    const dir = repoWithTokens();
+    const check = await checkDrift({ config: { project: { name: "h" } } as never, projectRoot: dir }, ["src/deep/Missing.tsx"], []);
+    expect(check.notFound).toEqual(["src/deep/Missing.tsx"]);
+    expect(check.note).toContain("no such file");
+  });
+
+  it("skips dependencies and files outside the project", async () => {
+    const dir = repoWithTokens();
+    expect(await runHook(dir, "node_modules/x/A.tsx")).toEqual({ exitCode: 0, message: null });
+    expect(await runHook(join(dir, "src"), "/elsewhere/A.tsx")).toEqual({ exitCode: 0, message: null });
+  }, 60_000);
 });
 
 describe("install", () => {
