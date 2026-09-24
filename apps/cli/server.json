@@ -6,12 +6,12 @@
     "url": "https://github.com/ahoybuoy/buoy",
     "source": "github"
   },
-  "version": "0.7.5",
+  "version": "0.8.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@buoy-design/cli",
-      "version": "0.7.5",
+      "version": "0.8.0",
       "transport": {
         "type": "stdio"
       },
