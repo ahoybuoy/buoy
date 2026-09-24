@@ -21,6 +21,17 @@ describe("classifyFileContext", () => {
     expect(classifyFileContext("src/__stories__/showcase/lifecycle.front-component.tsx")).toBe("test-or-story");
     expect(classifyFileContext("apps/webapp/app/routes/storybook.colors/route.tsx")).toBe("test-or-story");
     expect(classifyFileContext("src/components/Button.tsx", "export const Button = () => <button/>")).toBeNull();
+    // Next.js 2026-09: examples/, bench/ and test/e2e/ stylesheets drove its score to 38.
+    expect(classifyFileContext("test/e2e/next-dynamic-css/src/Content4.module.css")).toBe("test-or-story");
+    expect(classifyFileContext("apps/web/e2e/login.spec.css")).toBe("test-or-story");
+    for (const p of ["examples/cms-buttercms/css/main.css", "bench/basic-app/app/bench.css",
+      "services/hogql-language-service/cmd/demo/assets/style.css", "packages/ui/playground/App.tsx",
+      "evals/evals/agent-043-view-transitions/app/globals.css", "packages/create-next-app/templates/app/js/app/page.module.css"]) {
+      expect(classifyFileContext(p), p).toBe("example-or-demo");
+    }
+    for (const p of ["src/features/testimonials/Card.tsx", "src/latest/Feed.tsx", "apps/web/app/benchmark-results/page.tsx", "src/templates/Invoice.tsx"]) {
+      expect(classifyFileContext(p), p).toBeNull();
+    }
     for (const p of ["packages/surveys/src/styles/preflight.css", "src/normalize.css", "packages/editor/src/styles/github-dark.css", "styles/prism-okaidia.css"]) {
       expect(classifyFileContext(p), p).toBe("third-party");
     }

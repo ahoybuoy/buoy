@@ -40,8 +40,12 @@ export function styleBlocksAsCss(content: string): string {
   return out.join("\n");
 }
 
-export async function checkStylesheets(projectRoot: string, tokens: DesignToken[]): Promise<FileIssue[]> {
-  const files = (await glob(STYLESHEETS, { cwd: projectRoot, ignore: IGNORE, nodir: true })).sort();
+/**
+ * `exclude` is the project's own exclude globs from .buoy.yaml sources: a
+ * folder the user keeps out of the component scan stays out of this one too.
+ */
+export async function checkStylesheets(projectRoot: string, tokens: DesignToken[], exclude: string[] = []): Promise<FileIssue[]> {
+  const files = (await glob(STYLESHEETS, { cwd: projectRoot, ignore: [...IGNORE, ...exclude], nodir: true })).sort();
   const issues: FileIssue[] = [];
   for (const file of files) {
     let content: string;

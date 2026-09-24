@@ -10,10 +10,14 @@
  * so they all agree on what counts.
  */
 
-export type ExemptFileContext = "artwork" | "email" | "og-image" | "test-or-story" | "third-party";
+export type ExemptFileContext = "artwork" | "email" | "og-image" | "test-or-story" | "example-or-demo" | "third-party";
 
 const ARTWORK_PATH = /(^|\/)(icons?|logos?|illustrations?|svgs?|brand(ing)?|flags?|emojis?|avatars?\/presets?)(\/|$)|(^|\/)[\w.-]*(icon|logo|illustration|flag)s?\.(tsx|jsx|vue|svelte|astro)$|\.svg\.(tsx|jsx)$/i;
-const TEST_PATH = /(^|\/)(__tests__|__mocks__|__stories__|mocks?|fixtures?|storybook|\.storybook|stories)(\/|$)|\.(test|spec|stories|story)\.[jt]sx?$|(^|\/)routes\/storybook[./]/i;
+const TEST_PATH = /(^|\/)(__tests__|__mocks__|__stories__|tests?|e2e|cypress|playwright|mocks?|fixtures?|storybook|\.storybook|stories)(\/|$)|\.(test|spec|stories|story)\.[jt]sx?$|(^|\/)routes\/storybook[./]/i;
+// Example apps, demos and benchmarks show how to use a project; they are not
+// its product UI. Next.js scored 38 in 2026-09 almost entirely from examples/,
+// bench/ and test/e2e/ stylesheets.
+const EXAMPLE_PATH = /(^|\/)(examples?|demos?|bench|benchmarks?|playgrounds?|evals?)(\/|$)|(^|\/)create-[\w-]+\/templates?\//i;
 const EMAIL_PATH = /(^|\/)(emails?|email-templates|mail-templates)(\/|$)/i;
 const EMAIL_IMPORT = /from\s+['"](@react-email\/[\w-]+|react-email|jsx-email|mjml|mjml-react|@mjmlio\/[\w-]+)['"]/;
 const OG_PATH = /(^|\/)(opengraph-image|twitter-image|og-image|og)(\.[\w]+)?\.(tsx|jsx|ts|js)$|(^|\/)og(\/|$)/i;
@@ -44,6 +48,7 @@ function intrinsicTags(content: string): Set<string> {
 export function classifyFileContext(path: string, content?: string): ExemptFileContext | null {
   const p = path.replace(/\\/g, "/");
   if (TEST_PATH.test(p)) return "test-or-story";
+  if (EXAMPLE_PATH.test(p)) return "example-or-demo";
   if (THIRD_PARTY_CSS.test(p)) return "third-party";
   if (EMAIL_PATH.test(p) || (content && EMAIL_IMPORT.test(content))) return "email";
   if (OG_PATH.test(p) || (content && OG_IMPORT.test(content))) return "og-image";

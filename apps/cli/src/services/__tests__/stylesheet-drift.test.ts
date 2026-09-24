@@ -4,11 +4,32 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DesignToken } from "@buoy-design/core";
 import { checkStylesheets, styleBlocksAsCss, stylesheetIssuesToDrifts } from "../stylesheet-drift.js";
+import { configuredExcludes } from "../drift-analysis.js";
+import type { BuoyConfig } from "../../config/schema.js";
 
 const token = (name: string, value: DesignToken["value"], category: DesignToken["category"]): DesignToken =>
   ({ id: name, name, category, value, source: { type: "css", path: "style.css" }, aliases: [], usedBy: [], metadata: {}, scannedAt: new Date() }) as DesignToken;
 
 describe("stylesheet drift", () => {
+  it("skips examples, demos, benchmarks, tests and configured excludes", async () => {
+    const root = mkdtempSync(join(tmpdir(), "buoy-css-scope-"));
+    const css = ".a { color: #123456; }\n";
+    for (const dir of ["src", "examples/cms/css", "bench/app", "test/e2e/case", "services/lang/cmd/demo", "legacy"]) {
+      mkdirSync(join(root, dir), { recursive: true });
+      writeFileSync(join(root, dir, "style.css"), css);
+    }
+    const issues = await checkStylesheets(root, [], ["legacy/**"]);
+    expect([...new Set(issues.map((i) => i.file))]).toEqual(["src/style.css"]);
+  });
+
+  it("collects exclude globs from enabled sources only", () => {
+    const config = { sources: {
+      react: { enabled: true, include: [], exclude: ["**/*.test.*", "legacy/**"] },
+      vue: { enabled: false, include: [], exclude: ["old/**"] },
+    } } as unknown as BuoyConfig;
+    expect(configuredExcludes(config)).toEqual(["**/*.test.*", "legacy/**"]);
+  });
+
   it("keeps <style> blocks on their real line numbers", () => {
     const vue = `<template><div class="c"/></template>\n<style scoped>\n.c { color: #fff; }\n</style>`;
     expect(styleBlocksAsCss(vue).split("\n")[2]).toBe(".c { color: #fff; }");

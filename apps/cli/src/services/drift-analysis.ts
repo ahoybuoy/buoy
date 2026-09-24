@@ -62,6 +62,18 @@ export function isDriftTypeEnabled(config: BuoyConfig, type: string): boolean {
 }
 
 /** Content-aware file classification (email imports, SVG-only files), cached per path. */
+/** Every exclude glob configured on an enabled source in .buoy.yaml. */
+export function configuredExcludes(config: BuoyConfig): string[] {
+  const globs = new Set<string>();
+  for (const source of Object.values(config.sources ?? {})) {
+    if (!source || typeof source !== "object") continue;
+    const { enabled, exclude } = source as { enabled?: boolean; exclude?: unknown };
+    if (enabled === false || !Array.isArray(exclude)) continue;
+    for (const pattern of exclude) if (typeof pattern === "string") globs.add(pattern);
+  }
+  return [...globs];
+}
+
 export function createFileClassifier(projectRoot: string): (path: string) => ExemptFileContext | null {
   const cache = new Map<string, ExemptFileContext | null>();
   return (path: string) => {
@@ -858,7 +870,7 @@ export class DriftAnalysisService {
     if (isDriftTypeEnabled(this.config, "hardcoded-value")) {
       onProgress?.("Checking stylesheets...");
       const stylesheetDrifts = stylesheetIssuesToDrifts(
-        await checkStylesheets(this.projectRoot, scannedTokens),
+        await checkStylesheets(this.projectRoot, scannedTokens, configuredExcludes(this.config)),
         this.projectRoot,
       );
       drifts.push(...applySeverityOverrides(stylesheetDrifts, this.config.drift.severity));
