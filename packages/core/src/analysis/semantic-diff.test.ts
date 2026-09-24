@@ -162,6 +162,43 @@ describe("SemanticDiffEngine", () => {
         expect(colorDrift?.severity).toBe("warning");
       });
 
+      it("does not flag artwork files or SVG paint (2026-09 audit)", () => {
+        const logo = createMockComponentWithMetadata("BunLogoIcon", {
+          hardcodedValues: [{ type: "color", value: "#fbf0df", property: "fill", location: "line 9" }],
+        });
+        logo.source = { type: "react", path: "apps/webapp/app/assets/icons/BunLogoIcon.tsx", exportName: "BunLogoIcon" } as Component["source"];
+        const card = createMockComponentWithMetadata("Card", {
+          hardcodedValues: [
+            { type: "color", value: "#fbf0df", property: "fill", location: "line 4" },
+            { type: "color", value: "#333333", property: "color", location: "line 5" },
+          ],
+        });
+        const result = engine.analyzeComponents([logo, card], {});
+        const colour = result.drifts.filter((d) => d.type === "hardcoded-value");
+        expect(colour).toHaveLength(1);
+        expect(colour[0]!.message).toContain("#333333");
+        expect(colour[0]!.message).not.toContain("#fbf0df");
+      });
+
+      it("offers a token only for an exact value; a near miss is reported but not a fix", () => {
+        const components = [
+          createMockComponentWithMetadata("Badge", {
+            hardcodedValues: [
+              { type: "color", value: "#ff0000", property: "color", location: "line 3" },
+              { type: "color", value: "#ef4444", property: "backgroundColor", location: "line 4" },
+            ],
+          }),
+        ];
+        const availableTokens = [
+          createMockToken("--color-danger", "#ff0000", "css"),
+          createMockToken("--color-peach", "#f04848", "css"),
+        ];
+        const result = engine.analyzeComponents(components, { availableTokens });
+        const drift = result.drifts.find((d) => d.type === "hardcoded-value")!;
+        expect(drift.details.tokenSuggestions).toEqual(["#ff0000 → --color-danger"]);
+        expect(drift.details.suggestions!.some((s) => s.includes("#ef4444 is close to --color-peach but not the same value"))).toBe(true);
+      });
+
       it("provides actionable token suggestions when tokens available", () => {
         const components = [
           createMockComponentWithMetadata("Button", {

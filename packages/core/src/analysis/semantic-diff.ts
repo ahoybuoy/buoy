@@ -23,6 +23,7 @@ import {
   type TokenSuggestion,
 } from "./token-suggestions.js";
 import { stringSimilarity as calcStringSimilarity } from "./string-utils.js";
+import { classifyFileContext, isDesignDeclaration, type ExemptFileContext } from "./design-value-rules.js";
 import { MATCHING_CONFIG } from "./config.js";
 
 // Import analyzers
@@ -94,12 +95,21 @@ export interface AnalysisOptions {
     tokens?: RegExp;
   };
   availableTokens?: DesignToken[];
+  /**
+   * Why a component's file should not be checked for hardcoded values
+   * (artwork, email template, OG image, test/story), or null. Defaults to
+   * path-only rules; callers with file access pass a content-aware one.
+   */
+  classifyFile?: (path: string) => ExemptFileContext | null;
 }
 
 export interface FrameworkInfo {
   name: string;
   version: string;
 }
+
+/** A token suggestion counts as a fix only at an exact (normalised) value match. */
+const EXACT_MATCH = 0.999;
 
 export class SemanticDiffEngine {
   // Caches for O(1) lookups
@@ -594,7 +604,13 @@ export class SemanticDiffEngine {
 
   private analyzeHardcodedValues(component: Component, options: AnalysisOptions): DriftSignal[] {
     const drifts: DriftSignal[] = [];
-    const hardcoded = component.metadata.hardcodedValues!;
+    // Artwork, email templates, OG images and tests hold literals on purpose.
+    const path = "path" in component.source ? component.source.path : undefined;
+    if (path && (options.classifyFile ?? ((p: string) => classifyFileContext(p)))(path)) return drifts;
+    // Keep design decisions only: SVG paint (artwork), layout geometry
+    // (width, top, ...), keywords, maths and hairlines are not token drift.
+    const hardcoded = component.metadata.hardcodedValues!.filter((h) => isDesignDeclaration(h.property, h.value));
+    if (hardcoded.length === 0) return drifts;
 
     const colorCount = hardcoded.filter((h) => h.type === "color").length;
     const spacingCount = hardcoded.filter((h) => h.type === "spacing" || h.type === "fontSize").length;
@@ -607,12 +623,16 @@ export class SemanticDiffEngine {
       const colorValues = hardcoded.filter((h) => h.type === "color");
       const suggestions: string[] = [];
       const tokenReplacements: string[] = [];
+      const nearMisses: string[] = [];
 
       for (const cv of colorValues) {
         const suggs = tokenSuggestions.get(cv.value);
         if (suggs?.length) {
           const best = suggs[0]!;
-          tokenReplacements.push(`${cv.value} → ${best.suggestedToken} (${Math.round(best.confidence * 100)}% match)`);
+          // Only an exact value is "use this token". A near miss is a different
+          // value (#ef4444 is not a peach token at 92%); say so, offer no fix.
+          if (best.confidence >= EXACT_MATCH) tokenReplacements.push(`${cv.value} → ${best.suggestedToken}`);
+          else if (best.confidence >= 0.9) nearMisses.push(`${cv.value} is close to ${best.suggestedToken} but not the same value`);
         }
       }
 
@@ -621,6 +641,7 @@ export class SemanticDiffEngine {
           ? `Suggested replacements:\n  ${tokenReplacements.join("\n  ")}`
           : "Replace hardcoded colors with design tokens"
       );
+      suggestions.push(...nearMisses);
 
       drifts.push({
         id: createDriftId("hardcoded-value", component.id, "color"),
@@ -641,12 +662,16 @@ export class SemanticDiffEngine {
       const spacingValues = hardcoded.filter((h) => h.type === "spacing" || h.type === "fontSize");
       const suggestions: string[] = [];
       const tokenReplacements: string[] = [];
+      const nearMisses: string[] = [];
 
       for (const sv of spacingValues) {
         const suggs = tokenSuggestions.get(sv.value);
         if (suggs?.length) {
           const best = suggs[0]!;
-          tokenReplacements.push(`${sv.value} → ${best.suggestedToken} (${Math.round(best.confidence * 100)}% match)`);
+          // Only an exact value is "use this token". A near miss is a different
+          // value (#ef4444 is not a peach token at 92%); say so, offer no fix.
+          if (best.confidence >= EXACT_MATCH) tokenReplacements.push(`${sv.value} → ${best.suggestedToken}`);
+          else if (best.confidence >= 0.9) nearMisses.push(`${sv.value} is close to ${best.suggestedToken} but not the same value`);
         }
       }
 
@@ -655,6 +680,7 @@ export class SemanticDiffEngine {
           ? `Suggested replacements:\n  ${tokenReplacements.join("\n  ")}`
           : "Consider using spacing tokens for consistency"
       );
+      suggestions.push(...nearMisses);
 
       drifts.push({
         id: createDriftId("hardcoded-value", component.id, "spacing"),

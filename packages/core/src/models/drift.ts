@@ -89,7 +89,8 @@ export const DriftDetailsSchema = z.object({
   // Populated by scanner when git info is available, used by `drift explain`
   gitContext: GitContextSchema.optional(),
   // Actionable token suggestions for hardcoded values
-  // Format: "hardcodedValue → tokenName (confidence% match)"
+  // Format: "hardcodedValue → tokenName", exact value matches only.
+  // Near misses go in `suggestions` as guidance, never here.
   tokenSuggestions: z.array(z.string()).optional(),
   // For repeated-pattern drift type
   occurrences: z.number().optional(),

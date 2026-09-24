@@ -337,7 +337,8 @@ export function calculateHealthScore(report: AuditReport): number {
     hasUtilityFramework: false,
     hasDesignSystemLibrary: false,
   };
-  return calculateHealthScorePillar(metrics).score ?? 0;
+  // Legacy callers approximate the component count, so no minimum applies.
+  return calculateHealthScorePillar(metrics, { minComponents: 0 }).score ?? 0;
 }
 
 /**
@@ -355,12 +356,25 @@ export function calculateHealthScore(report: AuditReport): number {
  * In practice, the highest-scoring real-world apps reach ~95.
  * A score of 95 represents near-perfect design system health.
  */
-export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreResult {
+/** Below this many detected components a score says more about the scanner than the code. */
+export const MIN_SCORABLE_COMPONENTS = 5;
+
+/** Hardcoded design values per component at which Value Discipline reaches 0. */
+export const VALUE_DENSITY_FLOOR = 0.3;
+
+export function calculateHealthScorePillar(
+  metrics: HealthMetrics,
+  options: { minComponents?: number } = {},
+): HealthScoreResult {
   const suggestions: string[] = [];
   const frameworks = metrics.detectedFrameworkNames ?? [];
 
-  // No UI surface area — can't evaluate design system health
-  if (metrics.componentCount === 0 && metrics.tokenCount === 0 && (metrics.totalDriftCount ?? 0) === 0) {
+  // Too little UI surface to judge. Scoring it anyway produced "Terrible 14"
+  // for repos where the scanner simply did not recognise the components
+  // (unkey, plausible in the 2026-09 reports): a coverage gap, not a verdict.
+  const minComponents = options.minComponents ?? MIN_SCORABLE_COMPONENTS;
+  const noSurface = metrics.componentCount === 0 && metrics.tokenCount === 0 && (metrics.totalDriftCount ?? 0) === 0;
+  if (noSurface || metrics.componentCount < minComponents) {
     return {
       score: null,
       tier: 'N/A' as const,
@@ -370,7 +384,9 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
         consistency: { name: 'Consistency', score: 0, maxScore: 10, description: 'Naming convention adherence' },
         criticalIssues: { name: 'Critical Issues', score: 0, maxScore: 10, description: 'Accessibility and critical failures' },
       },
-      suggestions: ['No UI components or design tokens detected — this repo may not need design system health tracking'],
+      suggestions: [noSurface
+        ? 'No UI components or design tokens detected — this repo may not need design system health tracking'
+        : `Only ${metrics.componentCount} UI component${metrics.componentCount === 1 ? '' : 's'} detected, too few to score. If this repo has more, Buoy may not recognise its framework yet.`],
       metrics,
     };
   }
@@ -391,11 +407,12 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
     hardcodedDensity + deadCodeDensity * 0.3,
     totalDriftDensity * 0.5,
   );
-  // Treat near-zero density as perfect: repos with <0.1 hardcoded values per component
-  // are effectively clean (e.g., 193 components with 12 hardcoded values = 0.06/comp)
-  const effectiveDensity = density < 0.1 ? 0 : density;
-  // Continuous scoring (no rounding) — round only the final total for more granular scores
-  const valueDisciplineRaw = 60 * clamp(1 - effectiveDensity / 2, 0, 1);
+  // Smooth curve with no free zone: every real hardcoded value costs a little,
+  // and 0.3 per component (roughly one in three components) empties the pillar.
+  // The old "<0.1 per component counts as perfect" rule offset findings that
+  // were mostly noise; once icons, email templates and layout values stopped
+  // counting (2026-09), it scored repos with 87 real literals as 100.
+  const valueDisciplineRaw = 60 * clamp(1 - density / VALUE_DENSITY_FLOOR, 0, 1);
   const valueDisciplineScore = Math.round(valueDisciplineRaw);
 
   if (metrics.hardcodedValueCount > 0) {
@@ -653,23 +670,16 @@ export function calculateHealthScorePillar(metrics: HealthMetrics): HealthScoreR
   // Total uses raw values, rounded once at the end for maximum granularity
   let total = Math.round(valueDisciplineRaw + tokenHealthScore + scaledConsistencyRaw + scaledCriticalRaw);
 
-  // Drift density penalty: prevent high-drift repos from scoring "Great"
-  // Apps with many drift signals relative to their size should be capped
+  // Drift density guard: a codebase with a lot of drift per component cannot
+  // score "Great". This used to cap on the absolute count (>200 findings ->
+  // 69), which put every large codebase on exactly 69 whatever its quality:
+  // 11 of 20 public reports in 2026-09. Size is not drift; density is.
   const totalDrift = metrics.totalDriftCount ?? metrics.hardcodedValueCount;
   if (totalDrift > 0 && metrics.componentCount > 0) {
     const driftPerComponent = totalDrift / metrics.componentCount;
-    if (totalDrift > 200) {
-      // >200 drift signals: cap at OK (69)
-      total = Math.min(total, 69);
-    } else if (totalDrift > 100) {
-      // >100 drift: graduated cap based on density (74-84)
-      const densityFactor = clamp(driftPerComponent, 0, 1);
-      const cap = Math.round(74 + (1 - densityFactor) * 10);
-      total = Math.min(total, cap);
-    } else if (totalDrift > 50 && driftPerComponent > 0.3) {
-      // >50 drift + high density: cap at 89
-      total = Math.min(total, 89);
-    }
+    if (driftPerComponent > 1) total = Math.min(total, 69);
+    else if (driftPerComponent > 0.5) total = Math.min(total, 79);
+    else if (driftPerComponent > 0.3) total = Math.min(total, 89);
   }
 
   // Ensure every scored app gets at least 1 suggestion

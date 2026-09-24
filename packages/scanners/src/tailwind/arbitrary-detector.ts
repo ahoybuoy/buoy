@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { glob } from 'glob';
 import { relative } from 'path';
 import type { DriftSignal, DriftSource } from '@buoy-design/core';
+import { classifyFileContext, isTailwindDesignValue } from '@buoy-design/core';
 
 export interface ArbitraryValue {
   type: 'color' | 'spacing' | 'size' | 'timing' | 'grid' | 'css-property' | 'border' | 'layout' | 'transform' | 'filter' | 'typography' | 'visual' | 'other';
@@ -21,7 +22,9 @@ export interface ArbitraryDetectorConfig {
 // Common modifiers that can prefix arbitrary value classes
 // Handles: dark:, before:, after:, hover:, focus:, lg:, sm:, @md:, @min-[28rem]:, has-[>svg]:, etc.
 // Also handles arbitrary variant selectors like [&>svg]:, [&_pre]:, [&>div]:
-const MODIFIER_PREFIX = '(?:(?:@(?:min|max)-\\[[^\\]]+\\]|@[a-z]+|[a-z-]+|has-\\[[^\\]]+\\]|\\[&[^\\]]+\\]):)*';
+// The leading lookbehind stops a pattern starting mid-word: without it
+// `border-[var(--x)]` also matched as `order-[...]` and `shadow-[...]` as `w-[...]`.
+const MODIFIER_PREFIX = '(?<![\\w-])(?:(?:@(?:min|max)-\\[[^\\]]+\\]|@[a-z]+|[a-z-]+|has-\\[[^\\]]+\\]|\\[&[^\\]]+\\]):)*';
 
 // Negative prefix for classes like -translate-x-[20px], -z-[1], -order-[1]
 const NEGATIVE_PREFIX = '-?';
@@ -215,9 +218,11 @@ export class ArbitraryValueDetector {
 
   private scanFile(filePath: string): ArbitraryValue[] {
     const content = readFileSync(filePath, 'utf-8');
+    const relativePath = relative(this.config.projectRoot, filePath);
+    // Icons, email templates, OG images and tests hold literals on purpose.
+    if (classifyFileContext(relativePath, content)) return [];
     const lines = content.split('\n');
     const values: ArbitraryValue[] = [];
-    const relativePath = relative(this.config.projectRoot, filePath);
     const seen = new Set<string>(); // Track seen matches to avoid duplicates
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
@@ -347,14 +352,14 @@ export class ArbitraryValueDetector {
         }
       }
 
-      // Check for font size arbitrary values
+      // Check for font size arbitrary values (typography, not layout size)
       for (const match of line.matchAll(ARBITRARY_PATTERNS.fontSize)) {
         const fullClass = match[0];
         const key = `${lineNum}:${match.index}:${fullClass}`;
         if (!seen.has(key)) {
           seen.add(key);
           values.push({
-            type: 'size',
+            type: 'typography',
             value: match[1]!,
             fullClass,
             file: relativePath,
@@ -860,7 +865,10 @@ export class ArbitraryValueDetector {
       }
     }
 
-    return values;
+    // Only literal design values (colour, spacing, font size, radius, shadow,
+    // type scale, border width). Layout maths, mechanics, keywords and token
+    // references are correct code, not drift.
+    return values.filter((v) => isTailwindDesignValue(v.fullClass));
   }
 
   private isHardcodedColor(value: string): boolean {

@@ -17,7 +17,8 @@ import type {
 } from "@buoy-design/core";
 import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
-import { getSeverityWeight } from "@buoy-design/core";
+import { getSeverityWeight, classifyFileContext, type ExemptFileContext } from "@buoy-design/core";
+import { readFileSync } from "fs";
 import {
   TailwindScanner,
   ScanCache,
@@ -36,6 +37,46 @@ import { minimatch } from "minimatch";
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import { dirname, extname, resolve } from "path";
+
+/**
+ * Finding types that proved unreliable in the 2026-09 audit of six well-known
+ * codebases, so they are off unless a repo opts in via
+ * `drift.types.<type>.enabled: true`:
+ * - unused-component: 9 to 11 of every 12 sampled were used (lazy routes,
+ *   re-exports, `Sidebar.Item` parts, email templates rendered by name)
+ * - semantic-mismatch: flagged every component for having its own props type
+ * - naming-inconsistency: flagged dot-notation parts, Storybook's `Story_`, and
+ *   numbers whose name contains "Click"
+ * - unused-token: 5 to 9 of every 10 sampled were used from JS theme objects,
+ *   other stylesheets or editor themes, which a var() search cannot see
+ */
+export const OPT_IN_DRIFT_TYPES = new Set(["unused-component", "semantic-mismatch", "naming-inconsistency", "unused-token"]);
+
+/** Repeated class strings are only worth a finding when they are long and widespread. */
+export const REPEATED_PATTERN_MIN = { occurrences: 4, files: 3, classes: 4 };
+
+export function isDriftTypeEnabled(config: BuoyConfig, type: string): boolean {
+  const configured = (config.drift?.types as Record<string, { enabled?: boolean }> | undefined)?.[type]?.enabled;
+  if (OPT_IN_DRIFT_TYPES.has(type)) return configured === true;
+  return configured !== false;
+}
+
+/** Content-aware file classification (email imports, SVG-only files), cached per path. */
+export function createFileClassifier(projectRoot: string): (path: string) => ExemptFileContext | null {
+  const cache = new Map<string, ExemptFileContext | null>();
+  return (path: string) => {
+    if (cache.has(path)) return cache.get(path)!;
+    let content: string | undefined;
+    try {
+      content = readFileSync(resolve(projectRoot, path), "utf-8");
+    } catch {
+      content = undefined;
+    }
+    const result = classifyFileContext(path, content);
+    cache.set(path, result);
+    return result;
+  };
+}
 
 export interface DriftAnalysisOptions {
   /** Callback for progress updates */
@@ -560,10 +601,11 @@ export class DriftAnalysisService {
     const engine = new SemanticDiffEngine();
     const diffResult = engine.analyzeComponents(components, {
       checkDeprecated: true,
-      checkNaming: true,
+      checkNaming: isDriftTypeEnabled(this.config, "naming-inconsistency"),
       checkDocumentation: true,
       checkAccessibility: true,
       availableTokens: scannedTokens,
+      classifyFile: createFileClassifier(this.projectRoot),
     });
 
     let drifts: DriftSignal[] = applySeverityOverrides(
@@ -683,11 +725,11 @@ export class DriftAnalysisService {
       (c) => !isEntryPointComponent(c),
     );
 
-    // Check for unused components (excluding entry points)
-    const unusedComponentDrifts = engine.checkUnusedComponents(
-      nonEntryPointComponents,
-      componentUsageMap,
-    );
+    // Check for unused components (excluding entry points). Opt-in: see
+    // OPT_IN_DRIFT_TYPES for why.
+    const unusedComponentDrifts = isDriftTypeEnabled(this.config, "unused-component")
+      ? engine.checkUnusedComponents(nonEntryPointComponents, componentUsageMap)
+      : [];
     if (unusedComponentDrifts.length > 0) {
       drifts.push(
         ...applySeverityOverrides(
@@ -718,10 +760,9 @@ export class DriftAnalysisService {
     );
 
     // Check for unused tokens
-    const unusedTokenDrifts = engine.checkUnusedTokens(
-      userTokens,
-      tokenUsageMap,
-    );
+    const unusedTokenDrifts = isDriftTypeEnabled(this.config, "unused-token")
+      ? engine.checkUnusedTokens(userTokens, tokenUsageMap)
+      : [];
     if (unusedTokenDrifts.length > 0) {
       drifts.push(
         ...applySeverityOverrides(
@@ -822,9 +863,16 @@ export class DriftAnalysisService {
     };
     if (repeatedPatternConfig.enabled !== false) {
       onProgress?.("Detecting repeated patterns...");
-      const patternDrifts = await this.detectRepeatedPatterns(
-        repeatedPatternConfig,
-      );
+      const patternDrifts = (await this.detectRepeatedPatterns(repeatedPatternConfig)).filter((d) => {
+        // An explicit minOccurrences means the repo chose its own bar.
+        if (repeatedPatternConfig.minOccurrences !== undefined) return true;
+        const locations = (d.details?.locations as string[] | undefined) ?? [];
+        const files = new Set(locations.map((l) => l.split(":")[0]));
+        const classes = (d.source.entityName ?? "").split(/\s+/).filter(Boolean).length;
+        return ((d.details?.occurrences as number | undefined) ?? locations.length) >= REPEATED_PATTERN_MIN.occurrences
+          && files.size >= REPEATED_PATTERN_MIN.files
+          && classes >= REPEATED_PATTERN_MIN.classes;
+      });
       drifts.push(...patternDrifts);
       if (patternDrifts.length > 0) {
         onProgress?.(`Found ${patternDrifts.length} repeated pattern issues`);
@@ -896,6 +944,9 @@ export class DriftAnalysisService {
     if (minSeverity) {
       drifts = filterBySeverity(drifts, minSeverity);
     }
+
+    // Step 3.5: Drop opt-in types unless the repo enabled them
+    drifts = drifts.filter((d) => isDriftTypeEnabled(this.config, d.type));
 
     // Step 4: Apply type filter
     if (filterType) {

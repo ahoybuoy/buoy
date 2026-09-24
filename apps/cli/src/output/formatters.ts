@@ -753,16 +753,17 @@ export function formatDriftTree(drifts: DriftSignal[], fileCount: number = 0): s
 
         const firstSugg = tokenSuggs?.[0];
         if (firstSugg) {
-          // Parse: "value → tokenName (N% match)"
-          const suggMatch = firstSugg.match(/^(.+?)\s*→\s*(.+?)\s*\((\d+)%/);
+          // Parse: "value → tokenName" (exact matches only since 0.8; older
+          // output carried a "(N% match)" suffix, still accepted)
+          const suggMatch = firstSugg.match(/^(.+?)\s*→\s*(.+?)(?:\s*\((\d+)%[^)]*\))?$/);
           if (suggMatch) {
             const value = suggMatch[1] ?? '';
             const tokenName = suggMatch[2] ?? '';
-            const confidence = suggMatch[3] ?? '';
+            const confidence = suggMatch[3];
             const displayValue = colorMatch?.[0]
               ? chalk.hex(colorMatch[0])(value.trim())
               : chalk.dim(value.trim());
-            issueText = `${displayValue} → ${chalk.cyan(tokenName.trim())} ${chalk.dim(`(${confidence}%)`)}`;
+            issueText = `${displayValue} → ${chalk.cyan(tokenName.trim())}${confidence ? ' ' + chalk.dim(`(${confidence}%)`) : ''}`;
           } else {
             issueText = chalk.cyan(firstSugg);
           }

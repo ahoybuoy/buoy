@@ -99,3 +99,12 @@ export {
   type ComponentContext,
   type ComponentWithContext,
 } from "./analyzers/example-analyzer.js";
+
+export {
+  classifyFileContext,
+  isSvgPaintProperty,
+  isDesignDeclaration,
+  isTailwindDesignValue,
+  parseArbitraryClass,
+  type ExemptFileContext,
+} from "./design-value-rules.js";

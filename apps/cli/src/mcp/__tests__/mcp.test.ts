@@ -138,3 +138,14 @@ describe("css variable aliases", () => {
     expect(findTokensByValue(out, "#fff").map((t) => t.name)).toContain("--cds-color-white");
   });
 });
+
+describe("design-value rules in the agent hook", () => {
+  it("leaves artwork, email templates and SVG paint alone", () => {
+    const logo = 'export const Logo = () => (<svg><path style={{ fill: "#fbf0df" }} /></svg>);\n';
+    expect(extractFileSignals(logo, "src/Logo.tsx")).toEqual([]);
+    const email = "import { Button } from '@react-email/components';\nexport const E = () => <Button style={{ color: '#ffffff' }} />;\n";
+    expect(extractFileSignals(email, "src/Welcome.tsx")).toEqual([]);
+    const card = 'export const C = () => (<div style={{ color: "#333333" }}><svg><path fill="#ff0000" /></svg></div>);\n';
+    expect(extractFileSignals(card, "src/Card.tsx").map((s) => s.value)).toEqual(["#333333"]);
+  });
+});

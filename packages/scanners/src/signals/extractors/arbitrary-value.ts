@@ -1,7 +1,8 @@
 import type { RawSignal, FileType } from '../types.js';
 import { createSignalId } from '../types.js';
+import { classifyFileContext, isTailwindDesignValue } from '@buoy-design/core';
 
-const ARBITRARY_VALUE_PATTERN = /\b([\w-]+)-\[([^\]]+)\]/g;
+const ARBITRARY_VALUE_PATTERN = /(?<![\w-])([\w-]+)-\[([^\]]+)\]/g;
 
 function getFileType(path: string): FileType {
   if (path.endsWith('.tsx')) return 'tsx';
@@ -25,6 +26,8 @@ export function extractArbitraryValueSignals(
   path: string,
 ): RawSignal[] {
   const signals: RawSignal[] = [];
+  // Icons, email templates, OG images and tests hold literals on purpose.
+  if (classifyFileContext(path, content)) return signals;
   const lines = content.split('\n');
   const fileType = getFileType(path);
 
@@ -39,6 +42,8 @@ export function extractArbitraryValueSignals(
       const rawValue = match[2]!;
 
       if (isTokenReference(rawValue)) continue;
+      // Only literal design values; layout maths, mechanics and keywords are fine.
+      if (!isTailwindDesignValue(fullMatch)) continue;
 
       signals.push({
         id: createSignalId('arbitrary-value', path, i + 1, fullMatch),

@@ -29,6 +29,7 @@ import {
   type RawSignal,
   type SignalContext,
 } from "@buoy-design/scanners";
+import { classifyFileContext, isSvgPaintProperty } from "@buoy-design/core";
 import { findTokensByValue } from "./project.js";
 
 type Extractor =
@@ -153,6 +154,8 @@ export function extractFileSignals(content: string, path: string): RawSignal[] {
   const isCss = /\.(css|scss)$/.test(path);
   const isJsx = /\.(tsx|jsx)$/.test(path);
   if (!isCss && !isJsx) return [];
+  // Icons, email templates, OG images and tests hold literals on purpose.
+  if (classifyFileContext(path, content)) return [];
   const ctx: SignalContext = {
     fileType: isCss ? "css" : "tsx",
     framework: isJsx ? "react" : "css",
@@ -174,6 +177,8 @@ export function extractFileSignals(content: string, path: string): RawSignal[] {
         const property = (m[1] ?? "").trim();
         const extractor = table[property];
         if (!extractor) continue;
+        // fill/stroke/stop-color are SVG artwork, not themed UI colour.
+        if (isSvgPaintProperty(property)) continue;
         let value = isCss ? (m[2] ?? "").trim() : (m[2] ?? m[3] ?? m[4]);
         if (value === undefined || value === "") continue;
         // Bare numbers in JSX style objects and props are pixels.

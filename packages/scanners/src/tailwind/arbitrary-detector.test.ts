@@ -24,6 +24,24 @@ describe("ArbitraryValueDetector", () => {
     vi.restoreAllMocks();
   });
 
+  describe("design-value rules (2026-09 audit)", () => {
+    it("does not start a match mid-word (border-[x] is not order-[x], shadow-[x] is not w-[x])", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Card.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`<div className="border-[var(--brand)] shadow-[0_4px_12px_#0001]" />`);
+      const values = await new ArbitraryValueDetector({ projectRoot: mockProjectRoot }).detect();
+      expect(values.map((v) => v.fullClass)).toEqual(["shadow-[0_4px_12px_#0001]"]);
+    });
+
+    it("skips artwork, email templates, OG images and tests", async () => {
+      for (const file of ["src/icons/BunLogoIcon.tsx", "packages/email/src/templates/welcome.tsx", "app/opengraph-image.tsx", "src/Button.stories.tsx"]) {
+        vi.mocked(glob.glob).mockResolvedValue([`/test/project/${file}`]);
+        vi.mocked(fs.readFileSync).mockReturnValue(`<div className="bg-[#fbf0df] p-[7px]" />`);
+        const values = await new ArbitraryValueDetector({ projectRoot: mockProjectRoot }).detect();
+        expect(values, file).toHaveLength(0);
+      }
+    });
+  });
+
   describe("detect", () => {
     it("detects hardcoded color values", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Button.tsx"]);
@@ -102,7 +120,7 @@ describe("ArbitraryValueDetector", () => {
       expect(spacingValues.map((v) => v.value)).toContain("10px");
     });
 
-    it("detects size arbitrary values", async () => {
+    it("ignores size arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Box.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="w-[100px] h-[50vh] min-w-[300px]">
@@ -116,14 +134,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const sizeValues = values.filter((v) => v.type === "size");
-      expect(sizeValues).toHaveLength(3);
-      expect(sizeValues.map((v) => v.value)).toContain("100px");
-      expect(sizeValues.map((v) => v.value)).toContain("50vh");
-      expect(sizeValues.map((v) => v.value)).toContain("300px");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects font size arbitrary values", async () => {
+    it("detects font size arbitrary values as typography", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Text.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <span className="text-[14px] text-[1.5rem]">
@@ -137,7 +154,7 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const sizeValues = values.filter((v) => v.type === "size");
+      const sizeValues = values.filter((v) => v.type === "typography");
       expect(sizeValues).toHaveLength(2);
     });
 
@@ -263,8 +280,8 @@ describe("ArbitraryValueDetector", () => {
 
       const signals = await detector.detectAsDriftSignals();
 
-      // Should have signals for color, spacing, and size
-      expect(signals).toHaveLength(3);
+      // Colour and spacing; the one-off width w-[100px] is layout, not drift.
+      expect(signals).toHaveLength(2);
     });
 
     it("assigns warning severity to color values", async () => {
@@ -339,7 +356,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("pseudo-class prefixed arbitrary values", () => {
-    it("detects before: and after: prefixed arbitrary values", async () => {
+    it("ignores before: and after: prefixed arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Next.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="before:h-[300px] before:w-[480px] after:h-[180px] after:w-[240px]">
@@ -353,10 +370,10 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const sizeValues = values.filter((v) => v.type === "size");
-      expect(sizeValues).toHaveLength(4);
-      expect(sizeValues.map((v) => v.fullClass)).toContain("before:h-[300px]");
-      expect(sizeValues.map((v) => v.fullClass)).toContain("after:w-[240px]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
     it("detects dark: prefixed arbitrary color values", async () => {
@@ -381,7 +398,7 @@ describe("ArbitraryValueDetector", () => {
     it("detects nested modifiers with arbitrary values", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Nested.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
-        <div className="before:lg:h-[360px] after:dark:via-[#0141ff]">
+        <div className="before:lg:p-[36px] after:dark:via-[#0141ff]">
           Nested modifiers
         </div>
       `);
@@ -416,7 +433,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("grid template arbitrary values", () => {
-    it("detects grid-cols with arbitrary values", async () => {
+    it("ignores grid-cols with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Grid.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="grid-cols-[repeat(auto-fill,minmax(350px,1fr))] grid-cols-[.75fr_1fr]">
@@ -430,12 +447,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.map((v) => v.fullClass)).toContain("grid-cols-[repeat(auto-fill,minmax(350px,1fr))]");
-      expect(values.map((v) => v.fullClass)).toContain("grid-cols-[.75fr_1fr]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects grid-rows with arbitrary values", async () => {
+    it("ignores grid-rows with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Grid.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="grid-rows-[auto_1fr_auto]">
@@ -449,8 +467,10 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(1);
-      expect(values[0]!.fullClass).toBe("grid-rows-[auto_1fr_auto]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
@@ -475,7 +495,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("duration arbitrary values", () => {
-    it("detects duration with arbitrary values", async () => {
+    it("ignores duration with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Transition.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="duration-[5s] delay-[200ms] transition-[opacity,transform]">
@@ -489,12 +509,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(2);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("arbitrary CSS properties", () => {
-    it("detects arbitrary CSS custom properties", async () => {
+    it("ignores arbitrary CSS custom properties (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/CustomProps.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="[--anchor-gap:--spacing(1)] [--anchor-max-height:--spacing(60)]">
@@ -508,8 +531,10 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values[0]!.type).toBe("css-property");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
@@ -535,7 +560,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("container query arbitrary values", () => {
-    it("detects container query prefixed arbitrary values", async () => {
+    it("ignores container query prefixed arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Container.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="@min-[28rem]/field-group:grid @md/field-group:max-w-[200px]">
@@ -549,7 +574,10 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(1);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
@@ -575,7 +603,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("aspect ratio arbitrary values", () => {
-    it("detects aspect with arbitrary values", async () => {
+    it("ignores aspect with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Aspect.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="aspect-[2/0.5] aspect-[16/9]">
@@ -589,13 +617,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.every((v) => v.type === "layout")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("transform arbitrary values", () => {
-    it("detects translate with arbitrary values", async () => {
+    it("ignores translate with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Transform.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="translate-x-[10px] translate-y-[50%] -translate-x-[20px]">
@@ -609,11 +639,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(3);
-      expect(values.every((v) => v.type === "transform")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects rotate with arbitrary values", async () => {
+    it("ignores rotate with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Rotate.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="rotate-[45deg] -rotate-[90deg]">
@@ -627,11 +659,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.every((v) => v.type === "transform")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects scale with arbitrary values", async () => {
+    it("ignores scale with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Scale.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="scale-[1.1] scale-x-[0.9] scale-y-[1.2]">
@@ -645,11 +679,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(3);
-      expect(values.every((v) => v.type === "transform")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects skew with arbitrary values", async () => {
+    it("ignores skew with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Skew.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="skew-x-[12deg] skew-y-[6deg]">
@@ -663,13 +699,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.every((v) => v.type === "transform")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("filter arbitrary values", () => {
-    it("detects blur with arbitrary values", async () => {
+    it("ignores blur with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Blur.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="blur-[2px] blur-[0.5rem]">
@@ -683,11 +721,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.every((v) => v.type === "filter")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects brightness and contrast with arbitrary values", async () => {
+    it("ignores brightness and contrast with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/BrightnessContrast.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="brightness-[1.25] contrast-[1.1]">
@@ -701,11 +741,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.every((v) => v.type === "filter")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects saturate and hue-rotate with arbitrary values", async () => {
+    it("ignores saturate and hue-rotate with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SaturateHue.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="saturate-[1.2] hue-rotate-[90deg]">
@@ -719,14 +761,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      // Filter for filter-type values specifically
-      const filterValues = values.filter((v) => v.type === "filter");
-      expect(filterValues).toHaveLength(2);
-      expect(filterValues.map((v) => v.fullClass)).toContain("saturate-[1.2]");
-      expect(filterValues.map((v) => v.fullClass)).toContain("hue-rotate-[90deg]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects invert and sepia with arbitrary values", async () => {
+    it("ignores invert and sepia with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/InvertSepia.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="invert-[0.5] sepia-[0.75]">
@@ -740,13 +781,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.every((v) => v.type === "filter")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("backdrop filter arbitrary values", () => {
-    it("detects backdrop-blur and backdrop-brightness with arbitrary values", async () => {
+    it("ignores backdrop-blur and backdrop-brightness with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Backdrop.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="backdrop-blur-[4px] backdrop-brightness-[0.5] backdrop-contrast-[1.2]">
@@ -760,17 +803,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      // Filter for filter-type values specifically (both regular and backdrop filters are 'filter' type)
-      const filterValues = values.filter((v) => v.type === "filter");
-      expect(filterValues).toHaveLength(3);
-      expect(filterValues.map((v) => v.fullClass)).toContain("backdrop-blur-[4px]");
-      expect(filterValues.map((v) => v.fullClass)).toContain("backdrop-brightness-[0.5]");
-      expect(filterValues.map((v) => v.fullClass)).toContain("backdrop-contrast-[1.2]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("z-index arbitrary values", () => {
-    it("detects z with arbitrary values", async () => {
+    it("ignores z with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/ZIndex.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="z-[100] z-[9999] -z-[1]">
@@ -784,13 +825,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(3);
-      expect(values.every((v) => v.type === "layout")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("opacity arbitrary values", () => {
-    it("detects opacity with arbitrary values", async () => {
+    it("ignores opacity with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Opacity.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="opacity-[0.85] opacity-[.5] opacity-[33%]">
@@ -804,8 +847,10 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(3);
-      expect(values.every((v) => v.type === "visual")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
@@ -866,7 +911,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("flex/layout arbitrary values", () => {
-    it("detects basis with arbitrary values", async () => {
+    it("ignores basis with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Basis.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="basis-[25%] basis-[200px]">
@@ -880,11 +925,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.every((v) => v.type === "layout")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects grow and shrink with arbitrary values", async () => {
+    it("ignores grow and shrink with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/GrowShrink.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="grow-[2] shrink-[0]">
@@ -898,14 +945,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      // Filter for layout-type values specifically
-      const layoutValues = values.filter((v) => v.type === "layout");
-      expect(layoutValues).toHaveLength(2);
-      expect(layoutValues.map((v) => v.fullClass)).toContain("grow-[2]");
-      expect(layoutValues.map((v) => v.fullClass)).toContain("shrink-[0]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects order with arbitrary values", async () => {
+    it("ignores order with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Order.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="order-[13] -order-[1]">
@@ -919,11 +965,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.every((v) => v.type === "layout")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects columns with arbitrary values", async () => {
+    it("ignores columns with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Columns.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="columns-[3] columns-[200px]">
@@ -937,8 +985,10 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values).toHaveLength(2);
-      expect(values.every((v) => v.type === "layout")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
@@ -1025,7 +1075,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("arbitrary variant selectors with values", () => {
-    it("detects size values inside arbitrary variant selectors", async () => {
+    it("ignores size values inside arbitrary variant selectors (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/ArbitraryVariant.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="[&>svg]:h-[0.9rem] [&>svg]:w-[0.9rem] [&>div]:h-[137px] [&_pre]:max-h-[650px]">
@@ -1039,11 +1089,10 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const sizeValues = values.filter((v) => v.type === "size");
-      expect(sizeValues.length).toBeGreaterThanOrEqual(4);
-      expect(sizeValues.map((v) => v.fullClass)).toContain("[&>svg]:h-[0.9rem]");
-      expect(sizeValues.map((v) => v.fullClass)).toContain("[&>div]:h-[137px]");
-      expect(sizeValues.map((v) => v.fullClass)).toContain("[&_pre]:max-h-[650px]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
     it("detects spacing values inside arbitrary variant selectors", async () => {
@@ -1081,7 +1130,8 @@ describe("ArbitraryValueDetector", () => {
       const values = await detector.detect();
 
       const borderValues = values.filter((v) => v.type === "border");
-      expect(borderValues.length).toBeGreaterThanOrEqual(2);
+      // rounded-[calc(...)] is derived from a token; only the 4px literal is drift.
+      expect(borderValues.map((v) => v.fullClass)).toEqual(["[&_button]:rounded-[4px]"]);
     });
   });
 
@@ -1100,15 +1150,14 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      // Shadow values should be detected - NOT as colors
-      expect(values.length).toBeGreaterThanOrEqual(1);
-      // The shadow-[...] patterns that contain HSL/rgba should be detected
-      expect(values.some((v) => v.fullClass.includes("shadow-[0_0_0_1px_hsl"))).toBe(true);
+      // The literal shadow is drift; the one whose colour is a token is not.
+      expect(values.map((v) => v.fullClass)).toEqual(["hover:shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)]"]);
+      expect(values.every((v) => v.type !== "color")).toBe(true);
     });
   });
 
   describe("line-clamp arbitrary values", () => {
-    it("detects line-clamp with arbitrary values", async () => {
+    it("ignores line-clamp with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/LineClamp.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <span className="line-clamp-[3] [&>span]:line-clamp-[2]">
@@ -1122,13 +1171,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(2);
-      expect(values.some((v) => v.fullClass.includes("line-clamp-[3]"))).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("text-[size] distinct from text-[color]", () => {
-    it("detects text-[1.05rem] as size, not color", async () => {
+    it("detects text-[1.05rem] as typography, not color", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/TextSize.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <p className="text-[1.05rem] text-[15px] text-[0.875em]">
@@ -1142,7 +1193,7 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const sizeValues = values.filter((v) => v.type === "size");
+      const sizeValues = values.filter((v) => v.type === "typography");
       expect(sizeValues.length).toBeGreaterThanOrEqual(3);
       expect(sizeValues.map((v) => v.value)).toContain("1.05rem");
     });
@@ -1185,8 +1236,10 @@ describe("ArbitraryValueDetector", () => {
       const values = await detector.detect();
 
       const borderValues = values.filter((v) => v.type === "border");
-      expect(borderValues).toHaveLength(4);
+      // A 1px hairline is an idiom, not a scale value.
+      expect(borderValues).toHaveLength(3);
       expect(borderValues.map((v) => v.fullClass)).toContain("border-t-[2px]");
+      expect(borderValues.map((v) => v.fullClass)).not.toContain("border-l-[1px]");
     });
 
     it("does not treat border-[#color] as width", async () => {
@@ -1212,7 +1265,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("transform-origin arbitrary values", () => {
-    it("detects origin-[...] values", async () => {
+    it("ignores origin-[...] values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Origin.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="origin-[--radix-dropdown-menu-content-transform-origin] origin-[center_bottom] origin-[50%_50%]">
@@ -1226,15 +1279,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const transformValues = values.filter((v) => v.type === "transform");
-      expect(transformValues).toHaveLength(3);
-      expect(transformValues.map((v) => v.fullClass)).toContain("origin-[--radix-dropdown-menu-content-transform-origin]");
-      expect(transformValues.map((v) => v.fullClass)).toContain("origin-[center_bottom]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("grid shorthand arbitrary values", () => {
-    it("detects cols-[...] shorthand for grid-template-columns", async () => {
+    it("ignores cols-[...] shorthand for grid-template-columns (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/GridShort.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="cols-[repeat(auto-fill,minmax(350px,1fr))] cols-[1fr_2fr_1fr]">
@@ -1248,12 +1301,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const gridValues = values.filter((v) => v.type === "grid");
-      expect(gridValues).toHaveLength(2);
-      expect(gridValues.map((v) => v.fullClass)).toContain("cols-[repeat(auto-fill,minmax(350px,1fr))]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects rows-[...] shorthand for grid-template-rows", async () => {
+    it("ignores rows-[...] shorthand for grid-template-rows (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/GridRowsShort.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="rows-[auto_1fr_auto] rows-[100px_auto]">
@@ -1267,14 +1321,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const gridValues = values.filter((v) => v.type === "grid");
-      expect(gridValues).toHaveLength(2);
-      expect(gridValues.map((v) => v.fullClass)).toContain("rows-[auto_1fr_auto]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("content arbitrary values", () => {
-    it("detects content-[''] and content-[...] values", async () => {
+    it("ignores content-[''] and content-[...] values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Content.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="before:content-[''] after:content-['*'] content-['Hello']">
@@ -1288,14 +1343,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const contentValues = values.filter((v) => v.type === "other" || v.type === "css-property");
-      expect(contentValues.length).toBeGreaterThanOrEqual(3);
-      expect(values.some((v) => v.fullClass.includes("content-['']"))).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("size-[...] arbitrary values", () => {
-    it("detects size-[...] for width and height simultaneously", async () => {
+    it("ignores size-[...] for width and height simultaneously (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Size.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="size-[100px] size-[50%] size-[--cell-size]">
@@ -1309,14 +1365,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const sizeValues = values.filter((v) => v.type === "size");
-      expect(sizeValues).toHaveLength(3);
-      expect(sizeValues.map((v) => v.fullClass)).toContain("size-[100px]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("stroke arbitrary values", () => {
-    it("detects stroke-[width] as border type (not color)", async () => {
+    it("ignores stroke-[width] as border type (not color) (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SVG.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <svg className="stroke-[2px] stroke-[1.5px] stroke-[0.5rem]">
@@ -1330,18 +1387,19 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const borderValues = values.filter((v) => v.type === "border");
-      expect(borderValues).toHaveLength(3);
-      expect(borderValues.map((v) => v.fullClass)).toContain("stroke-[2px]");
-      expect(borderValues.map((v) => v.fullClass)).toContain("stroke-[1.5px]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
     it("detects stroke-[#color] as color type", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SVGColor.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
-        <svg className="stroke-[#333333] stroke-[rgb(0,0,0)]">
-          SVG stroke colors
-        </svg>
+        <button className="p-2">
+          <svg className="stroke-[#333333] stroke-[rgb(0,0,0)]" />
+          Themed icon inside a UI component
+        </button>
       `);
 
       const detector = new ArbitraryValueDetector({
@@ -1356,7 +1414,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("text decoration arbitrary values", () => {
-    it("detects underline-offset with arbitrary values", async () => {
+    it("ignores underline-offset with arbitrary values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Underline.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <span className="underline-offset-[4px] underline-offset-[0.5em]">
@@ -1370,14 +1428,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const typographyValues = values.filter((v) => v.type === "typography");
-      expect(typographyValues.length).toBeGreaterThanOrEqual(2);
-      expect(typographyValues.map((v) => v.fullClass)).toContain("underline-offset-[4px]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("text indent arbitrary values", () => {
-    it("detects indent-[...] values", async () => {
+    it("ignores indent-[...] values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Indent.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <p className="indent-[2em] indent-[20px]">
@@ -1391,14 +1450,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const typographyValues = values.filter((v) => v.type === "typography");
-      expect(typographyValues.length).toBeGreaterThanOrEqual(2);
-      expect(typographyValues.map((v) => v.fullClass)).toContain("indent-[2em]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("will-change arbitrary values", () => {
-    it("detects will-change-[...] values", async () => {
+    it("ignores will-change-[...] values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/WillChange.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="will-change-[transform] will-change-[opacity,transform]">
@@ -1412,13 +1472,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(2);
-      expect(values.some((v) => v.fullClass === "will-change-[transform]")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("list style arbitrary values", () => {
-    it("detects list-[...] values", async () => {
+    it("ignores list-[...] values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/List.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <ul className="list-[upper-roman] list-[lower-alpha]">
@@ -1432,13 +1494,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(2);
-      expect(values.some((v) => v.fullClass === "list-[upper-roman]")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("auto-cols and auto-rows arbitrary values", () => {
-    it("detects auto-cols-[...] values", async () => {
+    it("ignores auto-cols-[...] values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/AutoGrid.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="auto-cols-[minmax(0,2fr)] auto-cols-[min-content]">
@@ -1452,12 +1516,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const gridValues = values.filter((v) => v.type === "grid");
-      expect(gridValues.length).toBeGreaterThanOrEqual(2);
-      expect(gridValues.map((v) => v.fullClass)).toContain("auto-cols-[minmax(0,2fr)]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects auto-rows-[...] values", async () => {
+    it("ignores auto-rows-[...] values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/AutoRows.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="auto-rows-[min-content] auto-rows-[auto]">
@@ -1471,14 +1536,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const gridValues = values.filter((v) => v.type === "grid");
-      expect(gridValues.length).toBeGreaterThanOrEqual(2);
-      expect(gridValues.map((v) => v.fullClass)).toContain("auto-rows-[min-content]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("object position arbitrary values", () => {
-    it("detects object-[...] position values", async () => {
+    it("ignores object-[...] position values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/ObjectPos.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <img className="object-[center_top] object-[25%_75%]" />
@@ -1490,13 +1556,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(2);
-      expect(values.some((v) => v.fullClass === "object-[center_top]")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("cursor arbitrary values", () => {
-    it("detects cursor-[...] values", async () => {
+    it("ignores cursor-[...] values (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Cursor.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="cursor-[pointer] cursor-[url(hand.cur),_pointer] cursor-[grab]">
@@ -1510,13 +1578,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(3);
-      expect(values.some((v) => v.fullClass === "cursor-[pointer]")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("Tailwind v4 CSS variable syntax", () => {
-    it("detects w-(--button-width) parentheses syntax for CSS variables", async () => {
+    it("ignores w-(--button-width) parentheses syntax for CSS variables (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/TailwindV4.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="w-(--button-width) h-(--header-height) min-w-(--sidebar-width)">
@@ -1530,13 +1600,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      // Should detect these as size/css-variable type values
-      expect(values.length).toBeGreaterThanOrEqual(3);
-      expect(values.some((v) => v.fullClass === "w-(--button-width)")).toBe(true);
-      expect(values.some((v) => v.fullClass === "h-(--header-height)")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects p-(--spacing) parentheses syntax for spacing", async () => {
+    it("ignores p-(--spacing) parentheses syntax for spacing (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/TailwindV4Spacing.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="p-(--card-padding) m-(--section-margin) gap-(--item-gap)">
@@ -1550,12 +1620,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(3);
-      expect(values.some((v) => v.fullClass === "p-(--card-padding)")).toBe(true);
-      expect(values.some((v) => v.fullClass === "gap-(--item-gap)")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects text-(--color) parentheses syntax for colors", async () => {
+    it("ignores text-(--color) parentheses syntax for colors (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/TailwindV4Color.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="text-(--primary-color) bg-(--background) border-(--border-color)">
@@ -1569,15 +1640,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      // CSS variable references should be detected but may not be flagged as "hardcoded"
-      expect(values.length).toBeGreaterThanOrEqual(3);
-      expect(values.some((v) => v.fullClass === "text-(--primary-color)")).toBe(true);
-      expect(values.some((v) => v.fullClass === "bg-(--background)")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("character unit values", () => {
-    it("detects max-w-[30ch] with character units", async () => {
+    it("ignores max-w-[30ch] with character units (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/CharUnits.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="max-w-[30ch] w-[60ch] min-w-[20ch]">
@@ -1591,9 +1662,10 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const sizeValues = values.filter((v) => v.type === "size");
-      expect(sizeValues.length).toBeGreaterThanOrEqual(3);
-      expect(sizeValues.map((v) => v.fullClass)).toContain("max-w-[30ch]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
@@ -1619,7 +1691,7 @@ describe("ArbitraryValueDetector", () => {
   });
 
   describe("calc expressions in arbitrary values", () => {
-    it("detects w-[calc(...)] with calc expressions", async () => {
+    it("ignores w-[calc(...)] with calc expressions (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/CalcExpr.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="w-[calc(var(--input-width)+var(--button-width))] h-[calc(100vh-64px)]">
@@ -1633,14 +1705,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const sizeValues = values.filter((v) => v.type === "size");
-      expect(sizeValues.length).toBeGreaterThanOrEqual(2);
-      expect(sizeValues.some((v) => v.fullClass.includes("w-[calc(var(--input-width)"))).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("Tailwind v4 --spacing() function", () => {
-    it("detects [--cell-size:--spacing(12)] CSS property with spacing function", async () => {
+    it("ignores [--cell-size:--spacing(12)] CSS property with spacing function (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SpacingFn.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="[--cell-size:--spacing(12)] md:[--cell-size:--spacing(10)]">
@@ -1654,14 +1727,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      // Should detect the CSS properties with --spacing() function
-      expect(values.length).toBeGreaterThanOrEqual(2);
-      expect(values.some((v) => v.fullClass.includes("[--cell-size:--spacing(12)]"))).toBe(true);
-      // The md: prefix creates a separate arbitrary CSS property
-      expect(values.some((v) => v.fullClass.includes("[--cell-size:--spacing(10)]"))).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects --spacing() with decimal values like --spacing(9.5)", async () => {
+    it("ignores --spacing() with decimal values like --spacing(9.5) (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SpacingDecimal.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="[--cell-size:--spacing(9.5)] [--sidebar-width:--spacing(40)]">
@@ -1675,11 +1747,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(2);
-      expect(values.some((v) => v.fullClass.includes("[--cell-size:--spacing(9.5)]"))).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects --spacing() inside calc() expressions", async () => {
+    it("ignores --spacing() inside calc() expressions (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SpacingCalc.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="[--header-height:calc(--spacing(14))] [--footer-height:calc(var(--spacing)*24)]">
@@ -1693,10 +1767,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(2);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects --spacing() with nested var() in the argument", async () => {
+    it("ignores --spacing() with nested var() in the argument (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/SpacingVar.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="[--toggle-gap:--spacing(var(--gap))]">
@@ -1710,13 +1787,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(1);
-      expect(values.some((v) => v.fullClass.includes("[--toggle-gap:--spacing(var(--gap))]"))).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("CSS properties with embedded hardcoded values", () => {
-    it("detects [background-image:radial-gradient(#color)] with embedded colors", async () => {
+    it("ignores [background-image:radial-gradient(#color)] with embedded colors (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Gradient.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="[background-image:radial-gradient(#d4d4d4_1px,transparent_1px)] [background-size:20px_20px]">
@@ -1730,12 +1809,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      // Should detect at least the CSS properties
-      expect(values.length).toBeGreaterThanOrEqual(2);
-      expect(values.some((v) => v.fullClass.includes("[background-image:radial-gradient"))).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects [background-size:20px_20px] as CSS property", async () => {
+    it("ignores [background-size:20px_20px] as CSS property (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/BgSize.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="[background-size:20px_20px]">
@@ -1749,14 +1829,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBe(1);
-      expect(values[0]!.type).toBe("css-property");
-      expect(values[0]!.fullClass).toBe("[background-size:20px_20px]");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("complex CSS functions in arbitrary values", () => {
-    it("detects max-h-[min(...)] with nested CSS functions", async () => {
+    it("ignores max-h-[min(...)] with nested CSS functions (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/CssFn.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="max-h-[min(calc(--spacing(96)),calc(var(--available-height)))]">
@@ -1770,11 +1851,13 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBeGreaterThanOrEqual(1);
-      expect(values.some((v) => v.fullClass.includes("max-h-[min("))).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
 
-    it("detects [--cell-size:clamp(...)] with clamp function", async () => {
+    it("ignores [--cell-size:clamp(...)] with clamp function (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Clamp.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="[--cell-size:clamp(0px,calc(100vw/7.5),52px)]">
@@ -1788,13 +1871,15 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      expect(values.length).toBe(1);
-      expect(values[0]!.type).toBe("css-property");
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 
   describe("svh/dvh/lvh viewport units", () => {
-    it("detects h-[80svh] with small viewport height unit", async () => {
+    it("ignores h-[80svh] with small viewport height unit (not a design value)", async () => {
       vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Svh.tsx"]);
       vi.mocked(fs.readFileSync).mockReturnValue(`
         <div className="h-[80svh] min-h-[50dvh] max-h-[100lvh]">
@@ -1808,9 +1893,10 @@ describe("ArbitraryValueDetector", () => {
 
       const values = await detector.detect();
 
-      const sizeValues = values.filter((v) => v.type === "size");
-      expect(sizeValues.length).toBeGreaterThanOrEqual(3);
-      expect(sizeValues.some((v) => v.fullClass === "h-[80svh]")).toBe(true);
+
+      // Layout, mechanics, keywords and token references are not drift.
+
+      expect(values).toHaveLength(0);
     });
   });
 });

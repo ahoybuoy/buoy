@@ -232,34 +232,39 @@ describe('calculateHealthScorePillar', () => {
     });
 
     it('scores proportionally to density', () => {
-      // density = 1.5 → 1 - 1.5/2 = 0.25 → round(60 * 0.25) = 15
+      // density = 0.15 → 1 - 0.15/0.3 = 0.5 → round(60 * 0.5) = 30
       const result = calculateHealthScorePillar(makeMetrics({
-        componentCount: 10,
+        componentCount: 100,
         hardcodedValueCount: 15,
       }));
-      expect(result.pillars.valueDiscipline.score).toBe(15);
+      expect(result.pillars.valueDiscipline.score).toBe(30);
     });
 
-    it('scores 60 when density is near-zero (<0.1 per component)', () => {
-      // 193 components, 12 hardcoded = 0.06 density — effectively perfect
+    it('has no free zone: a few real hardcoded values still cost something', () => {
+      // 193 components, 12 hardcoded = 0.062 density → round(60 * (1 - 0.062/0.3)) = 48
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 193,
         hardcodedValueCount: 12,
       }));
-      expect(result.pillars.valueDiscipline.score).toBe(60);
+      expect(result.pillars.valueDiscipline.score).toBe(48);
+      expect(calculateHealthScorePillar(makeMetrics({ componentCount: 193, hardcodedValueCount: 0 })).pillars.valueDiscipline.score).toBe(60);
     });
 
     it('allows score 100 for excellent repos with tokens', () => {
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 193,
-        hardcodedValueCount: 12,     // density 0.06 → treated as 0
+        hardcodedValueCount: 0,
         tokenCount: 50,
         unusedTokenCount: 0,
         hasUtilityFramework: true,
         hasDesignSystemLibrary: true,
       }));
-      // vd=60, th=20, co=10, ci=10 = 100
+      // vd=60, th=20, co=10, ci=10 = 100, and only with no real hardcoded values
       expect(result.score).toBe(100);
+      expect(calculateHealthScorePillar(makeMetrics({
+        componentCount: 193, hardcodedValueCount: 12, tokenCount: 50, unusedTokenCount: 0,
+        hasUtilityFramework: true, hasDesignSystemLibrary: true,
+      })).score).toBeLessThan(100);
     });
   });
 
@@ -974,31 +979,33 @@ describe('calculateHealthScorePillar', () => {
     });
 
     it('dead code density adds 30% penalty on top of hardcoded density', () => {
-      // hardcodedDensity = 10/100 = 0.1
-      // deadCodeDensity = 50/100 = 0.5
-      // density = max(0.1 + 0.5*0.3, 60/100*0.5) = max(0.25, 0.30) = 0.30
-      // valueDiscipline = round(60 * (1 - 0.30/2)) = round(60 * 0.85) = 51
+      // hardcodedDensity = 3/100 = 0.03
+      // deadCodeDensity = 10/100 = 0.1
+      // density = max(0.03 + 0.1*0.3, 13/100*0.5) = max(0.06, 0.065) = 0.065
+      // valueDiscipline = round(60 * (1 - 0.065/0.3)) = round(47.0) = 47
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 100,
-        hardcodedValueCount: 10,
-        unusedComponentCount: 50,
-        totalDriftCount: 60,
+        hardcodedValueCount: 3,
+        unusedComponentCount: 10,
+        totalDriftCount: 13,
       }));
-      expect(result.pillars.valueDiscipline.score).toBe(51);
+      expect(result.pillars.valueDiscipline.score).toBe(47);
+      const without = calculateHealthScorePillar(makeMetrics({ componentCount: 100, hardcodedValueCount: 3, totalDriftCount: 3 }));
+      expect(without.pillars.valueDiscipline.score).toBeGreaterThan(47);
     });
   });
 
   describe('score distribution calibration', () => {
     it('moderate drift repo scores Good, not Great', () => {
-      // A typical repo: 50 components, 30 hardcoded values, some naming issues
-      // density = 30/50 = 0.6 → valueDiscipline = round(60 * (1 - 0.6/2)) = round(60 * 0.7) = 42
+      // A typical repo: 50 components, 5 real hardcoded design values, some naming issues
+      // density = 5/50 = 0.1 → valueDiscipline = round(60 * (1 - 0.1/0.3)) = 40
       // tokenHealth: utility(5) + usage(5) = 10
       // namingRate = (3+5)/50 = 0.16 → consistency = round(10 * (1 - 0.16/0.25)) = round(10 * 0.36) = 4
       // criticalScore = 10
-      // total = 42 + 10 + 4 + 10 = 66 → Good
+      // total = 40 + 10 + 4 + 10 = 64 → Good
       const result = calculateHealthScorePillar(makeMetrics({
         componentCount: 50,
-        hardcodedValueCount: 30, // density 0.6
+        hardcodedValueCount: 5, // density 0.1
         namingInconsistencyCount: 3,
         semanticMismatchCount: 5,
         hasUtilityFramework: true,
@@ -1099,5 +1106,27 @@ describe('getHealthTier', () => {
     expect(getHealthTier(20)).toBe('Bad');
     expect(getHealthTier(19)).toBe('Terrible');
     expect(getHealthTier(0)).toBe('Terrible');
+  });
+});
+
+describe('health score fairness (2026-09 audit)', () => {
+  const base = { tokenCount: 40, unusedTokenCount: 0, namingInconsistencyCount: 0, criticalCount: 0, hasUtilityFramework: true, hasDesignSystemLibrary: false };
+
+  it('does not cap a large, clean codebase at 69 just for its size', () => {
+    // twentyhq/twenty: 3,678 components, 38 hardcoded values, 250 findings overall
+    const r = calculateHealthScorePillar({ ...base, componentCount: 3678, hardcodedValueCount: 38, totalDriftCount: 250 });
+    expect(r.score).toBeGreaterThan(69);
+  });
+
+  it('still caps a codebase with more drift than components', () => {
+    const r = calculateHealthScorePillar({ ...base, componentCount: 100, hardcodedValueCount: 150, totalDriftCount: 150 });
+    expect(r.score).toBeLessThanOrEqual(69);
+  });
+
+  it('declines to score when too few components were found, instead of calling it Terrible', () => {
+    const r = calculateHealthScorePillar({ ...base, componentCount: 2, hardcodedValueCount: 0, totalDriftCount: 3 });
+    expect(r.score).toBeNull();
+    expect(r.tier).toBe('N/A');
+    expect(r.suggestions[0]).toContain('too few to score');
   });
 });
