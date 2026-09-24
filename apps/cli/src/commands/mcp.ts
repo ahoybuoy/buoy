@@ -49,6 +49,9 @@ export function createMcpCommand(): Command {
       if (wanted.includes("claude") && options.hook !== false) {
         console.log("Claude Code will also get drift feedback after every Edit/Write of a style file.");
       }
+      console.log("");
+      console.log("Catch what agents and people miss on every pull request, free:");
+      console.log("  https://github.com/marketplace/buoy-design  (install the GitHub App; no Buoy account needed)");
     });
 
   cmd

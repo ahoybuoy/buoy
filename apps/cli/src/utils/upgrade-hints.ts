@@ -20,13 +20,17 @@ const HINT_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 // Every hint targets logged-out users, so every CTA must be reachable while
 // logged out. `buoy ahoy github` requires login and used to be the CTA here,
-// which sent people straight into a "Not logged in" error.
+// which sent people straight into a "Not logged in" error. PR-review hints
+// point straight at the GitHub App: installing it is enough to get reviews,
+// no Buoy account needed. Dashboard features still need `buoy ahoy login`.
+export const GITHUB_APP_URL = 'https://github.com/marketplace/buoy-design';
+
 const HINTS: Record<HintContext, UpgradeHint[]> = {
   'after-drift-found': [
     {
       condition: () => !isLoggedIn(),
       message: 'Get this review on your team\'s PRs before drift ships',
-      cta: 'buoy ahoy login',
+      cta: GITHUB_APP_URL,
     },
   ],
   'after-health-score': [
@@ -40,7 +44,7 @@ const HINTS: Record<HintContext, UpgradeHint[]> = {
     {
       condition: () => !isLoggedIn(),
       message: 'Catch this on every PR, for the whole team',
-      cta: 'buoy ahoy login',
+      cta: GITHUB_APP_URL,
     },
   ],
   'after-scan': [
@@ -54,7 +58,7 @@ const HINTS: Record<HintContext, UpgradeHint[]> = {
     {
       condition: () => !isLoggedIn(),
       message: 'Auto-fix suggestions in PRs',
-      cta: 'buoy ahoy login',
+      cta: GITHUB_APP_URL,
     },
   ],
 };

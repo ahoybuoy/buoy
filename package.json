@@ -1,6 +1,6 @@
 {
   "name": "buoy",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "private": true,
   "description": "Catch design drift before it ships",
   "keywords": [
@@ -30,7 +30,8 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && rm -rf node_modules",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "version:set": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.10",

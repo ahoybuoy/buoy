@@ -7,6 +7,10 @@ Keeps Claude on your design system.
 
 Works with CSS custom properties, Sass variables, Tailwind themes and tokens.json (Style Dictionary / Tokens Studio). No account or configuration needed; it reads your repository.
 
+## Get it on every pull request too
+
+The plugin catches drift while Claude writes. The free [Buoy GitHub App](https://github.com/marketplace/buoy-design) reviews every pull request, from agents and people alike, and suggests the token as a one-click fix. Installing it is enough; no Buoy account needed.
+
 ## Install
 
 ```

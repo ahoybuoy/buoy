@@ -143,6 +143,10 @@ Claude Code (and any MCP client) gets four tools: `list_design_tokens`, `find_to
 and `design_system_context`. Claude Code also gets a `PostToolUse` hook that checks every style
 file it edits and hands the fixes back before it moves on. See [docs/integrations/mcp](https://buoy.design/docs/integrations/mcp).
 
+In Claude Code, the plugin bundles all of it: `/plugin marketplace add ahoybuoy/buoy`, then `/plugin install buoy@buoy`.
+
+To review every pull request as well, install the free [GitHub App](https://github.com/marketplace/buoy-design); no Buoy account is needed.
+
 The `show` command outputs JSON for AI agents to consume:
 
 ```bash

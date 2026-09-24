@@ -22,7 +22,11 @@ describe('upgrade hints', () => {
   });
 
   it('never points a logged-out user at a command that requires login', () => {
-    for (const ctx of ['after-drift-found', 'after-health-score', 'after-check-fail', 'after-scan', 'after-fix'] as const) {
+    // PR-review hints go straight to the GitHub App (no account needed to install).
+    for (const ctx of ['after-drift-found', 'after-check-fail', 'after-fix'] as const) {
+      expect(getUpgradeHint(ctx)?.cta).toBe('https://github.com/marketplace/buoy-design');
+    }
+    for (const ctx of ['after-health-score', 'after-scan'] as const) {
       expect(getUpgradeHint(ctx)?.cta).toBe('buoy ahoy login');
     }
   });
@@ -51,7 +55,7 @@ describe('upgrade hints', () => {
 
   it('records when a hint was shown', () => {
     const out = formatUpgradeHint('after-check-fail', tty);
-    expect(out).toContain('buoy ahoy login');
+    expect(out).toContain('github.com/marketplace/buoy-design');
     expect(updateCloudConfig).toHaveBeenCalledWith({ hints: { lastShownAt: '2026-09-18T12:00:00.000Z' } });
   });
 });
