@@ -19,7 +19,8 @@ import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { consolidateRepeatedPatterns } from "./repeated-patterns.js";
 import { checkStylesheets, stylesheetIssuesToDrifts } from "./stylesheet-drift.js";
-import { getSeverityWeight, classifyFileContext, findStringLiterals, type ExemptFileContext } from "@buoy-design/core";
+import { getSeverityWeight, classifyFileContext, findStringLiterals, type ExemptFileContext, type NotedValue } from "@buoy-design/core";
+import { IntentJudge } from "./intent-judge.js";
 import { readFileSync } from "fs";
 import {
   TailwindScanner,
@@ -62,6 +63,25 @@ export function isDriftTypeEnabled(config: BuoyConfig, type: string): boolean {
 }
 
 /** Content-aware file classification (email imports, SVG-only files), cached per path. */
+/** 1-based line of a hardcoded value's location: `line 12`, `src/a.tsx:12` or `src/a.tsx:12:4`. */
+export function lineOfLocation(location: string): number | null {
+  const m = /\bline (\d+)/.exec(location) ?? /:(\d+)(?::\d+)?$/.exec(location);
+  return m ? parseInt(m[1]!, 10) : null;
+}
+
+/** A copy of the component without the values its source marks as deliberate. */
+export function withoutDeliberateValues(component: Component, judge: IntentJudge): Component {
+  const values = component.metadata.hardcodedValues;
+  const path = "path" in component.source ? component.source.path : undefined;
+  if (!values?.length || !path) return component;
+  const kept = values.filter((v) => {
+    const line = lineOfLocation(v.location);
+    return line === null || !judge.judge(path, line, { property: v.property, value: v.value });
+  });
+  if (kept.length === values.length) return component;
+  return { ...component, metadata: { ...component.metadata, hardcodedValues: kept.length ? kept : undefined } };
+}
+
 /** Every exclude glob configured on an enabled source in .buoy.yaml. */
 export function configuredExcludes(config: BuoyConfig): string[] {
   const globs = new Set<string>();
@@ -120,6 +140,11 @@ export interface DriftAnalysisResult {
   tokens: DesignToken[];
   /** Number of drifts filtered out by ignore list */
   ignoredCount: number;
+  /**
+   * Values the code says are deliberate (a comment, a 2-3px nudge, or the
+   * commit that added them). Left out of drifts and the score, listed here.
+   */
+  noted: NotedValue[];
   /** Summary counts by severity */
   summary: {
     total: number;
@@ -607,11 +632,18 @@ export class DriftAnalysisService {
       onProgress,
     });
 
+    // Step 2.05: Set aside values the code says are deliberate, before any
+    // finding is built from them, so messages and counts never include them.
+    const judge = new IntentJudge(this.projectRoot, {
+      history: this.config.drift?.history !== false,
+    });
+    const judgedComponents = components.map((component) => withoutDeliberateValues(component, judge));
+
     // Step 2.1: Run semantic diff analysis
     onProgress?.("Analyzing drift...");
     const { SemanticDiffEngine } = await import("@buoy-design/core/analysis");
     const engine = new SemanticDiffEngine();
-    const diffResult = engine.analyzeComponents(components, {
+    const diffResult = engine.analyzeComponents(judgedComponents, {
       checkDeprecated: true,
       checkNaming: isDriftTypeEnabled(this.config, "naming-inconsistency"),
       checkDocumentation: true,
@@ -848,6 +880,8 @@ export class DriftAnalysisService {
         include: this.config.sources.tailwind.files,
         exclude: this.config.sources.tailwind.exclude,
         detectArbitraryValues: true,
+        judge: (file, line, fullClass, lines) =>
+          judge.judge(file, line, { value: fullClass, fullClass }, lines),
       });
 
       const tailwindResult = await tailwindScanner.scan();
@@ -870,7 +904,7 @@ export class DriftAnalysisService {
     if (isDriftTypeEnabled(this.config, "hardcoded-value")) {
       onProgress?.("Checking stylesheets...");
       const stylesheetDrifts = stylesheetIssuesToDrifts(
-        await checkStylesheets(this.projectRoot, scannedTokens, configuredExcludes(this.config)),
+        await checkStylesheets(this.projectRoot, scannedTokens, configuredExcludes(this.config), judge),
         this.projectRoot,
       );
       drifts.push(...applySeverityOverrides(stylesheetDrifts, this.config.drift.severity));
@@ -1015,6 +1049,7 @@ export class DriftAnalysisService {
       tokenCount: scannedTokens.length,
       tokens: scannedTokens,
       ignoredCount,
+      noted: judge.noted,
       summary: calculateDriftSummary(drifts),
     };
   }

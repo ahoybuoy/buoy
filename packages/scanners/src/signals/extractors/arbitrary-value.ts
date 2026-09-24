@@ -1,6 +1,6 @@
 import type { RawSignal, FileType } from '../types.js';
 import { createSignalId } from '../types.js';
-import { classifyFileContext, isTailwindDesignValue } from '@buoy-design/core';
+import { classifyFileContext, isTailwindDesignValue, lineIntent, type NotedValue } from '@buoy-design/core';
 
 const ARBITRARY_VALUE_PATTERN = /(?<![\w-])([\w-]+)-\[([^\]]+)\]/g;
 
@@ -24,6 +24,8 @@ function isTokenReference(value: string): boolean {
 export function extractArbitraryValueSignals(
   content: string,
   path: string,
+  /** Called for each value the code marks as deliberate (a comment or a 2-3px nudge). */
+  onNoted?: (noted: NotedValue) => void,
 ): RawSignal[] {
   const signals: RawSignal[] = [];
   // Icons, email templates, OG images and tests hold literals on purpose.
@@ -44,6 +46,11 @@ export function extractArbitraryValueSignals(
       if (isTokenReference(rawValue)) continue;
       // Only literal design values; layout maths, mechanics and keywords are fine.
       if (!isTailwindDesignValue(fullMatch)) continue;
+      const intent = lineIntent(lines, i, { fullClass: fullMatch });
+      if (intent) {
+        onNoted?.({ file: path, line: i + 1, value: fullMatch, kind: intent.kind, reason: intent.reason });
+        continue;
+      }
 
       signals.push({
         id: createSignalId('arbitrary-value', path, i + 1, fullMatch),

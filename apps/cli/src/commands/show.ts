@@ -1,3 +1,4 @@
+import { summarizeNoted } from "../services/intent-judge.js";
 import { Command, Option } from "commander";
 import { flushAndExit } from "./check.js";
 import chalk from "chalk";
@@ -578,6 +579,7 @@ export function createShowCommand(): Command {
               },
             },
             ignoredCount,
+            noted: summarizeNoted(result.noted),
           };
 
           console.log(JSON.stringify(output, null, 2));
@@ -599,6 +601,9 @@ export function createShowCommand(): Command {
           keyValue("Info", String(summary.info));
           if (ignoredCount > 0) {
             keyValue("Ignored (hidden)", String(ignoredCount));
+          }
+          if (result.noted.length > 0) {
+            keyValue("Deliberate (not counted)", String(result.noted.length));
           }
           newline();
           console.log(formatDriftList(drifts));
@@ -1725,6 +1730,7 @@ export function createShowCommand(): Command {
           deprecatedPatternCount: drifts.filter(d => d.type === "deprecated-pattern").length,
           highDensityFileCount,
           vendoredDriftCount: richContext.vendoredDriftCount,
+          notedCount: driftResult.noted.length,
           topHardcodedColor: richContext.topHardcodedColor,
           worstFile: richContext.worstFile,
           uniqueSpacingValues: richContext.uniqueSpacingValues,
@@ -2062,6 +2068,7 @@ export async function gatherHealthMetrics(
     frameworkSprawlCount: drifts.filter(d => d.type === "framework-sprawl").length,
     highDensityFileCount,
     vendoredDriftCount: richContext.vendoredDriftCount,
+          notedCount: driftResult.noted.length,
     topHardcodedColor: richContext.topHardcodedColor,
     worstFile: richContext.worstFile,
     uniqueSpacingValues: richContext.uniqueSpacingValues,

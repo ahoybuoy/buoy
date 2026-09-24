@@ -1,7 +1,7 @@
 import type { DesignToken, DriftSignal, TokenSource } from '@buoy-design/core';
 import { createTokenId } from '@buoy-design/core';
 import { TailwindConfigParser } from './config-parser.js';
-import { ArbitraryValueDetector } from './arbitrary-detector.js';
+import { ArbitraryValueDetector, type ArbitraryValueJudge } from './arbitrary-detector.js';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { glob } from 'glob';
@@ -21,6 +21,8 @@ export interface TailwindScannerConfig {
   exclude?: string[];
   /** Whether to scan for arbitrary values (default: true) */
   detectArbitraryValues?: boolean;
+  /** Sets aside arbitrary values the code marks as deliberate (see ArbitraryDetectorConfig.judge). */
+  judge?: ArbitraryValueJudge;
   /** Whether to extract theme tokens from config (default: true) */
   extractThemeTokens?: boolean;
   /** Whether to extract semantic tokens from class usage in source files (default: false) */
@@ -295,10 +297,12 @@ export class TailwindScanner {
         projectRoot: this.config.projectRoot,
         include: this.config.include,
         exclude: this.config.exclude,
+        judge: this.config.judge,
       });
 
+      // One pass: the signals are built from the same values (it used to scan twice).
       const arbitraryValues = await detector.detect();
-      const driftSignals = await detector.detectAsDriftSignals();
+      const driftSignals = await detector.detectAsDriftSignals(arbitraryValues);
 
       result.drifts = driftSignals;
       result.stats.arbitraryValuesFound = arbitraryValues.length;

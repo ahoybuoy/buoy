@@ -215,6 +215,12 @@ export const DriftConfigSchema = z.object({
   failOn: z.enum(['info', 'warning', 'critical', 'none']).optional(),
   /** Drift types to exclude from scanning */
   exclude: z.array(z.string()).optional(),
+  /**
+   * Read the commit that introduced a flagged line: a message like "align
+   * icon with label" marks the value as deliberate. Needs full git history;
+   * shallow clones skip it. Default true.
+   */
+  history: z.boolean().optional(),
 });
 
 // Claude config

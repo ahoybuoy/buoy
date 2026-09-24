@@ -29,7 +29,7 @@ import {
   type RawSignal,
   type SignalContext,
 } from "@buoy-design/scanners";
-import { classifyFileContext, isDesignDeclaration, isSvgPaintProperty } from "@buoy-design/core";
+import { classifyFileContext, isDesignDeclaration, isSvgPaintProperty, lineIntent, type IntentEvidence } from "@buoy-design/core";
 import { findTokensByValue } from "./project.js";
 
 type Extractor =
@@ -150,7 +150,12 @@ function route(extractor: Extractor, value: string, path: string, line: number, 
 }
 
 /** Value-level signals for one file's content. Pure; `path` is only used for locations. */
-export function extractFileSignals(content: string, path: string): RawSignal[] {
+/** Sets aside a value the code marks as deliberate. `line` is 1-based. */
+export type LineJudge = (line: number, property: string, value: string, lines: readonly string[]) => IntentEvidence | null;
+
+const defaultLineJudge: LineJudge = (line, property, value, lines) => lineIntent(lines, line - 1, { property, value });
+
+export function extractFileSignals(content: string, path: string, judge: LineJudge = defaultLineJudge): RawSignal[] {
   const isCss = /\.(css|scss)$/.test(path);
   const isJsx = /\.(tsx|jsx)$/.test(path);
   if (!isCss && !isJsx) return [];
@@ -202,6 +207,8 @@ export function extractFileSignals(content: string, path: string): RawSignal[] {
         if (isJsx && m[4] !== undefined) value = `${value}px`;
         // Layout geometry (width, top, ...), keywords, maths and hairlines are not drift.
         if (!isDesignDeclaration(property, value)) continue;
+        // A comment, a 2-3px nudge or the line's history says it is deliberate.
+        if (judge(i + 1, property, value, lines)) continue;
         signals.push(...route(extractor, value, path, i + 1, property, ctx));
       }
     }

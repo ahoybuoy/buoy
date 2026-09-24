@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { glob } from 'glob';
 import { relative } from 'path';
 import type { DriftSignal, DriftSource } from '@buoy-design/core';
-import { classifyFileContext, isTailwindDesignValue, parseArbitraryClass } from '@buoy-design/core';
+import { classifyFileContext, isTailwindDesignValue, lineIntent, parseArbitraryClass, type IntentEvidence } from '@buoy-design/core';
 
 export interface ArbitraryValue {
   type: 'color' | 'spacing' | 'size' | 'timing' | 'grid' | 'css-property' | 'border' | 'layout' | 'transform' | 'filter' | 'typography' | 'visual' | 'other';
@@ -13,11 +13,23 @@ export interface ArbitraryValue {
   column: number;
 }
 
+/**
+ * Decides whether a class the code marks as deliberate should be set aside.
+ * `line` is 1-based; `lines` is the file's content. Defaults to the shared
+ * comment and optical-nudge rules; the CLI adds commit history and records
+ * what it set aside.
+ */
+export type ArbitraryValueJudge = (file: string, line: number, fullClass: string, lines: readonly string[]) => IntentEvidence | null;
+
 export interface ArbitraryDetectorConfig {
   projectRoot: string;
   include?: string[];
   exclude?: string[];
+  judge?: ArbitraryValueJudge;
 }
+
+const defaultJudge: ArbitraryValueJudge = (_file, line, fullClass, lines) =>
+  lineIntent(lines, line - 1, { fullClass });
 
 // Common modifiers that can prefix arbitrary value classes
 // Handles: dark:, before:, after:, hover:, focus:, lg:, sm:, @md:, @min-[28rem]:, has-[>svg]:, etc.
@@ -174,9 +186,8 @@ export class ArbitraryValueDetector {
     return arbitraryValues;
   }
 
-  async detectAsDriftSignals(): Promise<DriftSignal[]> {
-    const values = await this.detect();
-    return this.valuesToDriftSignals(values);
+  async detectAsDriftSignals(values?: ArbitraryValue[]): Promise<DriftSignal[]> {
+    return this.valuesToDriftSignals(values ?? await this.detect());
   }
 
   private async findSourceFiles(): Promise<string[]> {
@@ -868,7 +879,11 @@ export class ArbitraryValueDetector {
     // Only literal design values (colour, spacing, font size, radius, shadow,
     // type scale, border width). Layout maths, mechanics, keywords and token
     // references are correct code, not drift.
-    return values.filter((v) => isTailwindDesignValue(v.fullClass));
+    const judge = this.config.judge ?? defaultJudge;
+    return values
+      .filter((v) => isTailwindDesignValue(v.fullClass))
+      // A comment or an optical nudge says the value is deliberate.
+      .filter((v) => !judge(relativePath, v.line, v.fullClass, lines));
   }
 
   private isHardcodedColor(value: string): boolean {

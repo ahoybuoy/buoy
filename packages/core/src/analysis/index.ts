@@ -113,3 +113,15 @@ export {
   createPositionLookup,
   type StringLiteral,
 } from "./string-literals.js";
+export {
+  commentText,
+  commentIntent,
+  classifyIntentText,
+  valueIntent,
+  tailwindValueIntent,
+  commitIntent,
+  lineIntent,
+  type IntentKind,
+  type IntentEvidence,
+  type NotedValue,
+} from "./intent.js";

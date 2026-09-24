@@ -1,4 +1,5 @@
 // apps/cli/src/commands/check.ts
+import { formatNotedLine, summarizeNoted } from "../services/intent-judge.js";
 import { Command } from "commander";
 import { dirname } from "node:path";
 import { loadConfig, getConfigPath } from "../config/loader.js";
@@ -401,10 +402,12 @@ export function createCheckCommand(): Command {
         });
 
         let drifts = result.drifts;
+        let noted = result.noted;
 
         // Filter to staged files only if --staged is used
         if (options.staged && stagedFiles.length > 0) {
           drifts = drifts.filter((d) => isFromStagedFile(d, stagedFiles));
+          noted = noted.filter((n) => stagedFiles.some((f) => f === n.file || f.endsWith(`/${n.file}`) || n.file.endsWith(`/${f}`)));
         }
 
         // Determine exit code using shared utility
@@ -550,6 +553,8 @@ export function createCheckCommand(): Command {
               details: d.details,
             })),
             summary,
+            // Values the code marks as deliberate: not counted, listed with the reason.
+            noted: summarizeNoted(noted),
           };
 
           if (failBelow != null) {
@@ -606,6 +611,11 @@ export function createCheckCommand(): Command {
 
             console.log("");
             console.log("Run `buoy show drift` for details");
+          }
+
+          if (noted.length > 0) {
+            console.log("");
+            console.log(formatNotedLine(noted));
           }
 
           // Show health score when threshold is configured

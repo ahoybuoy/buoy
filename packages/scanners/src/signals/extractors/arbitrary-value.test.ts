@@ -53,3 +53,20 @@ describe('extractArbitraryValueSignals', () => {
     expect(signals).toHaveLength(2);
   });
 });
+
+describe('deliberate arbitrary values', () => {
+  it('sets aside commented classes and 2-3px nudges, and reports them', () => {
+    const content = [
+      'export const A = () => (',
+      '  // Figma calls for 10px on this popover, per design',
+      '  <div className="rounded-[10px] mt-[3px]">',
+      '    <span className="text-[#ff6600]" />',
+      '  </div>',
+      ');',
+    ].join('\n');
+    const noted: string[] = [];
+    const signals = extractArbitraryValueSignals(content, 'src/A.tsx', (n) => noted.push(`${n.kind}:${n.value}`));
+    expect(signals.map((s) => s.value)).toEqual(['text-[#ff6600]']);
+    expect(noted).toEqual(['explained:rounded-[10px]', 'explained:mt-[3px]']);
+  });
+});

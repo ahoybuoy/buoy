@@ -58,6 +58,8 @@ export interface HealthMetrics {
   criticalCount: number;
   /** Number of accessibility-conflict drift signals */
   accessibilityConflictCount?: number;
+  /** Values the code marks as deliberate (comments, nudges, history); not counted anywhere else. */
+  notedCount?: number;
   /** Number of color-contrast drift signals */
   colorContrastCount?: number;
   /** Whether a utility CSS framework (Tailwind) is detected */

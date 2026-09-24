@@ -12,6 +12,7 @@ import { relative, resolve } from "node:path";
 import { glob } from "glob";
 import type { DesignToken, DriftSignal } from "@buoy-design/core";
 import { classifyFileContext } from "@buoy-design/core";
+import type { IntentJudge } from "./intent-judge.js";
 import { extractFileSignals, issuesFromSignals, type FileIssue } from "../mcp/file-check.js";
 
 const STYLESHEETS = ["**/*.css", "**/*.scss", "**/*.vue", "**/*.svelte"];
@@ -44,7 +45,12 @@ export function styleBlocksAsCss(content: string): string {
  * `exclude` is the project's own exclude globs from .buoy.yaml sources: a
  * folder the user keeps out of the component scan stays out of this one too.
  */
-export async function checkStylesheets(projectRoot: string, tokens: DesignToken[], exclude: string[] = []): Promise<FileIssue[]> {
+export async function checkStylesheets(
+  projectRoot: string,
+  tokens: DesignToken[],
+  exclude: string[] = [],
+  judge?: IntentJudge,
+): Promise<FileIssue[]> {
   const files = (await glob(STYLESHEETS, { cwd: projectRoot, ignore: [...IGNORE, ...exclude], nodir: true })).sort();
   const issues: FileIssue[] = [];
   for (const file of files) {
@@ -58,7 +64,13 @@ export async function checkStylesheets(projectRoot: string, tokens: DesignToken[
     const isComponent = /\.(vue|svelte)$/.test(file);
     const css = isComponent ? styleBlocksAsCss(content) : content;
     // Scan as CSS so the CSS property table applies; report the real path.
-    const signals = extractFileSignals(css, isComponent ? `${file}.css` : file).map((s) => ({
+    // Line numbers match the real file (styleBlocksAsCss keeps them), so the
+    // judge reads comments and history from the source as written.
+    const lineJudge = judge
+      ? (line: number, property: string, value: string, lines: readonly string[]) =>
+        judge.judge(file, line, { property, value }, lines)
+      : undefined;
+    const signals = extractFileSignals(css, isComponent ? `${file}.css` : file, lineJudge).map((s) => ({
       ...s,
       location: { ...s.location, path: file },
     }));
