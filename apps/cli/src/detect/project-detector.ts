@@ -814,7 +814,7 @@ export class ProjectDetector {
     // .NET/ASP.NET
     // ============================================
 
-    const csprojFiles = await glob('*.csproj', { cwd: this.root });
+    const csprojFiles = (await glob('*.csproj', { cwd: this.root })).sort();
     const firstCsproj = csprojFiles[0];
     if (firstCsproj) {
       try {
@@ -846,11 +846,11 @@ export class ProjectDetector {
         const extensions = ['tsx', 'jsx', 'vue', 'svelte'];
 
         for (const ext of extensions) {
-          const files = await glob(`**/*.${ext}`, {
+          const files = (await glob(`**/*.${ext}`, {
             cwd: fullPath,
             ignore: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*', '**/node_modules/**'],
             maxDepth: 8,
-          });
+          })).sort();
           if (files.length > 0) {
             extensionCounts[ext] = files.length;
           }
@@ -878,11 +878,11 @@ export class ProjectDetector {
         const extensionCounts: Record<string, number> = {};
 
         for (const ext of extensions) {
-          const files = await glob(`**/*.${ext}`, {
+          const files = (await glob(`**/*.${ext}`, {
             cwd: srcPath,
             ignore: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*', '**/node_modules/**'],
             maxDepth: 8,
-          });
+          })).sort();
           if (files.length > 0) {
             extensionCounts[ext] = files.length;
           }
@@ -905,11 +905,11 @@ export class ProjectDetector {
     for (const { dir, ext, type } of TEMPLATE_DIRS) {
       const fullPath = resolve(this.root, dir);
       if (existsSync(fullPath) && statSync(fullPath).isDirectory()) {
-        const files = await glob(`**/*.${ext}`, {
+        const files = (await glob(`**/*.${ext}`, {
           cwd: fullPath,
           ignore: ['**/node_modules/**', '**/vendor/**', '**/cache/**'],
           maxDepth: 8,
-        });
+        })).sort();
 
         if (files.length > 0) {
           locations.push({
@@ -931,11 +931,11 @@ export class ProjectDetector {
 
     // Check predefined token patterns first
     for (const { pattern, type, name } of TOKEN_PATTERNS) {
-      const files = await glob(pattern, {
+      const files = (await glob(pattern, {
         cwd: this.root,
         ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/vendor/**'],
         maxDepth: 8,
-      });
+      })).sort();
 
       for (const file of files) {
         if (!foundPaths.has(file)) {
@@ -950,11 +950,11 @@ export class ProjectDetector {
     }
 
     // Scan ALL CSS files for :root with CSS variables
-    const allCssFiles = await glob('**/*.css', {
+    const allCssFiles = (await glob('**/*.css', {
       cwd: this.root,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/vendor/**', '**/*.min.css'],
       maxDepth: 8,
-    });
+    })).sort();
 
     for (const file of allCssFiles) {
       if (foundPaths.has(file)) continue;
@@ -982,11 +982,11 @@ export class ProjectDetector {
     }
 
     // Also scan SCSS files for variables
-    const allScssFiles = await glob('**/*.scss', {
+    const allScssFiles = (await glob('**/*.scss', {
       cwd: this.root,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/vendor/**'],
       maxDepth: 8,
-    });
+    })).sort();
 
     for (const file of allScssFiles) {
       if (foundPaths.has(file)) continue;

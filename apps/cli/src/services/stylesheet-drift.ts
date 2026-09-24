@@ -41,7 +41,7 @@ export function styleBlocksAsCss(content: string): string {
 }
 
 export async function checkStylesheets(projectRoot: string, tokens: DesignToken[]): Promise<FileIssue[]> {
-  const files = await glob(STYLESHEETS, { cwd: projectRoot, ignore: IGNORE, nodir: true });
+  const files = (await glob(STYLESHEETS, { cwd: projectRoot, ignore: IGNORE, nodir: true })).sort();
   const issues: FileIssue[] = [];
   for (const file of files) {
     let content: string;

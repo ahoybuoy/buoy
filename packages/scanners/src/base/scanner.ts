@@ -385,10 +385,10 @@ export async function validateFilePaths(
   for (const pathOrPattern of paths) {
     if (isGlobPattern(pathOrPattern)) {
       // It's a glob pattern - expand it
-      const matches = await glob(pathOrPattern, {
+      const matches = (await glob(pathOrPattern, {
         cwd: projectRoot,
         absolute: true,
-      });
+      })).sort();
 
       if (matches.length > 0) {
         valid.push(...matches);
@@ -480,11 +480,11 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
     const unmatchedPatterns: string[] = [];
 
     for (const pattern of patterns) {
-      const matches = await glob(pattern, {
+      const matches = (await glob(pattern, {
         cwd: this.config.projectRoot,
         ignore,
         absolute: true,
-      });
+      })).sort();
       if (matches.length > 0) {
         allFiles.push(...matches);
       } else {
@@ -747,11 +747,11 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
     const stats: PatternStats[] = [];
 
     for (const pattern of patterns) {
-      const matches = await glob(pattern, {
+      const matches = (await glob(pattern, {
         cwd: this.config.projectRoot,
         ignore,
         absolute: true,
-      });
+      })).sort();
       stats.push({ pattern, count: matches.length });
     }
 

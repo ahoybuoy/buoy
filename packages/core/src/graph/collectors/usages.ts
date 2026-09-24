@@ -8,6 +8,7 @@
 import { readFile } from 'fs/promises';
 import { glob } from 'glob';
 import { join } from 'path';
+import { createPositionLookup, findStringLiterals } from '../../analysis/string-literals.js';
 
 // ============================================================================
 // Types
@@ -104,11 +105,11 @@ export async function collectUsages(
   } = options;
 
   // Find all matching files
-  const files = await glob(include, {
+  const files = (await glob(include, {
     cwd: projectRoot,
     ignore: exclude,
     absolute: false,
-  });
+  })).sort();
 
   const tokenUsages: TokenUsage[] = [];
   const componentUsages: ComponentUsage[] = [];
@@ -335,16 +336,18 @@ function collectComponentUsages(
   }
 }
 
+// Files are processed one at a time, so caching the last file's line starts
+// turns every lookup into a binary search instead of a rescan from offset 0.
+let positionCache: { content: string; lookup: ReturnType<typeof createPositionLookup> } | null = null;
+
 function getPosition(
   content: string,
   index: number
 ): { lineNumber: number; columnNumber: number } {
-  const before = content.slice(0, index);
-  const lineNumber = (before.match(/\n/g) ?? []).length + 1;
-  const lastNewline = before.lastIndexOf('\n');
-  const columnNumber = index - lastNewline;
-
-  return { lineNumber, columnNumber };
+  if (positionCache?.content !== content) {
+    positionCache = { content, lookup: createPositionLookup(content) };
+  }
+  return positionCache.lookup(index);
 }
 
 function isInComment(line: string, column: number): boolean {
@@ -399,11 +402,8 @@ function collectTailwindTokenUsages(
   if (knownCandidates.size === 0) return;
 
   // Scan string literals; this catches className="...", clsx("..."), cva("..."), etc.
-  const stringPattern = /(['"`])((?:\\.|(?!\1)[\s\S])*)\1/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = stringPattern.exec(content)) !== null) {
-    const raw = match[2];
+  for (const match of findStringLiterals(content)) {
+    const raw = match.value;
     if (!raw || (!raw.includes('-') && !raw.includes(':'))) continue;
 
     const classTokens = raw.split(/\s+/).filter(Boolean);

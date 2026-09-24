@@ -414,11 +414,11 @@ export class TailwindScanner {
 
     for (const pattern of sourcePatterns) {
       try {
-        const files = await glob(pattern, {
+        const files = (await glob(pattern, {
           cwd: this.config.projectRoot,
           ignore: exclude,
           absolute: true,
-        });
+        })).sort();
 
         for (const file of files) {
           const content = readFileSync(file, 'utf-8');
@@ -686,11 +686,11 @@ export class TailwindScanner {
 
     for (const pattern of cssPatterns) {
       try {
-        const files = await glob(pattern, {
+        const files = (await glob(pattern, {
           cwd: this.config.projectRoot,
           ignore: exclude,
           absolute: true,
-        });
+        })).sort();
 
         for (const file of files) {
           const content = readFileSync(file, 'utf-8');
@@ -1449,11 +1449,11 @@ export class TailwindScanner {
 
     for (const pattern of sourcePatterns) {
       try {
-        const files = await glob(pattern, {
+        const files = (await glob(pattern, {
           cwd: this.config.projectRoot,
           ignore: exclude,
           absolute: true,
-        });
+        })).sort();
 
         for (const file of files) {
           const content = readFileSync(file, 'utf-8');
@@ -1890,11 +1890,11 @@ export class TailwindScanner {
 
     for (const pattern of cssPatterns) {
       try {
-        const files = await glob(pattern, {
+        const files = (await glob(pattern, {
           cwd: this.config.projectRoot,
           ignore: exclude,
           absolute: true,
-        });
+        })).sort();
 
         for (const file of files) {
           try {

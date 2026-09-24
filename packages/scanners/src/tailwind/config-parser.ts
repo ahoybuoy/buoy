@@ -153,7 +153,7 @@ export class TailwindConfigParser {
 
     // Try glob search, prioritizing files with @theme blocks
     try {
-      const files = await glob('**/*.css', {
+      const files = (await glob('**/*.css', {
         cwd: this.projectRoot,
         ignore: [
           '**/node_modules/**',
@@ -167,7 +167,7 @@ export class TailwindConfigParser {
           '**/coverage/**',
         ],
         absolute: true,
-      });
+      })).sort();
 
       // Sort candidates by content quality (prefer files with @theme blocks)
       const candidates: Array<{ path: string; score: number }> = [];

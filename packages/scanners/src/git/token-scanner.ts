@@ -52,10 +52,10 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       usedExplicitFiles = true;
       // Scan explicitly configured files
       for (const pattern of this.config.files) {
-        const matches = await glob(pattern, {
+        const matches = (await glob(pattern, {
           cwd: this.config.projectRoot,
           absolute: true,
-        });
+        })).sort();
 
         // Warn if configured pattern matches no files
         if (matches.length === 0) {
@@ -204,11 +204,11 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     const ignore = this.config.exclude || ["**/node_modules/**", "**/dist/**"];
 
     for (const pattern of patterns) {
-      const matches = await glob(pattern, {
+      const matches = (await glob(pattern, {
         cwd: this.config.projectRoot,
         ignore,
         absolute: true,
-      });
+      })).sort();
       allFiles.push(...matches);
     }
 
@@ -324,11 +324,11 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
 
     const allCandidates: string[] = [];
     for (const pattern of candidatePatterns) {
-      const matches = await glob(pattern, {
+      const matches = (await glob(pattern, {
         cwd: this.config.projectRoot,
         ignore,
         absolute: true,
-      });
+      })).sort();
       allCandidates.push(...matches);
     }
 

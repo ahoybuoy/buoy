@@ -19,7 +19,7 @@ import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { consolidateRepeatedPatterns } from "./repeated-patterns.js";
 import { checkStylesheets, stylesheetIssuesToDrifts } from "./stylesheet-drift.js";
-import { getSeverityWeight, classifyFileContext, type ExemptFileContext } from "@buoy-design/core";
+import { getSeverityWeight, classifyFileContext, findStringLiterals, type ExemptFileContext } from "@buoy-design/core";
 import { readFileSync } from "fs";
 import {
   TailwindScanner,
@@ -1078,12 +1078,12 @@ export class DriftAnalysisService {
       "**/.next/**",
     ];
 
-    const files = await glob(include, {
+    const files = (await glob(include, {
       cwd: this.projectRoot,
       ignore: exclude,
       absolute: false,
       nodir: true,
-    });
+    })).sort();
 
     for (const file of files) {
       let content = "";
@@ -1222,10 +1222,8 @@ export class DriftAnalysisService {
     const classTokens = new Set<string>();
 
     // Generic string literal scan catches JSX, Astro, template literals, and utility wrappers.
-    const stringPattern = /(['"`])((?:\\.|(?!\1)[\s\S])*)\1/g;
-    let match: RegExpExecArray | null;
-    while ((match = stringPattern.exec(content)) !== null) {
-      const raw = match[2];
+    for (const literal of findStringLiterals(content)) {
+      const raw = literal.value;
       if (!raw || (!raw.includes("-") && !raw.includes(":"))) continue;
       for (const token of raw.split(/\s+/)) {
         if (token) classTokens.add(token);
@@ -1248,7 +1246,7 @@ export class DriftAnalysisService {
     componentUsageMap: Map<string, number>,
   ): Promise<void> {
     const cwd = this.projectRoot;
-    const barrelFiles = await glob("**/index.{ts,tsx,js,jsx}", {
+    const barrelFiles = (await glob("**/index.{ts,tsx,js,jsx}", {
       cwd,
       ignore: [
         "**/node_modules/**",
@@ -1258,7 +1256,7 @@ export class DriftAnalysisService {
       ],
       nodir: true,
       maxDepth: 6,
-    });
+    })).sort();
 
     for (const barrelFile of barrelFiles.slice(0, 200)) {
       try {
@@ -1315,7 +1313,7 @@ export class DriftAnalysisService {
     componentUsageMap: Map<string, number>,
   ): Promise<void> {
     const cwd = this.projectRoot;
-    const sourceFiles = await glob("**/*.{tsx,jsx,ts,js}", {
+    const sourceFiles = (await glob("**/*.{tsx,jsx,ts,js}", {
       cwd,
       ignore: [
         "**/node_modules/**",
@@ -1327,7 +1325,7 @@ export class DriftAnalysisService {
       ],
       nodir: true,
       maxDepth: 6,
-    });
+    })).sort();
 
     for (const file of sourceFiles.slice(0, 200)) {
       try {
@@ -1365,7 +1363,7 @@ export class DriftAnalysisService {
   ): Promise<void> {
     if (knownComponents.length === 0) return;
     const cwd = this.projectRoot;
-    const templateFiles = await glob("**/*.{vue,svelte,html}", {
+    const templateFiles = (await glob("**/*.{vue,svelte,html}", {
       cwd,
       ignore: [
         "**/node_modules/**",
@@ -1375,7 +1373,7 @@ export class DriftAnalysisService {
       ],
       nodir: true,
       maxDepth: 8,
-    });
+    })).sort();
 
     const knownSet = new Set(knownComponents);
     // Build a kebab-case lookup for Vue/Angular (MyComponent -> my-component)
@@ -1428,7 +1426,7 @@ export class DriftAnalysisService {
     componentUsageMap: Map<string, number>,
   ): Promise<void> {
     const cwd = this.projectRoot;
-    const sourceFiles = await glob("**/*.{ts,js,tsx,jsx}", {
+    const sourceFiles = (await glob("**/*.{ts,js,tsx,jsx}", {
       cwd,
       ignore: [
         "**/node_modules/**",
@@ -1438,7 +1436,7 @@ export class DriftAnalysisService {
       ],
       nodir: true,
       maxDepth: 4,
-    });
+    })).sort();
 
     for (const file of sourceFiles.slice(0, 100)) {
       try {
@@ -1466,12 +1464,12 @@ export class DriftAnalysisService {
     componentUsageMap: Map<string, number>,
   ): Promise<void> {
     const cwd = this.projectRoot;
-    const moduleFiles = await glob("**/*.module.ts", {
+    const moduleFiles = (await glob("**/*.module.ts", {
       cwd,
       ignore: ["**/node_modules/**", "**/dist/**", "**/build/**"],
       nodir: true,
       maxDepth: 8,
-    });
+    })).sort();
 
     for (const file of moduleFiles.slice(0, 50)) {
       try {
@@ -1527,12 +1525,12 @@ export class DriftAnalysisService {
     componentUsageMap: Map<string, number>,
   ): Promise<void> {
     const cwd = this.projectRoot;
-    const storyFiles = await glob("**/*.stories.{ts,tsx,js,jsx}", {
+    const storyFiles = (await glob("**/*.stories.{ts,tsx,js,jsx}", {
       cwd,
       ignore: ["**/node_modules/**", "**/dist/**", "**/build/**"],
       nodir: true,
       maxDepth: 8,
-    });
+    })).sort();
 
     for (const file of storyFiles.slice(0, 200)) {
       try {
@@ -1583,7 +1581,7 @@ export class DriftAnalysisService {
     componentUsageMap: Map<string, number>,
   ): Promise<void> {
     const cwd = this.projectRoot;
-    const files = await glob("**/*.{ts,js}", {
+    const files = (await glob("**/*.{ts,js}", {
       cwd,
       ignore: [
         "**/node_modules/**",
@@ -1595,7 +1593,7 @@ export class DriftAnalysisService {
       ],
       nodir: true,
       maxDepth: 8,
-    });
+    })).sort();
 
     for (const file of files.slice(0, 500)) {
       try {
@@ -1640,10 +1638,10 @@ export class DriftAnalysisService {
   ): Promise<void> {
     const cwd = this.projectRoot;
     // Check for Nuxt config
-    const nuxtConfigs = await glob("nuxt.config.{ts,js,mjs}", {
+    const nuxtConfigs = (await glob("nuxt.config.{ts,js,mjs}", {
       cwd,
       nodir: true,
-    });
+    })).sort();
     if (nuxtConfigs.length === 0) return;
 
     // In Nuxt, all components in components/ are auto-imported
@@ -1661,12 +1659,12 @@ export class DriftAnalysisService {
     componentUsageMap: Map<string, number>,
   ): Promise<void> {
     const cwd = this.projectRoot;
-    const testFiles = await glob("**/*.{test,spec}.{ts,tsx,js,jsx}", {
+    const testFiles = (await glob("**/*.{test,spec}.{ts,tsx,js,jsx}", {
       cwd,
       ignore: ["**/node_modules/**", "**/dist/**", "**/build/**"],
       nodir: true,
       maxDepth: 8,
-    });
+    })).sort();
 
     for (const file of testFiles.slice(0, 300)) {
       try {
@@ -1711,7 +1709,7 @@ export class DriftAnalysisService {
     componentUsageMap: Map<string, number>,
   ): Promise<void> {
     const cwd = this.projectRoot;
-    const sourceFiles = await glob("**/*.{ts,tsx,js,jsx}", {
+    const sourceFiles = (await glob("**/*.{ts,tsx,js,jsx}", {
       cwd,
       ignore: [
         "**/node_modules/**",
@@ -1722,7 +1720,7 @@ export class DriftAnalysisService {
       ],
       nodir: true,
       maxDepth: 8,
-    });
+    })).sort();
 
     for (const file of sourceFiles.slice(0, 500)) {
       try {
@@ -1850,10 +1848,10 @@ export class DriftAnalysisService {
       if (!isLibraryPattern) return;
 
       // Scan the root barrel file(s) for exports — these are the public API
-      const rootBarrels = await glob("src/index.{ts,tsx,js,jsx}", {
+      const rootBarrels = (await glob("src/index.{ts,tsx,js,jsx}", {
         cwd,
         nodir: true,
-      });
+      })).sort();
 
       for (const barrel of rootBarrels) {
         try {
@@ -1934,7 +1932,7 @@ export class DriftAnalysisService {
   ): Promise<void> {
     if (knownComponents.length === 0) return;
     const cwd = this.projectRoot;
-    const sourceFiles = await glob("**/*.{tsx,jsx,ts,js}", {
+    const sourceFiles = (await glob("**/*.{tsx,jsx,ts,js}", {
       cwd,
       ignore: [
         "**/node_modules/**",
@@ -1945,7 +1943,7 @@ export class DriftAnalysisService {
       ],
       nodir: true,
       maxDepth: 8,
-    });
+    })).sort();
 
     // Build a Set for O(1) lookup
     const knownSet = new Set(knownComponents);
@@ -1994,7 +1992,7 @@ export class DriftAnalysisService {
       "**/build/**",
     ];
 
-    const files = await glob(patterns, { cwd, ignore, absolute: true });
+    const files = (await glob(patterns, { cwd, ignore, absolute: true })).sort();
 
     for (const file of files) {
       try {

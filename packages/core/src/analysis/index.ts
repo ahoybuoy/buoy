@@ -108,3 +108,8 @@ export {
   parseArbitraryClass,
   type ExemptFileContext,
 } from "./design-value-rules.js";
+export {
+  findStringLiterals,
+  createPositionLookup,
+  type StringLiteral,
+} from "./string-literals.js";

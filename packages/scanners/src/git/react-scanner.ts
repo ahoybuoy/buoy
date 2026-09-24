@@ -25,6 +25,8 @@ const COLOR_PATTERNS = [
 
 // Pattern for buoy-ignore comments
 const BUOY_IGNORE_PATTERN = /buoy-ignore|buoy-disable/i;
+/** Whether a source file contains any ignore comment, checked once per file. */
+const FILES_WITH_IGNORE = new WeakMap<ts.SourceFile, boolean>();
 
 // Known third-party UI primitive library patterns
 const PRIMITIVE_LIBRARY_PATTERNS = [
@@ -1191,14 +1193,25 @@ export class ReactComponentScanner extends SignalAwareScanner<
    * Check if a node has a buoy-ignore comment on the same line or preceding line
    */
   private hasIgnoreComment(node: ts.Node, sourceFile: ts.SourceFile): boolean {
+    const fullText = sourceFile.getFullText();
+    // Called for every AST node: never split the whole file here (that was
+    // O(nodes x file size) and dominated scans of large repos).
+    let fileHasIgnore = FILES_WITH_IGNORE.get(sourceFile);
+    if (fileHasIgnore === undefined) {
+      fileHasIgnore = BUOY_IGNORE_PATTERN.test(fullText);
+      FILES_WITH_IGNORE.set(sourceFile, fileHasIgnore);
+    }
+    if (!fileHasIgnore) return false;
+
     const nodeStart = node.getStart(sourceFile);
     const lineNumber = sourceFile.getLineAndCharacterOfPosition(nodeStart).line;
-    const fullText = sourceFile.getFullText();
-
-    // Get the text of the current line and previous line
-    const lines = fullText.split('\n');
-    const currentLine = lines[lineNumber] || '';
-    const previousLine = lineNumber > 0 ? lines[lineNumber - 1] || '' : '';
+    const lineStarts = sourceFile.getLineStarts();
+    const lineText = (line: number): string =>
+      line < 0 || line >= lineStarts.length
+        ? ''
+        : fullText.slice(lineStarts[line], lineStarts[line + 1] ?? fullText.length);
+    const currentLine = lineText(lineNumber);
+    const previousLine = lineText(lineNumber - 1);
 
     // Check for buoy-ignore comment
     return BUOY_IGNORE_PATTERN.test(currentLine) || BUOY_IGNORE_PATTERN.test(previousLine);

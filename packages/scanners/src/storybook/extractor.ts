@@ -288,11 +288,11 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
 
     for (const pattern of StoryFileScanner.MDX_PATTERNS) {
       try {
-        const files = await glob(pattern, {
+        const files = (await glob(pattern, {
           cwd: this.config.projectRoot,
           ignore: this.config.exclude || STORY_SCANNER_EXCLUDES,
           absolute: true,
-        });
+        })).sort();
 
         for (const file of files) {
           try {

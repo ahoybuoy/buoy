@@ -1611,11 +1611,11 @@ export class AngularComponentScanner extends SignalAwareScanner<
 
     // Get all TypeScript files that might contain NgModules
     const { glob } = await import("glob");
-    const files = await glob("**/*.module.ts", {
+    const files = (await glob("**/*.module.ts", {
       cwd: this.config.projectRoot,
       ignore: ["**/node_modules/**", "**/dist/**"],
       absolute: true,
-    });
+    })).sort();
 
     for (const filePath of files) {
       try {

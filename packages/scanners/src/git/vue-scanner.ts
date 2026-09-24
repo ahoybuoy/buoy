@@ -154,10 +154,10 @@ export class VueComponentScanner extends SignalAwareScanner<Component, VueScanne
     // Scan composables directory
     try {
       const { glob } = await import("glob");
-      const composableFiles = await glob("composables/**/*.{ts,js}", {
+      const composableFiles = (await glob("composables/**/*.{ts,js}", {
         cwd: this.config.projectRoot,
         ignore: ["**/node_modules/**"],
-      });
+      })).sort();
       for (const file of composableFiles) {
         const name = basename(file).replace(/\.(ts|js)$/, "");
         if (name.startsWith("use")) {
@@ -166,17 +166,17 @@ export class VueComponentScanner extends SignalAwareScanner<Component, VueScanne
       }
 
       // Scan pages directory
-      const pageFiles = await glob("pages/**/*.vue", {
+      const pageFiles = (await glob("pages/**/*.vue", {
         cwd: this.config.projectRoot,
         ignore: ["**/node_modules/**"],
-      });
+      })).sort();
       pages.push(...pageFiles);
 
       // Scan layouts directory
-      const layoutFiles = await glob("layouts/**/*.vue", {
+      const layoutFiles = (await glob("layouts/**/*.vue", {
         cwd: this.config.projectRoot,
         ignore: ["**/node_modules/**"],
-      });
+      })).sort();
       layouts.push(...layoutFiles);
     } catch {
       // Glob not available or failed

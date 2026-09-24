@@ -144,11 +144,11 @@ export async function detectDesignSystemLibraries(
   // This is detected during import scanning, not package.json
 
   // Scan source files for imports
-  const sourceFiles = await glob('**/*.{tsx,jsx,ts,js}', {
+  const sourceFiles = (await glob('**/*.{tsx,jsx,ts,js}', {
     cwd: projectRoot,
     ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
     absolute: true,
-  });
+  })).sort();
 
   // Track components per library
   const libraryComponents: Map<string, Set<string>> = new Map();

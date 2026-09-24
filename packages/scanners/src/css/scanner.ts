@@ -102,11 +102,11 @@ export class CssScanner {
 
     // Find all CSS files
     for (const pattern of this.options.include) {
-      const matches = await glob(pattern, {
+      const matches = (await glob(pattern, {
         cwd: this.options.projectRoot,
         ignore: this.options.exclude,
         nodir: true
-      });
+      })).sort();
       files.push(...matches);
     }
 

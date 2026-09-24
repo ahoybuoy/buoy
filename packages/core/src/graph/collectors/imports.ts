@@ -104,11 +104,11 @@ export async function collectImports(
     includeExternal = false,
   } = options;
 
-  const files = await glob(include, {
+  const files = (await glob(include, {
     cwd: projectRoot,
     ignore: exclude,
     absolute: false,
-  });
+  })).sort();
 
   const imports: FileImport[] = [];
   const externalDependencies = new Set<string>();

@@ -453,12 +453,12 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
   const found: string[] = [];
 
   for (const pattern of patterns) {
-    const matches = await glob(pattern, {
+    const matches = (await glob(pattern, {
       cwd: projectRoot,
       nodir: true,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
       maxDepth: 8,
-    });
+    })).sort();
     found.push(...matches);
   }
 
@@ -477,12 +477,12 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
   ];
 
   for (const pattern of cssFilesToCheck) {
-    const matches = await glob(pattern, {
+    const matches = (await glob(pattern, {
       cwd: projectRoot,
       nodir: true,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
       maxDepth: 8,
-    });
+    })).sort();
 
     for (const file of matches) {
       // Check if this file contains @theme blocks or CSS custom properties
@@ -502,12 +502,12 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
   }
 
   // Search ALL CSS files for :root with CSS variables (catches monorepo sub-packages)
-  const allCssFiles = await glob('**/*.css', {
+  const allCssFiles = (await glob('**/*.css', {
     cwd: projectRoot,
     nodir: true,
     ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/*.min.css'],
     maxDepth: 6,
-  });
+  })).sort();
 
   for (const file of allCssFiles) {
     if (found.includes(file)) continue;

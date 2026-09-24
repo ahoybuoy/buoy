@@ -205,11 +205,11 @@ export class ArbitraryValueDetector {
     const allFiles: string[] = [];
 
     for (const pattern of patterns) {
-      const matches = await glob(pattern, {
+      const matches = (await glob(pattern, {
         cwd: this.config.projectRoot,
         ignore,
         absolute: true,
-      });
+      })).sort();
       allFiles.push(...matches);
     }
 

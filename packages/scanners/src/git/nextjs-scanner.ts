@@ -1084,11 +1084,11 @@ export class NextJSScanner extends SignalAwareScanner<Component, NextJSScannerCo
 
     for (const pattern of NextJSScanner.CSS_MODULE_PATTERNS) {
       try {
-        const files = await glob(pattern, {
+        const files = (await glob(pattern, {
           cwd: this.config.projectRoot,
           ignore: ["**/node_modules/**", "**/dist/**", "**/.next/**"],
           absolute: true,
-        });
+        })).sort();
 
         for (const file of files) {
           const analysis = this.analyzeCSSModule(file);
@@ -1181,11 +1181,11 @@ export class NextJSScanner extends SignalAwareScanner<Component, NextJSScannerCo
     const results: NextImageUsage[] = [];
 
     try {
-      const files = await glob("**/*.{tsx,jsx}", {
+      const files = (await glob("**/*.{tsx,jsx}", {
         cwd: this.config.projectRoot,
         ignore: ["**/node_modules/**", "**/dist/**", "**/.next/**"],
         absolute: true,
-      });
+      })).sort();
 
       for (const file of files) {
         const content = await readFile(file, "utf-8");

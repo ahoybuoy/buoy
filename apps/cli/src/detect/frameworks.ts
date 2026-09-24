@@ -148,7 +148,7 @@ export async function detectFrameworks(projectRoot: string, monorepoInfo?: Monor
         : `${normalizedPattern}/*/package.json`;
 
       try {
-        const matches = await glob(pkgPattern, { cwd: projectRoot, nodir: true });
+        const matches = (await glob(pkgPattern, { cwd: projectRoot, nodir: true })).sort();
         for (const match of matches) {
           try {
             const wsPkgPath = resolve(projectRoot, match);
@@ -185,7 +185,7 @@ export async function detectFrameworks(projectRoot: string, monorepoInfo?: Monor
     // Check for config files
     if (pattern.files) {
       for (const filePattern of pattern.files) {
-        const matches = await glob(filePattern, { cwd: projectRoot, nodir: true });
+        const matches = (await glob(filePattern, { cwd: projectRoot, nodir: true })).sort();
         if (matches.length > 0) {
           detected.push({
             name: pattern.name,
@@ -215,12 +215,12 @@ export async function detectFrameworks(projectRoot: string, monorepoInfo?: Monor
 
   // Special case: Tailwind v4 uses @import "tailwindcss" in CSS instead of package.json
   if (!detected.some(d => d.name === 'tailwind')) {
-    const cssFiles = await glob('**/*.css', {
+    const cssFiles = (await glob('**/*.css', {
       cwd: projectRoot,
       nodir: true,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
       maxDepth: 4,
-    });
+    })).sort();
 
     for (const file of cssFiles.slice(0, 20)) {
       try {
@@ -243,12 +243,12 @@ export async function detectFrameworks(projectRoot: string, monorepoInfo?: Monor
 
   // Special case: shadcn/ui uses vendored components in components/ui/
   if (!detected.some(d => d.name === 'shadcn')) {
-    const shadcnFiles = await glob('**/components/ui/button.tsx', {
+    const shadcnFiles = (await glob('**/components/ui/button.tsx', {
       cwd: projectRoot,
       nodir: true,
       ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
       maxDepth: 5,
-    });
+    })).sort();
 
     if (shadcnFiles.length > 0) {
       try {
