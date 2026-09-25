@@ -51,7 +51,7 @@ export function createMcpCommand(): Command {
         }
       }
       console.log("");
-      console.log("Agents in this repo can now call list_design_tokens, find_token_for_value, check_design_drift and design_system_context.");
+      console.log("Agents in this repo can now call list_design_tokens, find_token_for_value, check_ui_against_design_system and design_system_context.");
       if (wanted.includes("claude") && options.hook !== false) {
         console.log("Claude Code will also get drift feedback after every Edit/Write of a style file.");
       }

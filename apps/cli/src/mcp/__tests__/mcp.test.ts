@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DesignToken, DriftSignal } from "@buoy-design/core";
 import { checkDrift, findRepoRoot, findTokensByValue, normalizeValue, toIssue } from "../project.js";
-import { extractFileSignals, issuesFromSignals } from "../file-check.js";
+import { extractFileSignals, issuesFromSignals, lineEdit, type FileIssue } from "../file-check.js";
 import { filePathFromHookPayload, formatHookFeedback, isStyleFile, runHook } from "../hook.js";
 import { installClient, mergeClaudeHook, mergeMcpServers } from "../install.js";
 import { cssVariableFor, withCssVariableAliases } from "../../scan/token-aliases.js";
@@ -215,5 +215,40 @@ describe("design-value rules in the agent hook", () => {
       "}",
     ].join("\n");
     expect(extractFileSignals(css, "src/globals.css").map((s) => s.value)).toEqual(["#333333"]);
+  });
+});
+
+describe("exact line edits for agents", () => {
+  const issue = (over: Partial<FileIssue>): FileIssue => ({
+    file: "a.css", line: 3, type: "hardcoded-color", severity: "warning",
+    message: "", current: "#fff", suggested: "var(--color-white)", ...over,
+  });
+
+  it("swaps the literal for the token", () => {
+    expect(lineEdit(issue({}), "  color: #fff;")).toEqual({ line: 3, before: "  color: #fff;", after: "  color: var(--color-white);" });
+  });
+
+  it("works inside a Tailwind arbitrary value", () => {
+    expect(lineEdit(issue({ file: "a.tsx" }), '<div className="bg-[#fff] p-2">')?.after).toBe('<div className="bg-[var(--color-white)] p-2">');
+  });
+
+  it("skips ambiguous lines, missing suggestions and JSX bare numbers", () => {
+    expect(lineEdit(issue({}), "  border: 1px solid #fff; color: #fff;")).toBeNull();
+    expect(lineEdit(issue({ suggested: undefined }), "  color: #fff;")).toBeNull();
+    expect(lineEdit(issue({ file: "a.tsx", current: "16px", suggested: "var(--space-4)" }), "style={{ padding: 16 }}")).toBeNull();
+  });
+
+  it("only puts Sass variables into Sass files", () => {
+    expect(lineEdit(issue({ suggested: "$white" }), "  color: #fff;")).toBeNull();
+    expect(lineEdit(issue({ file: "a.scss", suggested: "$white" }), "  color: #fff;")?.after).toBe("  color: $white;");
+  });
+
+  it("attaches the edit through checkDrift", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "buoy-edit-"));
+    writeFileSync(join(dir, "tokens.css"), ":root { --color-brand: #1a73e8; }\n");
+    writeFileSync(join(dir, "card.css"), ".card {\n  color: #1a73e8;\n}\n");
+    const tokens = [{ name: "--color-brand", category: "color", value: { type: "color", hex: "#1a73e8" }, source: { type: "css", path: "tokens.css" } }] as unknown as DesignToken[];
+    const result = await checkDrift({ projectRoot: dir, config: {} } as never, ["card.css"], tokens);
+    expect(result.issues[0]?.edit).toEqual({ line: 2, before: "  color: #1a73e8;", after: "  color: var(--color-brand);" });
   });
 });

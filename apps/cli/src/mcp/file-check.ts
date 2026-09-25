@@ -225,6 +225,31 @@ export interface FileIssue {
   current: string;
   suggested?: string;
   tokenSuggestions?: string[];
+  /** The exact line rewrite, when the swap is unambiguous; agents apply it as-is. */
+  edit?: LineEdit;
+}
+
+export interface LineEdit {
+  line: number;
+  before: string;
+  after: string;
+}
+
+/**
+ * Rewrite one line to use the suggested token, or null when that is not safe:
+ * the literal must appear exactly once on the line, and a Sass variable only
+ * goes into a Sass file. JSX bare numbers (`padding: 16`) are skipped because
+ * the reported value (`16px`) is not what the source says.
+ */
+export function lineEdit(issue: FileIssue, lineText: string | undefined): LineEdit | null {
+  const token = issue.suggested;
+  if (!token || lineText === undefined) return null;
+  const isSass = /\.(scss|sass)$/.test(issue.file);
+  if (token.startsWith("$") && !isSass) return null;
+  if (!token.startsWith("var(") && !token.startsWith("$")) return null;
+  const occurrences = lineText.split(issue.current).length - 1;
+  if (occurrences !== 1) return null;
+  return { line: issue.line, before: lineText, after: lineText.replace(issue.current, token) };
 }
 
 function tokenRef(token: { name: string }): string {
@@ -270,7 +295,11 @@ export async function checkFiles(files: string[], projectRoot: string, tokens: D
     } catch {
       continue; // deleted or unreadable: nothing to check
     }
-    issues.push(...issuesFromSignals(extractFileSignals(content, rel), tokens));
+    const lines = content.split("\n");
+    for (const issue of issuesFromSignals(extractFileSignals(content, rel), tokens)) {
+      const edit = lineEdit(issue, lines[issue.line - 1]);
+      issues.push(edit ? { ...issue, edit } : issue);
+    }
   }
   return issues;
 }

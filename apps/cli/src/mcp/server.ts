@@ -1,7 +1,7 @@
 /**
  * `buoy mcp serve`: a stdio MCP server that gives coding agents this repo's
- * design tokens and drift checks, so hardcoded values are caught while the
- * agent writes instead of on the PR.
+ * design system and checks their UI against it, so off-system values are
+ * caught while the agent writes instead of on the PR.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -55,7 +55,7 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
     {
       title: "List design tokens",
       description:
-        "The design tokens defined in this repository (CSS custom properties, Tailwind theme, tokens.json, SCSS variables). Call this before writing any CSS, inline style or Tailwind class so you use an existing token instead of a literal value. Filter by category (color, spacing, typography, shadow, border, sizing, motion, zIndex) or a name substring.",
+        "Get this repository's design system: the colors, spacing, typography, radius, shadow and motion values it defines (CSS custom properties, Tailwind theme, tokens.json, Sass variables, DESIGN.md). Call this before writing any CSS, inline style or Tailwind class, so the UI you write uses the project's values instead of new ones. Repos with no tokens get the values their code already uses most. Filter by category (color, spacing, typography, shadow, border, sizing, motion, zIndex) or a name substring.",
       inputSchema: {
         category: z.string().optional().describe("Only tokens in this category"),
         query: z.string().optional().describe("Case-insensitive substring of the token name"),
@@ -85,7 +85,7 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
     {
       title: "Find the token for a literal value",
       description:
-        "Given a literal CSS value you are about to write (for example '#1a73e8', '16px', '0.5rem'), return the design tokens in this repository that have exactly that value. Use the token instead of the literal. An empty result means there is no token for it; prefer the nearest token from list_design_tokens over inventing a new value.",
+        "Before you write a literal CSS value (for example '#1a73e8', '16px', '0.5rem'), find the design token in this repository that already holds it, and write the token instead. An empty result means no token has that value; pick the nearest one from list_design_tokens rather than inventing a new value.",
       inputSchema: {
         value: z.string().describe("The literal value, e.g. '#ffffff' or '8px'"),
         category: z.string().optional().describe("Restrict to a category such as color or spacing"),
@@ -114,11 +114,11 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
   );
 
   server.registerTool(
-    "check_design_drift",
+    "check_ui_against_design_system",
     {
-      title: "Check files for design drift",
+      title: "Check UI code against the design system",
       description:
-        "Run Buoy's drift analysis and return hardcoded values, unknown tokens and inconsistent components, each with the token to use instead when one exists. Pass the files you just edited to check only those; omit files for the whole repository. Run this after editing styles and fix every issue that has a suggestion.",
+        "After you edit UI code, check it against this repository's design system before you finish. Returns every hardcoded color, spacing, font, radius or shadow that should be a token, with the token to use. When an issue has an `edit`, replace line `edit.line` (currently `edit.before`) with `edit.after` exactly; it is a verified one-line swap. Pass the files you edited to check only those (fast); omit files to check the whole repository. Re-run until it reports no issues.",
       inputSchema: {
         files: z.array(z.string()).optional().describe("Repository-relative or absolute paths to limit the check to"),
       },
@@ -128,8 +128,8 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
       return json({
         ...result,
         instructions: result.issues.length === 0
-          ? "No design drift in the checked files."
-          : "Replace each `current` value with `suggested` (or one of `tokenSuggestions`), then run check_design_drift again.",
+          ? "The checked files match the design system."
+          : "Apply each `edit` as given. For issues without one, replace `current` with `suggested` (or one of `tokenSuggestions`). Then run check_ui_against_design_system again.",
       });
     },
   );
@@ -139,7 +139,7 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
     {
       title: "Design system overview",
       description:
-        "A Markdown summary of this repository's design system: token categories with example names, the component library, and the anti-patterns Buoy flags. Read it once at the start of a task that touches UI.",
+        "Read this once at the start of any task that builds or changes UI. A Markdown summary of this repository's design system: token categories with example names, the existing components to reuse before creating new ones, and the patterns to avoid.",
       inputSchema: {
         detail: z.enum(["minimal", "standard", "comprehensive"]).optional().describe("How much to include (default standard)"),
       },

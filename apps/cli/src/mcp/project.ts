@@ -120,6 +120,7 @@ export interface DriftIssue {
   current?: unknown;
   suggested?: string;
   tokenSuggestions?: string[];
+  edit?: { line: number; before: string; after: string };
 }
 
 export function toIssue(drift: DriftSignal): DriftIssue {
