@@ -1892,6 +1892,16 @@ function getSetupStatus(cwd: string): Record<string, unknown> {
 
 
 /**
+ * Whole colour values from a drift message's value list. Splitting on commas
+ * cut `rgba(0, 0, 0, 0.5)` to `rgba(0`; functional colours are normalised to
+ * `, ` spacing so the same colour written two ways counts once.
+ */
+export function colorValuesIn(text: string): string[] {
+  const matches = text.match(/#[0-9a-f]{3,8}\b|(?:rgba?|hsla?)\([^)]*\)/gi) ?? [];
+  return matches.map((m) => m.startsWith("#") ? m : m.replace(/\s*,\s*/g, ", ").replace(/\(\s+|\s+\)/g, (p) => p.trim()));
+}
+
+/**
  * Extract rich suggestion context from drift signals for better health suggestions.
  */
 function computeRichSuggestionContext(drifts: DriftSignal[]): {
@@ -1910,11 +1920,7 @@ function computeRichSuggestionContext(drifts: DriftSignal[]): {
     // Extract color values from the message after the colon
     const colonIdx = d.message.lastIndexOf(":");
     if (colonIdx === -1) continue;
-    const valuesStr = d.message.slice(colonIdx + 1).trim();
-    const colors = valuesStr.split(",").map(v => v.trim()).filter(v =>
-      v.startsWith("#") || v.startsWith("rgb")
-    );
-    for (const c of colors) {
+    for (const c of colorValuesIn(d.message.slice(colonIdx + 1))) {
       colorCounts.set(c, (colorCounts.get(c) || 0) + 1);
     }
   }

@@ -176,3 +176,15 @@ describe("computeRichSuggestionContext vendored filtering", () => {
     expect(worst?.path).toBe("src/components/Footer.tsx");
   });
 });
+
+describe("colorValuesIn", async () => {
+  const { colorValuesIn } = await import("../show.js");
+
+  it("keeps functional colours whole and drops trailing punctuation", () => {
+    expect(colorValuesIn(" rgba(0, 0, 0, 0.5), #fff, rgb(255,255,255)")).toEqual([
+      "rgba(0, 0, 0, 0.5)", "#fff", "rgb(255, 255, 255)",
+    ]);
+    expect(colorValuesIn(" #000.")).toEqual(["#000"]);
+    expect(colorValuesIn(" hsl(210 40% 98%)")).toEqual(["hsl(210 40% 98%)"]);
+  });
+});

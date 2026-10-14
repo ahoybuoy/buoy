@@ -42,6 +42,15 @@ export function styleBlocksAsCss(content: string): string {
 }
 
 /**
+ * Blank out SCSS `//` line comments, keeping line numbers. Only a `//` at the
+ * start of a line or after `;`, `{` or `}` counts, so `url(https://…)` stays.
+ * Without this, prose like `// color: disabled > accent` reads as a declaration.
+ */
+export function blankLineComments(css: string): string {
+  return css.replace(/(^|[;{}])([ \t]*)\/\/[^\n]*/gm, (_m, lead: string, space: string) => lead + space);
+}
+
+/**
  * `exclude` is the project's own exclude globs from .buoy.yaml sources: a
  * folder the user keeps out of the component scan stays out of this one too.
  */
@@ -66,11 +75,13 @@ export async function checkStylesheets(
     // Scan as CSS so the CSS property table applies; report the real path.
     // Line numbers match the real file (styleBlocksAsCss keeps them), so the
     // judge reads comments and history from the source as written.
+    // The judge reads the comments, so it gets the lines as written.
+    const sourceLines = css.split("\n");
     const lineJudge = judge
-      ? (line: number, property: string, value: string, lines: readonly string[]) =>
-        (judge.skip(file, line, { property, value }, lines) ? { kind: "allowlisted" as const, reason: "skipped" } : null)
+      ? (line: number, property: string, value: string) =>
+        (judge.skip(file, line, { property, value }, sourceLines) ? { kind: "allowlisted" as const, reason: "skipped" } : null)
       : undefined;
-    const signals = extractFileSignals(css, isComponent ? `${file}.css` : file, lineJudge).map((s) => ({
+    const signals = extractFileSignals(blankLineComments(css), isComponent ? `${file}.css` : file, lineJudge).map((s) => ({
       ...s,
       location: { ...s.location, path: file },
     }));

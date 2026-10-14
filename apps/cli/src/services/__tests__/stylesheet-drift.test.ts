@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DesignToken } from "@buoy-design/core";
-import { checkStylesheets, styleBlocksAsCss, stylesheetIssuesToDrifts } from "../stylesheet-drift.js";
+import { blankLineComments, checkStylesheets, styleBlocksAsCss, stylesheetIssuesToDrifts } from "../stylesheet-drift.js";
 import { configuredExcludes } from "../drift-analysis.js";
 import type { BuoyConfig } from "../../config/schema.js";
 
@@ -53,5 +53,26 @@ describe("stylesheet drift", () => {
     expect(css.message).toBe("Hardcoded colour / spacing in style.css: #3b82f6 (use var(--brand)), 13px.");
     expect(css.details.tokenSuggestions).toEqual(["#3b82f6 → var(--brand)"]);
     expect(css.severity).toBe("warning");
+  });
+});
+
+describe("SCSS line comments", () => {
+  it("are not read as declarations, and line numbers hold", async () => {
+    const root = mkdtempSync(join(tmpdir(), "buoy-scss-comments-"));
+    const scss = [
+      "// Cascade order mirrors the old ternaries:",
+      "// color: disabled > accent > base; hover background: disabled (with",
+      ".a {",
+      "  background: url(https://example.com/x.png); // trailing note: padding: 13px",
+      "  color: #123456;",
+      "}",
+    ].join("\n");
+    writeFileSync(join(root, "menu.module.scss"), scss);
+    const issues = await checkStylesheets(root, []);
+    const found = issues.map((i) => `${i.line}:${i.current}`).join(" ");
+    expect(found).not.toMatch(/disabled|accent|13px/);
+    expect(found).toMatch(/5:[^ ]*#123456/);
+    expect(blankLineComments(scss).split("\n")).toHaveLength(6);
+    expect(blankLineComments(scss)).toContain("url(https://example.com/x.png);");
   });
 });
