@@ -31,10 +31,11 @@ const TEAM_FEATURES = [
   'Public repos are always free',
 ];
 
-const DESIGN_SYSTEM_FEATURES = [
+const ORGANIZATION_FEATURES = [
   'Everything in Team',
-  'Org-wide drift record across repos and teams',
-  'Calibration in year one',
+  'Org-wide drift record across every repo that uses your system',
+  'Optional calibration ($12,000, one time)',
+  'Design-partner relationship with the people building Buoy',
 ];
 
 const PRICING_URL = 'https://buoy.design/pricing';
@@ -47,9 +48,9 @@ export function createPlansCommand(): Command {
       if (options.json) {
         console.log(JSON.stringify({
           plans: [
-            { id: 'open-source', name: 'Open source', price: '$0', period: 'forever', features: OPEN_SOURCE_FEATURES },
+            { id: 'free', name: 'Open source', price: '$0', period: 'forever', features: OPEN_SOURCE_FEATURES },
             { id: 'team', name: 'Team', price: '$49', period: '/month per design system', features: TEAM_FEATURES },
-            { id: 'design-system', name: 'Design System', price: '$5,000', period: '/year per design system', features: DESIGN_SYSTEM_FEATURES },
+            { id: 'enterprise', name: 'Organization', price: '$5,000', period: '/year per design system', audience: 'The team that owns a design system used across many teams', features: ORGANIZATION_FEATURES },
           ],
           url: PRICING_URL,
         }, null, 2));
@@ -96,8 +97,9 @@ export function createPlansCommand(): Command {
       console.log(chalk.cyan.bold('Team') + chalk.dim(' $49/month per design system, no seats') + teamLabel);
       list(TEAM_FEATURES);
 
-      console.log(chalk.magenta.bold('Design System') + chalk.dim(' $5,000/year per design system') + current('enterprise'));
-      list(DESIGN_SYSTEM_FEATURES);
+      console.log(chalk.magenta.bold('Organization') + chalk.dim(' $5,000/year per design system') + current('enterprise'));
+      console.log(chalk.dim('  For the team that owns a design system used across many teams'));
+      list(ORGANIZATION_FEATURES);
 
       console.log(chalk.dim('─'.repeat(50)));
       console.log(chalk.dim('   ') + 'Details and the free-for-life spots left: ' + chalk.cyan(PRICING_URL));
