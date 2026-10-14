@@ -102,6 +102,22 @@ describe("SemanticDiffEngine", () => {
       expect(result.drifts).toHaveLength(1);
       expect(result.drifts[0]!.type).toBe("orphaned-component");
     });
+
+    it("only mentions Figma when the design source is Figma", () => {
+      const code = [createMockComponent("Card", "react")];
+      const figma = engine.compareComponents(code, [createMockComponent("Modal", "figma")]);
+      const stories = engine.compareComponents(code, [createMockComponent("Modal", "storybook")]);
+      const none = engine.compareComponents(code, []);
+
+      const card = (r: typeof figma) => r.drifts.find((d) => d.message.includes('"Card"'))!;
+      expect(card(figma).details.suggestions?.[0]).toContain("Figma");
+      expect(card(stories).message).toContain("no match in Storybook");
+      expect(card(stories).details.suggestions?.[0]).toBe("Add a story for this component or document it as an intentional deviation");
+      expect(card(none).message).toContain("no match in the design source");
+      for (const r of [stories, none]) {
+        expect(JSON.stringify(r.drifts)).not.toContain("Figma");
+      }
+    });
   });
 
   describe("analyzeComponents", () => {
@@ -1059,11 +1075,13 @@ describe("SemanticDiffEngine", () => {
 
 // Helper functions
 
-function createMockComponent(name: string, type: "react" | "figma"): Component {
+function createMockComponent(name: string, type: "react" | "figma" | "storybook"): Component {
   const source =
     type === "react"
       ? { type: "react" as const, path: `src/${name}.tsx`, exportName: name }
-      : { type: "figma" as const, fileKey: "abc", nodeId: "1:1" };
+      : type === "figma"
+        ? { type: "figma" as const, fileKey: "abc", nodeId: "1:1" }
+        : { type: "storybook" as const, storyId: `${name.toLowerCase()}--default`, kind: name };
 
   return {
     id: `${type}:${name}`,

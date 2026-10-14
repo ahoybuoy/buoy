@@ -253,7 +253,7 @@ export class SemanticDiffEngine {
     // Phase 3: Generate drift signals
     const orphanedSource = sourceComponents.filter((c) => !matchedSourceIds.has(c.id));
     const orphanedTarget = targetComponents.filter((c) => !matchedTargetIds.has(c.id));
-    const drifts = this.generateComponentDrifts(matches, orphanedSource, orphanedTarget);
+    const drifts = this.generateComponentDrifts(matches, orphanedSource, orphanedTarget, designSourceLabel(targetComponents));
 
     this.clearCaches();
 
@@ -857,6 +857,7 @@ export class SemanticDiffEngine {
     matches: ComponentMatch[],
     orphanedSource: Component[],
     orphanedTarget: Component[],
+    designLabel = "the design source",
   ): DriftSignal[] {
     const drifts: DriftSignal[] = [];
 
@@ -888,8 +889,8 @@ export class SemanticDiffEngine {
         type: "orphaned-component",
         severity: "warning",
         source: this.componentToDriftSource(comp),
-        message: `Component "${comp.name}" exists in ${comp.source.type} but has no match in design`,
-        details: { suggestions: ["Add component to Figma or document as intentional deviation"] },
+        message: `Component "${comp.name}" exists in ${comp.source.type} but has no match in ${designLabel}`,
+        details: { suggestions: [missingFromDesignSuggestion(designLabel)] },
         detectedAt: new Date(),
       });
     }
@@ -900,7 +901,7 @@ export class SemanticDiffEngine {
         type: "orphaned-component",
         severity: "info",
         source: this.componentToDriftSource(comp),
-        message: `Component "${comp.name}" exists in design but not implemented`,
+        message: `Component "${comp.name}" exists in ${designLabel} but not implemented`,
         details: { suggestions: ["Implement component or mark as planned"] },
         detectedAt: new Date(),
       });
@@ -948,4 +949,21 @@ export class SemanticDiffEngine {
     if (differences.some((d) => d.severity === "warning")) return "warning";
     return "info";
   }
+}
+
+/**
+ * Name the design source components were compared against. Only say Figma
+ * when there is Figma: telling a code-first team to "add it to Figma" is
+ * wrong advice, and Storybook-only repos compare against their stories.
+ */
+export function designSourceLabel(designComponents: Component[]): string {
+  if (designComponents.some((c) => c.source.type === "figma")) return "Figma";
+  if (designComponents.some((c) => c.source.type === "storybook")) return "Storybook";
+  return "the design source";
+}
+
+function missingFromDesignSuggestion(designLabel: string): string {
+  if (designLabel === "Figma") return "Add component to Figma or document as intentional deviation";
+  if (designLabel === "Storybook") return "Add a story for this component or document it as an intentional deviation";
+  return "Add component to the design source or document as intentional deviation";
 }

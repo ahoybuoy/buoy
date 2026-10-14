@@ -1,4 +1,4 @@
-import type { Component, DesignToken } from '@buoy-design/core';
+import { createDriftId, type Component, type DesignToken, type DriftSignal } from '@buoy-design/core';
 import { minimatch } from 'minimatch';
 
 const CODE_COMPONENT_SOURCES = new Set([
@@ -82,4 +82,21 @@ export function isCanonicalTokenFile(
 function getTokenPath(token: DesignToken): string {
   const source = token.source as Record<string, unknown>;
   return (source.path as string) || (source.fileKey as string) || '';
+}
+
+/**
+ * Storybook is documentation, not a design source. Without Figma, a code
+ * component with no story is not drift, and one warning per component buries
+ * the real findings (thousands on code-first repos). Drop those signals and
+ * return how many there were so the caller can summarise them in one line.
+ */
+export function dropStorylessComponents(
+  drifts: DriftSignal[],
+  orphanedCode: Component[],
+  canonical: Component[],
+): { drifts: DriftSignal[]; withoutStory: number } {
+  if (canonical.some((c) => c.source.type === 'figma')) return { drifts, withoutStory: 0 };
+  const ids = new Set(orphanedCode.map((c) => createDriftId('orphaned-component', c.id)));
+  const kept = drifts.filter((d) => !ids.has(d.id));
+  return { drifts: kept, withoutStory: drifts.length - kept.length };
 }

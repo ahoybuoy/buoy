@@ -340,13 +340,13 @@ function getActionItems(drift: DriftSignal): string[] {
       break;
 
     case 'orphaned-component':
-      if (drift.message.includes('not in design')) {
-        actions.push('Add component to Figma design system');
+      if (drift.message.includes('has no match in')) {
+        actions.push(drift.details.suggestions?.[0] ?? 'Add component to the design source');
         actions.push('Or document as intentional code-only component');
         actions.push('Or remove if truly unused');
       } else {
         actions.push('Implement the designed component in code');
-        actions.push('Or remove from Figma if no longer needed');
+        actions.push('Or remove it from the design source if no longer needed');
       }
       break;
 
@@ -418,7 +418,7 @@ export function formatDriftTypeForDesigners(type: string): string {
     'naming-inconsistency': 'Inconsistent naming',
     'semantic-mismatch': 'Component behaves differently',
     'deprecated-pattern': 'Using outdated component',
-    'orphaned-component': 'Component not in design file',
+    'orphaned-component': 'Component not in design source',
     'orphaned-token': 'Style not in design system',
     'value-divergence': 'Design doesn\'t match code',
     'accessibility-conflict': 'Accessibility problem',
@@ -438,7 +438,7 @@ export function getDriftExplanationForDesigners(type: string): string {
     'naming-inconsistency': 'Similar components have different names, which makes it confusing to know which one to use.',
     'semantic-mismatch': 'The same component works differently in different places, which creates an inconsistent experience.',
     'deprecated-pattern': 'This component has been replaced with a newer version, but someone is still using the old one.',
-    'orphaned-component': 'This component exists in code but isn\'t documented in Figma, so designers can\'t see it.',
+    'orphaned-component': 'This component exists in code but not in your design source (Figma or Storybook), so it can drift from what designers expect.',
     'orphaned-token': 'This style exists in code but isn\'t in the design system, so it might be inconsistent.',
     'value-divergence': 'The design file says one thing, but the code says something different. They need to be synced.',
     'accessibility-conflict': 'This might be hard for some users to see or interact with.',
