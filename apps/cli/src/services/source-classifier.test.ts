@@ -41,4 +41,13 @@ describe("dropStorylessComponents", () => {
     expect(withoutStory).toBe(0);
     expect(drifts).toEqual(diff.drifts);
   });
+
+  it("keeps them when Figma is configured but its scan found nothing", () => {
+    const stories = [component("Button", "storybook")];
+    const diff = new SemanticDiffEngine().compareComponents(code, stories);
+    const { drifts, withoutStory } = dropStorylessComponents(diff.drifts, diff.orphanedSource, stories, true);
+
+    expect(withoutStory).toBe(0);
+    expect(drifts).toEqual(diff.drifts);
+  });
 });

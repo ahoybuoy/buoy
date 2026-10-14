@@ -848,6 +848,7 @@ export class DriftAnalysisService {
         componentDiff.drifts,
         componentDiff.orphanedSource,
         classifiedComponents.canonical,
+        Boolean(this.config.sources.figma?.enabled),
       );
       if (withoutStory > 0) {
         onProgress?.(

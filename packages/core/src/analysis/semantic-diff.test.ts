@@ -118,6 +118,15 @@ describe("SemanticDiffEngine", () => {
         expect(JSON.stringify(r.drifts)).not.toContain("Figma");
       }
     });
+
+    it("labels each unmatched design component by its own source", () => {
+      const result = engine.compareComponents(
+        [createMockComponent("Button", "react")],
+        [createMockComponent("Button", "figma"), createMockComponent("Tooltip", "storybook")],
+      );
+      const tooltip = result.drifts.find((d) => d.message.includes('"Tooltip"'))!;
+      expect(tooltip.message).toBe('Component "Tooltip" exists in Storybook but not implemented');
+    });
   });
 
   describe("analyzeComponents", () => {

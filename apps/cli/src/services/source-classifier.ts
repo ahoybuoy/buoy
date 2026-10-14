@@ -94,8 +94,10 @@ export function dropStorylessComponents(
   drifts: DriftSignal[],
   orphanedCode: Component[],
   canonical: Component[],
+  figmaConfigured = false,
 ): { drifts: DriftSignal[]; withoutStory: number } {
-  if (canonical.some((c) => c.source.type === 'figma')) return { drifts, withoutStory: 0 };
+  // A configured Figma source counts even when its scan returned nothing.
+  if (figmaConfigured || canonical.some((c) => c.source.type === 'figma')) return { drifts, withoutStory: 0 };
   const ids = new Set(orphanedCode.map((c) => createDriftId('orphaned-component', c.id)));
   const kept = drifts.filter((d) => !ids.has(d.id));
   return { drifts: kept, withoutStory: drifts.length - kept.length };

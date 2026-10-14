@@ -901,7 +901,7 @@ export class SemanticDiffEngine {
         type: "orphaned-component",
         severity: "info",
         source: this.componentToDriftSource(comp),
-        message: `Component "${comp.name}" exists in ${designLabel} but not implemented`,
+        message: `Component "${comp.name}" exists in ${designSourceLabel([comp])} but not implemented`,
         details: { suggestions: ["Implement component or mark as planned"] },
         detectedAt: new Date(),
       });
