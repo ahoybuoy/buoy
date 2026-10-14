@@ -20,6 +20,55 @@ function countStyleProperties(styleContent: string, isJSX: boolean): number {
   return styleContent.split(';').filter(s => s.trim().includes(':')).length;
 }
 
+/** `MP.neutral400`, `theme.colors['gray-500']`, `tokens?.space` */
+const REFERENCE = /^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*|\[[^\]]+\])*$/;
+/** `'var(--color-text)'`, `var(--space-2)` */
+const CSS_VAR = /^(['"`]?)var\(--[\w-]+(?:\s*,[^)]*)?\)\1$/;
+const LITERALS = new Set(['true', 'false', 'null', 'undefined']);
+
+/** Split on top-level separators, ignoring ones inside quotes, parens or brackets. */
+function splitTopLevel(text: string, separator: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let current = '';
+  for (const ch of text) {
+    if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      quote = ch;
+    } else if (ch === '(' || ch === '[') {
+      depth++;
+    } else if (ch === ')' || ch === ']') {
+      depth--;
+    } else if (ch === separator && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  parts.push(current);
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+
+/**
+ * True when every property in the style only references the design system:
+ * `style={{ color: MP.navy500, borderColor: AUDIT.border }}` or
+ * `style="color: var(--text)"`. That is token use, not drift.
+ */
+export function onlyReferencesTokens(styleContent: string, isJSX: boolean): boolean {
+  const declarations = splitTopLevel(styleContent, isJSX ? ',' : ';');
+  if (declarations.length === 0) return false;
+  return declarations.every((declaration) => {
+    const colon = declaration.indexOf(':');
+    if (colon === -1) return false;
+    const value = declaration.slice(colon + 1).trim();
+    if (CSS_VAR.test(value)) return true;
+    return isJSX && REFERENCE.test(value) && !LITERALS.has(value);
+  });
+}
+
 /**
  * File-level extractor: scans for inline style= attributes
  */
@@ -41,6 +90,7 @@ export function extractInlineStyleSignals(
       let match;
       while ((match = pattern.exec(line)) !== null) {
         const styleContent = match[1]!;
+        if (onlyReferencesTokens(styleContent, pattern === JSX_STYLE_PATTERN)) continue;
         const styleCount = countStyleProperties(styleContent, pattern === JSX_STYLE_PATTERN);
 
         signals.push({
