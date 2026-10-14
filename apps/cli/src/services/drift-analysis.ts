@@ -827,7 +827,7 @@ export class DriftAnalysisService {
     }
 
     // Step 2.4: Cross-source comparison (orphaned-component, orphaned-token, value-divergence)
-    const { classifyComponents, classifyTokens } =
+    const { classifyComponents, classifyTokens, dropStorylessComponents } =
       await import("./source-classifier.js");
     const canonicalPatterns = this.config.sources.tokens?.canonical ?? [];
     const classifiedComponents = classifyComponents(components);
@@ -844,15 +844,26 @@ export class DriftAnalysisService {
         classifiedComponents.code,
         classifiedComponents.canonical,
       );
-      if (componentDiff.drifts.length > 0) {
+      const { drifts: componentDrifts, withoutStory } = dropStorylessComponents(
+        componentDiff.drifts,
+        componentDiff.orphanedSource,
+        classifiedComponents.canonical,
+        Boolean(this.config.sources.figma?.enabled),
+      );
+      if (withoutStory > 0) {
+        onProgress?.(
+          `${withoutStory} code components have no Storybook story (not reported: no Figma source)`,
+        );
+      }
+      if (componentDrifts.length > 0) {
         drifts.push(
           ...applySeverityOverrides(
-            componentDiff.drifts,
+            componentDrifts,
             this.config.drift.severity,
           ),
         );
         onProgress?.(
-          `Found ${componentDiff.drifts.length} cross-source component issues`,
+          `Found ${componentDrifts.length} cross-source component issues`,
         );
       }
     }
