@@ -1,8 +1,7 @@
 /**
  * buoy plans - Show available plans and features
  *
- * Displays a comparison of Free vs Team plans with pricing info.
- * Helps users understand what they get with an upgrade.
+ * Displays the plans and prices shown on buoy.design/pricing.
  */
 
 import { Command } from 'commander';
@@ -14,35 +13,32 @@ import {
 import {
   header,
   newline,
-  info,
 } from '../output/reporters.js';
 
-const FREE_FEATURES = [
-  'Auto-detect design system',
+const OPEN_SOURCE_FEATURES = [
+  'CLI, MCP server and GitHub Action (MIT)',
   'All drift detection commands',
-  'Token import (JSON, CSS, Tokens Studio)',
+  'Blocks in your own CI with --fail-on / fail-on-drift',
   'AI guardrails (skills, hooks, context)',
   'Local scan history',
-  'Unlimited developers',
 ];
 
 const TEAM_FEATURES = [
-  'Everything in Free',
-  'Unlimited repos',
-  'GitHub PR comments',
-  'Slack & Teams alerts',
-  'Cloud history & trends',
-  'Figma Monitor plugin',
+  'GitHub App PR reviews with inline fixes',
+  'Unlimited repos, contributors, agents and runs',
+  'Remembered declines and cloud history',
+  'Free for life for the first 100 installs',
+  'Public repos are always free',
 ];
 
-const ENTERPRISE_FEATURES = [
+const ORGANIZATION_FEATURES = [
   'Everything in Team',
-  'SSO / SAML',
-  'Audit logs',
-  'SLA guarantees',
-  'Implementation consulting',
-  'Dedicated Slack channel',
+  'Org-wide drift record across every repo that uses your system',
+  'Optional calibration ($12,000, one time)',
+  'Design-partner relationship with the people building Buoy',
 ];
+
+const PRICING_URL = 'https://buoy.design/pricing';
 
 export function createPlansCommand(): Command {
   return new Command('plans')
@@ -52,29 +48,11 @@ export function createPlansCommand(): Command {
       if (options.json) {
         console.log(JSON.stringify({
           plans: [
-            {
-              id: 'free',
-              name: 'Free',
-              price: '$0',
-              period: 'forever',
-              features: FREE_FEATURES,
-            },
-            {
-              id: 'team',
-              name: 'Team',
-              price: '$25',
-              period: '/dev/month',
-              annualPrice: '$20',
-              annualPeriod: '/dev/month (billed annually)',
-              features: TEAM_FEATURES,
-            },
-            {
-              id: 'enterprise',
-              name: 'Enterprise',
-              price: 'Custom',
-              features: ENTERPRISE_FEATURES,
-            },
+            { id: 'free', name: 'Open source', price: '$0', period: 'forever', features: OPEN_SOURCE_FEATURES },
+            { id: 'team', name: 'Team', price: '$49', period: '/month per design system', features: TEAM_FEATURES },
+            { id: 'enterprise', name: 'Organization', price: '$5,000', period: '/year per design system', audience: 'The team that owns a design system used across many teams', features: ORGANIZATION_FEATURES },
           ],
+          url: PRICING_URL,
         }, null, 2));
         return;
       }
@@ -102,61 +80,28 @@ export function createPlansCommand(): Command {
       header('Buoy Plans');
       newline();
 
-      // Free plan
-      const freeLabel = currentPlan === 'free' && trialDays === 0
-        ? chalk.green(' ← current')
-        : '';
-      console.log(chalk.bold('Free') + chalk.dim(' $0/forever') + freeLabel);
-      for (const feature of FREE_FEATURES) {
-        console.log(`  ${chalk.green('✓')} ${feature}`);
-      }
-      newline();
+      const current = (id: string) => (currentPlan === id ? chalk.green(' ← current') : '');
+      const list = (features: string[]) => {
+        for (const feature of features) console.log(`  ${chalk.green('✓')} ${feature}`);
+        newline();
+      };
 
-      // Team plan
+      console.log(chalk.bold('Open source') + chalk.dim(' $0 forever') + current('free'));
+      list(OPEN_SOURCE_FEATURES);
+
       const teamLabel = currentPlan === 'team'
         ? chalk.green(' ← current')
         : trialDays > 0
           ? chalk.yellow(` ← trial (${trialDays} days left)`)
           : '';
-      console.log(chalk.cyan.bold('Team') + chalk.dim(' $25/dev/month') + teamLabel);
-      console.log(chalk.dim('      $20/dev/month billed annually (20% off)'));
-      for (const feature of TEAM_FEATURES) {
-        console.log(`  ${chalk.green('✓')} ${feature}`);
-      }
-      newline();
+      console.log(chalk.cyan.bold('Team') + chalk.dim(' $49/month per design system, no seats') + teamLabel);
+      list(TEAM_FEATURES);
 
-      // Enterprise plan
-      const entLabel = currentPlan === 'enterprise' ? chalk.green(' ← current') : '';
-      console.log(chalk.magenta.bold('Enterprise') + chalk.dim(' Custom pricing') + entLabel);
-      for (const feature of ENTERPRISE_FEATURES) {
-        console.log(`  ${chalk.green('✓')} ${feature}`);
-      }
-      newline();
+      console.log(chalk.magenta.bold('Organization') + chalk.dim(' $5,000/year per design system') + current('enterprise'));
+      console.log(chalk.dim('  For the team that owns a design system used across many teams'));
+      list(ORGANIZATION_FEATURES);
 
-      // Call to action
       console.log(chalk.dim('─'.repeat(50)));
-      if (currentPlan === 'free' && trialDays === 0) {
-        console.log(
-          chalk.dim('💡 ') +
-          'Run ' +
-          chalk.cyan('buoy billing upgrade') +
-          ' to start your Team trial'
-        );
-      } else if (trialDays > 0) {
-        console.log(
-          chalk.dim('💡 ') +
-          'Run ' +
-          chalk.cyan('buoy billing upgrade') +
-          ' to keep Team features after trial'
-        );
-      } else if (currentPlan === 'team') {
-        info('Contact sales@buoy.dev for Enterprise');
-      }
-
-      console.log(
-        chalk.dim('   ') +
-        'Learn more: ' +
-        chalk.cyan('https://buoy.dev/pricing')
-      );
+      console.log(chalk.dim('   ') + 'Details and the free-for-life spots left: ' + chalk.cyan(PRICING_URL));
     });
 }
