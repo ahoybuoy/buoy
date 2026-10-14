@@ -14,7 +14,6 @@ import {
   isLoggedIn,
   getBillingStatus,
   getInvoices,
-  createCheckoutSession,
   createPortalSession,
 } from '../cloud/index.js';
 import {
@@ -27,6 +26,8 @@ import {
   newline,
   header,
 } from '../output/reporters.js';
+
+const PRICING_URL = 'https://buoy.design/pricing';
 
 export function createBillingCommand(): Command {
   const cmd = new Command('billing');
@@ -159,61 +160,18 @@ async function showBillingStatus(options: { json?: boolean }): Promise<void> {
 
 function createUpgradeCommand(): Command {
   return new Command('upgrade')
-    .description('Upgrade to Team plan ($25/dev/month)')
+    .description('Upgrade to Team ($49/month per design system)')
     .action(async () => {
-      if (!isLoggedIn()) {
-        error('Not logged in');
-        info('Run `buoy ahoy login` to sign in');
-        info('Run `buoy login --signup` to create an account');
-        process.exit(1);
-      }
-
-      const spin = spinner('Creating checkout session...');
-
+      // Checkout is paused until the $49-per-design-system price exists in
+      // Stripe; the old checkout charged per developer.
+      info('Team is $49/month per design system: unlimited repos, contributors, agents and runs.');
+      info('The first 100 GitHub App installs are free for life.');
+      newline();
       try {
-        // Check current plan first
-        const statusResult = await getBillingStatus();
-        if (statusResult.ok && statusResult.data?.plan.id === 'team') {
-          spin.stop();
-          info('You are already on the Team plan');
-          info('Run `buoy billing portal` to manage your subscription');
-          return;
-        }
-
-        const result = await createCheckoutSession();
-
-        spin.stop();
-
-        if (!result.ok) {
-          error(result.error || 'Failed to create checkout session');
-          process.exit(1);
-        }
-
-        info('Opening checkout page...');
-        newline();
-
-        try {
-          await open(result.data!.checkoutUrl);
-          success('Browser opened!');
-        } catch {
-          info('Please visit this URL to complete your upgrade:');
-          console.log(chalk.cyan(result.data!.checkoutUrl));
-        }
-
-        newline();
-        console.log(chalk.bold('Team Plan - $25/dev/month'));
-        console.log(chalk.dim('  ($20/dev/month billed annually)'));
-        console.log('');
-        console.log('  • Unlimited repos');
-        console.log('  • GitHub PR comments');
-        console.log('  • Slack & Teams alerts');
-        console.log('  • Cloud history & trends');
-        console.log('  • Figma Monitor plugin');
-      } catch (err) {
-        spin.fail('Failed to start upgrade');
-        const message = err instanceof Error ? err.message : String(err);
-        error(message);
-        process.exit(1);
+        await open(PRICING_URL);
+        success('Opened buoy.design/pricing');
+      } catch {
+        info(`See ${chalk.cyan(PRICING_URL)}`);
       }
     });
 }
