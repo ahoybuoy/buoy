@@ -34,7 +34,7 @@ describe('extractInlineStyleSignals', () => {
       `<p style={{ color: MP.neutral400 }}>`,
       `<div style={{ color: MP.navy500, borderColor: AUDIT.border }}>`,
       `<span style={{ background: theme.colors['gray-100'], padding: tokens?.space }}>`,
-      `<div style={{ color: 'var(--color-text)', gap: 'var(--space-2, 8px)' }}>`,
+      `<div style={{ color: 'var(--color-text)', gap: 'var(--space-2)' }}>`,
       `<div style="color: var(--text); margin: var(--space-4);">`,
     ].join('\n');
     expect(extractInlineStyleSignals(content, 'Panel.tsx')).toHaveLength(0);
@@ -56,5 +56,7 @@ describe('onlyReferencesTokens', () => {
     expect(onlyReferencesTokens(" gridTemplateColumns: 'repeat(2, 1fr)' ", true)).toBe(false);
     expect(onlyReferencesTokens('color: red', false)).toBe(false);
     expect(onlyReferencesTokens('color: var(--text)', false)).toBe(true);
+    expect(onlyReferencesTokens("color: 'var(--text, #ff0000)'", true)).toBe(false); // literal fallback
+    expect(onlyReferencesTokens('color: var(--text, #ff0000)', false)).toBe(false);
   });
 });

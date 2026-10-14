@@ -22,8 +22,8 @@ function countStyleProperties(styleContent: string, isJSX: boolean): number {
 
 /** `MP.neutral400`, `theme.colors['gray-500']`, `tokens?.space` */
 const REFERENCE = /^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*|\[[^\]]+\])*$/;
-/** `'var(--color-text)'`, `var(--space-2)` */
-const CSS_VAR = /^(['"`]?)var\(--[\w-]+(?:\s*,[^)]*)?\)\1$/;
+/** `'var(--color-text)'`, `var(--space-2)`. A literal fallback (`var(--x, #fff)`) still counts as a value. */
+const CSS_VAR = /^(['"`]?)var\(--[\w-]+\)\1$/;
 const LITERALS = new Set(['true', 'false', 'null', 'undefined']);
 
 /** Split on top-level separators, ignoring ones inside quotes, parens or brackets. */
