@@ -27,6 +27,12 @@ describe("tokenNeedles", () => {
   it("does not count a longer token that shares the name", () => {
     expect(count("--color-navy", 'className="bg-navy-dark"')).toBe(0);
   });
+
+  it("only counts utilities from the token's own namespace", () => {
+    expect(count("--text-sm", 'className="text-sm rounded-sm shadow-sm"')).toBe(1);
+    expect(count("--radius-sm", 'className="text-sm rounded-sm rounded-tl-sm"')).toBe(2);
+    expect(count("--spacing-4", 'className="p-4 mt-4 gap-x-4 text-4"')).toBe(3);
+  });
 });
 
 describe("categoriesIn", () => {

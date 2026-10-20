@@ -58,8 +58,25 @@ const ORDERED_CATEGORIES = new Set(["spacing", "typography", "border", "sizing"]
 /** Letter-spacing and line-height tokens are often categorised as spacing but are not spacing steps. */
 const NOT_A_STEP = /(?:^|-)(?:tracking|leading|letter-spacing|line-height)(?:-|$)/;
 
-/** Category prefixes a CSS custom property carries before the name a Tailwind utility uses. */
-const NAME_PREFIXES = /^(?:color|colors|spacing|space|text|font-size|font|leading|tracking|radius|rounded|shadow|border|z|ease|duration)-/;
+/**
+ * Tailwind v4 utilities each token namespace feeds: `--color-buoy` is used as
+ * `bg-buoy` or `text-buoy`, `--text-sm` only as `text-sm`. Matching only the
+ * namespace's own utilities keeps `--text-sm` from counting `rounded-sm`.
+ */
+const UTILITIES_BY_NAMESPACE: Array<[RegExp, string]> = [
+  [/^colors?-/, "bg|text|border(?:-[trblxyse])?|ring|ring-offset|outline|fill|stroke|accent|caret|decoration|divide|placeholder|shadow|from|via|to"],
+  [/^(?:spacing|space)-/, "-?(?:p[xytrblse]?|m[xytrblse]?|gap(?:-[xy])?|space-[xy]|inset(?:-[xy])?|top|right|bottom|left|w|h|min-w|max-w|min-h|max-h|size|scroll-[mp][xytrbl]?)"],
+  [/^(?:text|font-size)-/, "text"],
+  [/^font-/, "font"],
+  [/^leading-/, "leading"],
+  [/^tracking-/, "tracking"],
+  [/^(?:radius|rounded)-/, "rounded(?:-[trblse]|-[tb][lr]|-[se][se])?"],
+  [/^shadow-/, "shadow"],
+  [/^border-/, "border(?:-[trblxyse])?"],
+  [/^z-/, "z"],
+  [/^ease-/, "ease"],
+  [/^duration-/, "duration"],
+];
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -67,10 +84,13 @@ const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export function tokenNeedles(name: string): RegExp[] {
   const bare = name.replace(/^--/, "").replace(/^\$/, "");
   const needles = [new RegExp(`(?<![\\w-])${escapeRegExp(name)}(?![\\w-])`, "g")];
-  const suffix = bare.replace(NAME_PREFIXES, "");
-  if (name.startsWith("--") && suffix && suffix !== bare) {
-    // Tailwind v4: --color-buoy is used as bg-buoy / text-buoy / border-buoy.
-    needles.push(new RegExp(`(?<![\\w-])[a-z]+(?:-[a-z]+)?-${escapeRegExp(suffix)}(?![\\w-])`, "g"));
+  if (name.startsWith("--")) {
+    for (const [namespace, utilities] of UTILITIES_BY_NAMESPACE) {
+      if (!namespace.test(bare)) continue;
+      const suffix = bare.replace(namespace, "");
+      if (suffix) needles.push(new RegExp(`(?<![\\w-])(?:${utilities})-${escapeRegExp(suffix)}(?![\\w-])`, "g"));
+      break;
+    }
   }
   if (bare.includes(".")) {
     // Dotted names (colors.brand.500) appear as brand-500 in classes and as is in JS.
