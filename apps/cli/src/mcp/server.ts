@@ -3,23 +3,30 @@
  * design system and checks their UI against it, so off-system values are
  * caught while the agent writes instead of on the PR.
  */
+import { readdir, readFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import type { DesignToken } from "@buoy-design/core";
+import type { Component, DesignToken } from "@buoy-design/core";
 import { generateContext } from "../services/context-generator.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import {
   checkDrift,
   findTokensByValue,
   loadProject,
-  scanTokens,
   summarizeToken,
   type ProjectContext,
 } from "./project.js";
+import { buildFileContext, type SourceFile } from "./file-context.js";
 import { inferDesignSystem, normalizeLiteral, summarizeInferredSystem } from "../services/inferred-system.js";
 
 const TOKEN_CACHE_MS = 30_000;
+/** Without a filter, list_design_tokens returns a summary plus this many per category, not the whole system. */
+const SLIM_PER_CATEGORY = 6;
+const SOURCE_FILE = /\.(tsx|jsx|ts|js|vue|svelte|astro|css|scss|html)$/;
+const MAX_NEIGHBORS = 20;
+const MAX_NEIGHBOR_BYTES = 200_000;
 
 export interface BuoyMcpOptions {
   cwd: string;
@@ -30,15 +37,17 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
   const server = new McpServer({ name: "buoy", version: options.version });
 
   let project: ProjectContext | null = null;
-  let tokenCache: { at: number; tokens: DesignToken[] } | null = null;
+  let scanCache: { at: number; tokens: DesignToken[]; components: Component[] } | null = null;
 
   const getProject = async () => (project ??= await loadProject(options.cwd));
-  const getTokens = async () => {
-    if (tokenCache && Date.now() - tokenCache.at < TOKEN_CACHE_MS) return tokenCache.tokens;
-    const tokens = await scanTokens(await getProject());
-    tokenCache = { at: Date.now(), tokens };
-    return tokens;
+  const getScan = async () => {
+    if (scanCache && Date.now() - scanCache.at < TOKEN_CACHE_MS) return scanCache;
+    const proj = await getProject();
+    const result = await new ScanOrchestrator(proj.config, proj.projectRoot).scan();
+    scanCache = { at: Date.now(), tokens: result.tokens, components: result.components };
+    return scanCache;
   };
+  const getTokens = async () => (await getScan()).tokens;
   let inferredCache: { at: number; system: ReturnType<typeof summarizeInferredSystem> | null } | null = null;
   // Repos with no tokens still have a de facto system: the values they use most.
   const getInferred = async () => {
@@ -55,7 +64,7 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
     {
       title: "List design tokens",
       description:
-        "Get this repository's design system: the colors, spacing, typography, radius, shadow and motion values it defines (CSS custom properties, Tailwind theme, tokens.json, Sass variables, DESIGN.md). Call this before writing any CSS, inline style or Tailwind class, so the UI you write uses the project's values instead of new ones. Repos with no tokens get the values their code already uses most. Filter by category (color, spacing, typography, shadow, border, sizing, motion, zIndex) or a name substring.",
+        "Get this repository's design system: the colors, spacing, typography, radius, shadow and motion values it defines (CSS custom properties, Tailwind theme, tokens.json, Sass variables, DESIGN.md). Without arguments it returns a short summary (counts plus a few tokens per category) to keep context small; pass a category or name substring for the full list. When you are about to edit a specific file, prefer context_for_file, which returns only what that file needs. Repos with no tokens get the values their code already uses most. Categories: color, spacing, typography, shadow, border, sizing, motion, zIndex.",
       inputSchema: {
         category: z.string().optional().describe("Only tokens in this category"),
         query: z.string().optional().describe("Case-insensitive substring of the token name"),
@@ -70,6 +79,19 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
         .filter((t) => !q || t.name.toLowerCase().includes(q));
       const byCategory: Record<string, number> = {};
       for (const t of tokens) byCategory[t.category] = (byCategory[t.category] ?? 0) + 1;
+      if (!category && !q && !limit && tokens.length > 0) {
+        const sample: Record<string, ReturnType<typeof summarizeToken>[]> = {};
+        for (const t of tokens) {
+          const list = (sample[t.category] ??= []);
+          if (list.length < SLIM_PER_CATEGORY) list.push(summarizeToken(t));
+        }
+        return json({
+          total: tokens.length,
+          byCategory,
+          sample,
+          note: "Summary only. Pass category (or query) for the full list, or call context_for_file with the file you are editing to get just the tokens, scales and components it needs.",
+        });
+      }
       return json({
         total: tokens.length,
         byCategory,
@@ -110,6 +132,34 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
         });
       }
       return json({ value, matches, suggestion: matches[0] ? `Use ${matches[0].name} instead of ${value}` : null });
+    },
+  );
+
+  server.registerTool(
+    "context_for_file",
+    {
+      title: "Design context for the file you are editing",
+      description:
+        "Before you edit a UI file, get only the design context it needs: tokens the file already uses, tokens its neighbours use, the scale steps for the kinds of values it contains (colors, spacing, type, radius, shadow), components in the same folder or already imported that you should reuse, and the drift already in it. Much smaller than the full token list. Then write values from it and run check_ui_against_design_system on the file.",
+      inputSchema: {
+        file: z.string().describe("Repository-relative or absolute path of the file you are about to edit (it may not exist yet)"),
+      },
+    },
+    async ({ file }) => {
+      const proj = await getProject();
+      const abs = isAbsolute(file) ? file : resolve(proj.projectRoot, file);
+      const rel = relative(proj.projectRoot, abs);
+      if (rel.startsWith("..") || isAbsolute(rel)) {
+        return json({ error: `${file} is outside the repository (${proj.projectRoot}).` });
+      }
+      const content = await readFile(abs, "utf8").catch(() => "");
+      const neighbors = await readNeighbors(proj.projectRoot, rel);
+      const { tokens, components } = await getScan();
+      const issues = content ? (await checkDrift(proj, [rel], tokens)).issues : [];
+      const context = buildFileContext({ file: { path: rel, content }, neighbors, tokens, components, issues });
+      // Compact JSON: this tool exists to keep context small.
+      const body = tokens.length === 0 ? { ...context, ...(await inferredFallback()) } : context;
+      return { content: [{ type: "text" as const, text: JSON.stringify(body) }] };
     },
   );
 
@@ -175,6 +225,25 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
   }
 
   return server;
+}
+
+/** Source files in the same folder and its parent, so "used nearby" reflects the area being edited. */
+async function readNeighbors(root: string, rel: string): Promise<SourceFile[]> {
+  const out: SourceFile[] = [];
+  let bytes = 0;
+  const dir = dirname(rel);
+  for (const folder of dir === "." ? ["."] : [dir, dirname(dir)]) {
+    const entries = await readdir(join(root, folder), { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (out.length >= MAX_NEIGHBORS || bytes >= MAX_NEIGHBOR_BYTES) return out;
+      const path = folder === "." ? entry.name : join(folder, entry.name);
+      if (!entry.isFile() || path === rel || !SOURCE_FILE.test(entry.name)) continue;
+      const content = await readFile(join(root, path), "utf8").catch(() => "");
+      bytes += content.length;
+      out.push({ path, content });
+    }
+  }
+  return out;
 }
 
 export async function serveStdio(options: BuoyMcpOptions): Promise<void> {
