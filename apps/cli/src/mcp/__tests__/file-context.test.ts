@@ -125,6 +125,7 @@ describe("MCP server: slim tokens and context_for_file", () => {
     expect(ctx.file).toBe("src/components/Card.tsx");
     expect(ctx.usedHere.some((t: string) => t.startsWith("--color-brand "))).toBe(true);
     expect(ctx.scales.spacing).toEqual(["--space-2 8px", "--space-4 16px"]);
+    expect(ctx.teamDecisions.sources[0]).toBe(".buoy.yaml");
     const outside = await call("context_for_file", { file: "../elsewhere.tsx" });
     expect(outside.error).toMatch(/outside the repository/);
   }, 60_000);
