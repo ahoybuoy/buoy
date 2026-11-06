@@ -19,6 +19,7 @@ import {
   type ProjectContext,
 } from "./project.js";
 import { buildFileContext, type SourceFile } from "./file-context.js";
+import { configDecisions, fetchCloudDecisions, mergeDecisions, type CloudDecisions } from "./team-decisions.js";
 import { inferDesignSystem, normalizeLiteral, summarizeInferredSystem } from "../services/inferred-system.js";
 
 const TOKEN_CACHE_MS = 30_000;
@@ -27,6 +28,8 @@ const SLIM_PER_CATEGORY = 6;
 const SOURCE_FILE = /\.(tsx|jsx|ts|js|vue|svelte|astro|css|scss|html)$/;
 const MAX_NEIGHBORS = 20;
 const MAX_NEIGHBOR_BYTES = 200_000;
+/** Team decisions change on PR review, not per keystroke. */
+const DECISIONS_CACHE_MS = 5 * 60_000;
 
 export interface BuoyMcpOptions {
   cwd: string;
@@ -48,6 +51,14 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
     return scanCache;
   };
   const getTokens = async () => (await getScan()).tokens;
+  const decisionsCache = new Map<string, { at: number; value: CloudDecisions | { unavailable: string } }>();
+  const getCloudDecisions = async (root: string, file: string) => {
+    const hit = decisionsCache.get(file);
+    if (hit && Date.now() - hit.at < DECISIONS_CACHE_MS) return hit.value;
+    const value = await fetchCloudDecisions(root, file);
+    decisionsCache.set(file, { at: Date.now(), value });
+    return value;
+  };
   let inferredCache: { at: number; system: ReturnType<typeof summarizeInferredSystem> | null } | null = null;
   // Repos with no tokens still have a de facto system: the values they use most.
   const getInferred = async () => {
@@ -140,7 +151,7 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
     {
       title: "Design context for the file you are editing",
       description:
-        "Before you edit a UI file, get only the design context it needs: tokens the file already uses, tokens its neighbours use, the scale steps for the kinds of values it contains (colors, spacing, type, radius, shadow), components in the same folder or already imported that you should reuse, and the drift already in it. Much smaller than the full token list. Then write values from it and run check_ui_against_design_system on the file.",
+        "Before you edit a UI file, get only the design context it needs: tokens the file already uses, tokens its neighbours use, the scale steps for the kinds of values it contains (spacing, type, radius), components in the same folder or already imported that you should reuse, the drift already in it, and the team's decisions (values they chose to keep, which you must not replace, and values they always want flagged). Much smaller than the full token list. Then write values from it and run check_ui_against_design_system on the file.",
       inputSchema: {
         file: z.string().describe("Repository-relative or absolute path of the file you are about to edit (it may not exist yet)"),
       },
@@ -157,8 +168,16 @@ export function createBuoyMcpServer(options: BuoyMcpOptions): McpServer {
       const { tokens, components } = await getScan();
       const issues = content ? (await checkDrift(proj, [rel], tokens)).issues : [];
       const context = buildFileContext({ file: { path: rel, content }, neighbors, tokens, components, issues });
+      const teamDecisions = mergeDecisions(configDecisions(proj.config, rel), await getCloudDecisions(proj.projectRoot, rel));
+      const withDecisions = {
+        ...context,
+        teamDecisions,
+        ...(teamDecisions.leaveAlone.length
+          ? { note: `${context.note} Values in teamDecisions.leaveAlone are deliberate: keep them as written, even where they look off-scale.` }
+          : {}),
+      };
       // Compact JSON: this tool exists to keep context small.
-      const body = tokens.length === 0 ? { ...context, ...(await inferredFallback()) } : context;
+      const body = tokens.length === 0 ? { ...withDecisions, ...(await inferredFallback()) } : withDecisions;
       return { content: [{ type: "text" as const, text: JSON.stringify(body) }] };
     },
   );
