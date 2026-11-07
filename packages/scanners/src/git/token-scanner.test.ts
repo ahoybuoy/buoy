@@ -9,6 +9,23 @@ describe("TokenScanner", () => {
   });
 
   describe("CSS variable parsing", () => {
+    it("keeps a themed second value instead of dropping it", async () => {
+      vol.fromJSON({
+        "/project/css/theme.scss": `
+          :root { --popup-text-inverted-color: #fff; --gray-0: #fff; }
+          .theme--dark { --popup-text-inverted-color: #2c2c2c; --gray-0: #fff; }
+        `,
+      });
+      const scanner = new TokenScanner({ projectRoot: "/project", files: ["css/*.scss"] });
+      const result = await scanner.scan();
+      const themed = result.items.filter((t) => t.name === "--popup-text-inverted-color");
+      expect(themed).toHaveLength(1);
+      expect(themed[0]!.metadata.alternateValues).toHaveLength(1);
+      expect(JSON.stringify(themed[0]!.metadata.alternateValues)).toContain("2c2c2c");
+      // Same value in both blocks: nothing alternate.
+      expect(result.items.find((t) => t.name === "--gray-0")!.metadata.alternateValues).toBeUndefined();
+    });
+
     it("extracts CSS custom properties from :root", async () => {
       vol.fromJSON({
         "/project/tokens/colors.css": `
