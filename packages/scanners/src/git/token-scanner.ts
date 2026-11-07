@@ -36,10 +36,18 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     let cacheMisses = 0;
 
     // Helper to add tokens with deduplication
+    // The first declaration wins; a later one with a different value (a dark
+    // theme block, a media query) is kept as an alternate value on the token.
     const addTokens = (newTokens: DesignToken[]) => {
       for (const token of newTokens) {
-        if (!tokenMap.has(token.id)) {
+        const existing = tokenMap.get(token.id);
+        if (!existing) {
           tokenMap.set(token.id, token);
+          continue;
+        }
+        const seen = [existing.value, ...(existing.metadata.alternateValues ?? [])].map((v) => JSON.stringify(v));
+        if (!seen.includes(JSON.stringify(token.value))) {
+          existing.metadata = { ...existing.metadata, alternateValues: [...(existing.metadata.alternateValues ?? []), token.value] };
         }
       }
     };

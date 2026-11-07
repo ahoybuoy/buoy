@@ -120,6 +120,13 @@ export const TokenMetadataSchema = z.object({
   deprecationReason: z.string().optional(),
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  /**
+   * Other values the same token is given in the same file, e.g. under
+   * `.theme--dark` or a media query. A token that changes value is not a
+   * safe replacement for a fixed literal: `#fff` stays white in dark mode,
+   * a token that is white only in light mode does not.
+   */
+  alternateValues: z.array(z.unknown()).optional(),
 });
 
 // Main Token schema
