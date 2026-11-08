@@ -144,6 +144,7 @@ const KIND_LABEL: Record<NotedValue["kind"], string> = {
   "optical-nudge": "2-3px optical nudges",
   history: "deliberate per commit history",
   allowlisted: "buoy-ignore",
+  vendored: "in shadcn/ui library files",
 };
 
 /** One line for text output: how many values were set aside and why. */
