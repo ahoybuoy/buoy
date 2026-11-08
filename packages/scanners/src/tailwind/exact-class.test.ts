@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exactTailwindClass, themeColorMap, themeSizeMap } from "./exact-class.js";
+import { classValue, exactTailwindClass, themeColorMap, themeSizeMap } from "./exact-class.js";
 
 describe("exactTailwindClass", () => {
   it.each([
@@ -63,5 +63,32 @@ describe("exactTailwindClass", () => {
     expect(exactTailwindClass("p-[72px]", { themeSizes })).toBe("p-18");
     expect(exactTailwindClass("rounded-[10px]", { themeSizes })).toBe("rounded");
     expect(themeSizes.text.has(14)).toBe(false);
+  });
+});
+
+describe("classValue", () => {
+  it.each([
+    ["p-4", { category: "spacing", property: "padding", value: "16px" }],
+    ["md:gap-x-2.5", { category: "spacing", property: "column-gap", value: "10px" }],
+    ["mt-px", { category: "spacing", property: "margin-top", value: "1px" }],
+    ["text-sm", { category: "font-size", property: "font-size", value: "14px" }],
+    ["text-[13px]", { category: "font-size", property: "font-size", value: "13px" }],
+    ["bg-gray-500/50", { category: "color", property: "background-color", value: "#6b7280" }],
+    ["text-[#FFF]", { category: "color", property: "color", value: "#ffffff" }],
+    ["rounded-lg", { category: "radius", property: "border-radius", value: "8px" }],
+    ["rounded-full", { category: "radius", property: "border-radius", value: "9999px" }],
+  ])("%s", (cls, expected) => {
+    expect(classValue(cls)).toEqual(expected);
+  });
+
+  it("reads v4's renamed radii", () => {
+    expect(classValue("rounded-sm", 3)?.value).toBe("2px");
+    expect(classValue("rounded-sm", 4)?.value).toBe("4px");
+  });
+
+  it("ignores classes that set no design value", () => {
+    for (const cls of ["flex", "text-center", "w-full", "p-4.5", "text-primary", "bg-[url(x.png)]", "rounded-[50%]"]) {
+      expect(classValue(cls)).toBeNull();
+    }
   });
 });

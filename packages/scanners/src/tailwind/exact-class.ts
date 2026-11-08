@@ -195,3 +195,67 @@ export function themeSizeMap(tokens: Array<{ name: string; value: { type: string
   }
   return out;
 }
+
+/** What a Tailwind class sets, as a CSS value, for counting the values a codebase uses. */
+export interface ClassValue {
+  category: 'color' | 'spacing' | 'font-size' | 'radius';
+  property: string;
+  value: string;
+}
+
+const PX_TO_FONT = Object.fromEntries(Object.entries(FONT_SIZES).map(([px, name]) => [name, Number(px)]));
+const RADIUS_V3: Record<string, number> = { none: 0, sm: 2, '': 4, md: 6, lg: 8, xl: 12, '2xl': 16, '3xl': 24 };
+const RADIUS_V4: Record<string, number> = { none: 0, xs: 2, sm: 4, '': 4, md: 6, lg: 8, xl: 12, '2xl': 16, '3xl': 24, '4xl': 32 };
+const SPACING_PROPERTY: Record<string, string> = {
+  p: 'padding', px: 'padding-inline', py: 'padding-block', pt: 'padding-top', pr: 'padding-right', pb: 'padding-bottom', pl: 'padding-left', ps: 'padding-inline-start', pe: 'padding-inline-end',
+  m: 'margin', mx: 'margin-inline', my: 'margin-block', mt: 'margin-top', mr: 'margin-right', mb: 'margin-bottom', ml: 'margin-left', ms: 'margin-inline-start', me: 'margin-inline-end',
+  gap: 'gap', 'gap-x': 'column-gap', 'gap-y': 'row-gap', 'space-x': 'column-gap', 'space-y': 'row-gap',
+};
+const COLOR_PROPERTY: Record<string, string> = { text: 'color', bg: 'background-color', border: 'border-color', ring: 'outline-color', fill: 'fill', stroke: 'stroke' };
+
+/**
+ * The CSS value a Tailwind class sets, for the default scales and arbitrary
+ * values: `p-4` -> padding 16px, `text-sm` -> font-size 14px, `bg-gray-500` ->
+ * #6b7280, `rounded-lg` -> 8px, `text-[13px]` -> 13px. Other classes -> null.
+ */
+export function classValue(cls: string, version: 3 | 4 = 3): ClassValue | null {
+  const tail = cls.replace(/^(?:(?:[^[\]:]|\[[^\]]*\])*:)*/, '').replace(/^!|!$/g, '').replace(/^-/, '');
+  const arb = /^([a-z][\w-]*?)-\[([^\]]+)\]$/.exec(tail);
+  if (arb) {
+    const [, utility, raw] = arb as unknown as [string, string, string];
+    const value = raw.replace(/_/g, ' ').replace(/^(color|length):/, '');
+    const hex = normalizeHexColor(value);
+    if (hex && COLOR_PROPERTY[utility]) return { category: 'color', property: COLOR_PROPERTY[utility]!, value: hex };
+    if (toPx(value) === null) return null;
+    if (utility === 'text') return { category: 'font-size', property: 'font-size', value };
+    if (/^rounded/.test(utility)) return { category: 'radius', property: 'border-radius', value };
+    if (SPACING_PROPERTY[utility]) return { category: 'spacing', property: SPACING_PROPERTY[utility]!, value };
+    return null;
+  }
+  const scale = /^([a-z]+(?:-[xy])?)-(.+)$/.exec(tail);
+  if (/^rounded(-[a-z]{1,2})?$/.test(tail) || /^rounded(-[a-z]{1,2})?-(none|xs|sm|md|lg|xl|2xl|3xl|4xl|full)$/.test(tail)) {
+    const size = /-(none|xs|sm|md|lg|xl|2xl|3xl|4xl|full)$/.exec(tail)?.[1] ?? '';
+    if (size === 'full') return { category: 'radius', property: 'border-radius', value: '9999px' };
+    const px = (version === 4 ? RADIUS_V4 : RADIUS_V3)[size];
+    return px === undefined ? null : { category: 'radius', property: 'border-radius', value: `${px}px` };
+  }
+  if (!scale) return null;
+  const [, utility, rest] = scale as unknown as [string, string, string];
+  if (utility === 'text' && PX_TO_FONT[rest] !== undefined) {
+    return { category: 'font-size', property: 'font-size', value: `${PX_TO_FONT[rest]}px` };
+  }
+  if (COLOR_PROPERTY[utility]) {
+    const name = rest.replace(/\/[\w.]+$/, '');
+    const m = /^([a-z]+)-(\d{2,3})$/.exec(name);
+    const hex = name === 'white' ? '#ffffff' : name === 'black' ? '#000000' : m && FAMILIES[m[1]!] ? FAMILIES[m[1]!]![SHADES.indexOf(m[2]!)] : undefined;
+    if (hex) return { category: 'color', property: COLOR_PROPERTY[utility]!, value: hex };
+  }
+  if (SPACING_PROPERTY[utility]) {
+    if (rest === 'px') return { category: 'spacing', property: SPACING_PROPERTY[utility]!, value: '1px' };
+    const n = Number(rest);
+    if (Number.isFinite(n) && n >= 0 && (version === 4 ? Number.isInteger(n * 4) : SPACING_STEPS.has(n))) {
+      return { category: 'spacing', property: SPACING_PROPERTY[utility]!, value: `${fmt(n * 4)}px` };
+    }
+  }
+  return null;
+}

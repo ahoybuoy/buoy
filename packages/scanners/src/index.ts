@@ -19,7 +19,8 @@ export { FigmaClient, FigmaComponentScanner, type FigmaScannerConfig } from './f
 export { StorybookScanner, type StorybookScannerConfig } from './storybook/index.js';
 
 // Tailwind scanner
-export { TailwindScanner, TailwindConfigParser, ArbitraryValueDetector } from './tailwind/index.js';
+export { TailwindScanner, TailwindConfigParser, ArbitraryValueDetector, exactTailwindClass, classValue } from './tailwind/index.js';
+export type { ClassValue } from './tailwind/index.js';
 export type { TailwindScannerConfig, TailwindScanResult, TailwindTheme, ArbitraryValue, SemanticToken } from './tailwind/index.js';
 
 // CSS analyzer

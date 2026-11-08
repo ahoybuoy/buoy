@@ -2,4 +2,4 @@ export { TailwindScanner, type TailwindScannerConfig, type TailwindScanResult, t
 export { TailwindConfigParser, type TailwindTheme, type ParsedTailwindConfig } from './config-parser.js';
 export { ArbitraryValueDetector, type ArbitraryValue, type ArbitraryDetectorConfig, type ArbitraryValueJudge } from './arbitrary-detector.js';
 
-export { exactTailwindClass, themeColorMap, themeSizeMap, normalizeHexColor as normalizeTailwindHex } from './exact-class.js';
+export { exactTailwindClass, classValue, type ClassValue, themeColorMap, themeSizeMap, normalizeHexColor as normalizeTailwindHex } from './exact-class.js';
