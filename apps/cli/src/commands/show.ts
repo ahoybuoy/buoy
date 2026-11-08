@@ -95,6 +95,35 @@ function isLikelyGeneratedFile(filePath: string, issueCount: number): boolean {
   return false;
 }
 
+/** The buoy-snapshot/v1 for the project in the current directory. */
+export async function buildCurrentSnapshot(opts: { useCache?: boolean; onProgress?: (msg: string) => void } = {}) {
+  const { config, projectRoot } = await getOrBuildConfigWithRoot();
+  const { result: driftResult } = await withOptionalCache(
+    projectRoot,
+    opts.useCache !== false,
+    async (cache: ScanCache | undefined) => {
+      const service = new DriftAnalysisService(config, projectRoot);
+      return service.analyze({ onProgress: opts.onProgress, includeIgnored: false, cache });
+    },
+  );
+  const { buildSnapshot } = await import("../services/snapshot.js");
+  const pkg = (await import("../../package.json", { with: { type: "json" } })).default as { version: string };
+  const snapshot = buildSnapshot({
+    components: driftResult.components,
+    tokens: driftResult.tokens,
+    drifts: driftResult.drifts,
+    cliVersion: pkg.version,
+    readFile: (p) => {
+      try {
+        return readFileSync(join(projectRoot, p), "utf-8");
+      } catch {
+        return null;
+      }
+    },
+  });
+  return { snapshot, projectRoot };
+}
+
 export function createShowCommand(): Command {
   const cmd = new Command("show")
     .description("Show design system information")
@@ -1538,30 +1567,7 @@ export function createShowCommand(): Command {
       setJsonMode(true);
       const spin = spinner("Building the design system snapshot...");
       try {
-        const { config, projectRoot } = await getOrBuildConfigWithRoot();
-        const { result: driftResult } = await withOptionalCache(
-          projectRoot,
-          parentOpts.cache !== false,
-          async (cache: ScanCache | undefined) => {
-            const service = new DriftAnalysisService(config, projectRoot);
-            return service.analyze({ onProgress: (msg) => { spin.text = msg; }, includeIgnored: false, cache });
-          },
-        );
-        const { buildSnapshot } = await import("../services/snapshot.js");
-        const pkg = (await import("../../package.json", { with: { type: "json" } })).default as { version: string };
-        const snapshot = buildSnapshot({
-          components: driftResult.components,
-          tokens: driftResult.tokens,
-          drifts: driftResult.drifts,
-          cliVersion: pkg.version,
-          readFile: (p) => {
-            try {
-              return readFileSync(join(projectRoot, p), "utf-8");
-            } catch {
-              return null;
-            }
-          },
-        });
+        const { snapshot } = await buildCurrentSnapshot({ useCache: parentOpts.cache !== false, onProgress: (msg) => { spin.text = msg; } });
         spin.stop();
         const out = JSON.stringify(snapshot);
         if (options.output) {
