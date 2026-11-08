@@ -24,7 +24,7 @@ export interface MapNode {
   /** Token value for display, e.g. "#ededed" or "16px". */
   value?: string;
   /** Drift signals located in this component. */
-  drift?: { count: number; types: Record<string, number>; examples: string[] };
+  drift?: { count: number; types: Record<string, number>; examples: string[]; ids: string[] };
 }
 
 export interface MapEdge {
@@ -247,8 +247,9 @@ export function buildUiMap(input: BuildUiMapInput): SystemMap {
     const owner = [...comps]
       .sort((a, b) => (lineOf(b) ?? 0) - (lineOf(a) ?? 0))
       .find((c) => (lineOf(c) ?? 0) <= line) ?? comps[0]!;
-    const entry = driftOf.get(idOf(owner)) ?? { count: 0, types: {}, examples: [] };
+    const entry = driftOf.get(idOf(owner)) ?? { count: 0, types: {}, examples: [], ids: [] };
     entry.count++;
+    entry.ids.push(d.id);
     entry.types[d.type] = (entry.types[d.type] ?? 0) + 1;
     if (entry.examples.length < 3) entry.examples.push(d.message);
     driftOf.set(idOf(owner), entry);
