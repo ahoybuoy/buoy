@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DesignToken, DriftSignal } from "@buoy-design/core";
 import { checkDrift, findRepoRoot, findTokensByValue, normalizeValue, toIssue } from "../project.js";
-import { extractFileSignals, issuesFromSignals, lineEdit, type FileIssue } from "../file-check.js";
+import { applyFileIgnoreRules, extractFileSignals, issuesFromSignals, lineEdit, type FileIssue } from "../file-check.js";
 import { cursorHookOutput, filePathFromHookPayload, formatHookFeedback, isStyleFile, parseCursorHookPayload, runHook } from "../hook.js";
 import { installClient, mergeClaudeHook, mergeMcpServers } from "../install.js";
 import { cssVariableFor, withCssVariableAliases } from "../../scan/token-aliases.js";
@@ -386,5 +386,33 @@ describe("bare numbers in JSX", () => {
     expect(values.filter((v) => v.endsWith("px"))).toEqual(["8px"]);
     expect(values).not.toContain("600");
     expect(values).not.toContain("0.5");
+  });
+});
+
+describe("drift.ignore in file checks (the hook and check_drift with files)", () => {
+  const issue = (over: Partial<FileIssue>): FileIssue => ({
+    file: "src/Card.tsx", line: 3, type: "hardcoded-spacing", severity: "warning", message: "", current: "8px", ...over,
+  });
+
+  it("drops issues a rule matches, with the full scan's meaning for each field", () => {
+    const all = [issue({}), issue({ current: "#fff", type: "hardcoded-color" }), issue({ file: "src/legacy/Old.tsx" })];
+    expect(applyFileIgnoreRules(all, [{ value: "^8px$" }]).map((i) => i.current)).toEqual(["#fff"]);
+    expect(applyFileIgnoreRules(all, [{ file: "src/legacy/**" }])).toHaveLength(2);
+    expect(applyFileIgnoreRules(all, [{ type: "hardcoded-value" }])).toHaveLength(0);
+    expect(applyFileIgnoreRules(all, [{ type: "hardcoded-color", file: "src/legacy/**" }])).toHaveLength(3);
+  });
+
+  it("never matches on component/token rules, empty rules or a broken regex", () => {
+    const all = [issue({})];
+    expect(applyFileIgnoreRules(all, [{ component: "Card" }, { token: "space" }, {}, { value: "(" }])).toHaveLength(1);
+    expect(applyFileIgnoreRules(all, undefined)).toHaveLength(1);
+  });
+
+  it("applies the project's rules through checkDrift", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "buoy-ignore-"));
+    writeFileSync(join(dir, "card.css"), ".card {\n  padding: 8px;\n  color: #1a73e8;\n}\n");
+    const config = { drift: { ignore: [{ value: "^8px$", reason: "deliberate" }] } };
+    const result = await checkDrift({ projectRoot: dir, config } as never, ["card.css"], []);
+    expect(result.issues.map((i) => i.current)).toEqual(["#1a73e8"]);
   });
 });
