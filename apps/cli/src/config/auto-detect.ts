@@ -469,6 +469,19 @@ export async function findTokenFiles(projectRoot: string): Promise<string[]> {
     found.push(...matches);
   }
 
+  // Workspace Tailwind configs (monorepos keep the theme in a shared preset
+  // package, e.g. dub's packages/tailwind-config). Skip examples and fixtures.
+  const nestedTailwind = (await glob('**/tailwind.config.{js,ts,mjs,cjs}', {
+    cwd: projectRoot,
+    nodir: true,
+    ignore: [
+      '**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**',
+      '**/examples/**', '**/templates/**', '**/fixtures/**', '**/test/**', '**/tests/**', '**/__tests__/**',
+    ],
+    maxDepth: 4,
+  })).sort();
+  found.push(...nestedTailwind);
+
   // Scan common CSS files for @theme blocks (Tailwind v4)
   const cssFilesToCheck = [
     '**/app.css',

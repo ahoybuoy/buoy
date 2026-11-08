@@ -61,21 +61,40 @@ export class TailwindConfigParser {
   }
 
   async parse(): Promise<ParsedTailwindConfig | null> {
-    // Try v3 JS/TS config first
-    const v3ConfigPath = this.findV3ConfigFile();
-    if (v3ConfigPath) {
-      try {
-        const theme = await this.extractThemeFromJS(v3ConfigPath);
-        const tokens = this.themeToTokens(theme, v3ConfigPath);
-
+    // Try v3 JS/TS config first: the root config, then (monorepos) the
+    // workspace configs. Apps often hold a thin config that pulls the theme
+    // from a shared preset package (dub: packages/tailwind-config), so every
+    // config found is read and the tokens merged.
+    const v3ConfigPaths = await this.findV3ConfigFiles();
+    if (v3ConfigPaths.length > 0) {
+      const parsed: Array<{ path: string; theme: Partial<TailwindTheme>; tokens: DesignToken[] }> = [];
+      for (const path of v3ConfigPaths) {
+        try {
+          const theme = await this.extractThemeFromJS(path);
+          parsed.push({ path, theme, tokens: this.themeToTokens(theme, path) });
+        } catch (err) {
+          console.error(`Failed to parse Tailwind v3 config ${path}:`, err);
+        }
+      }
+      if (parsed.length > 0) {
+        // The config with the most theme is the primary one.
+        const primary = [...parsed].sort((a, b) => b.tokens.length - a.tokens.length)[0]!;
+        const seen = new Set<string>();
+        const tokens: DesignToken[] = [];
+        for (const entry of [primary, ...parsed.filter((p) => p !== primary)]) {
+          for (const token of entry.tokens) {
+            const key = `${token.category}:${token.name}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            tokens.push(token);
+          }
+        }
         return {
-          theme,
+          theme: primary.theme,
           tokens,
-          configPath: v3ConfigPath,
+          configPath: primary.path,
           version: 3,
         };
-      } catch (err) {
-        console.error('Failed to parse Tailwind v3 config:', err);
       }
     }
 
@@ -99,7 +118,8 @@ export class TailwindConfigParser {
     return null;
   }
 
-  private findV3ConfigFile(): string | null {
+  /** Root config first, then workspace configs (apps/*, packages/*), nearest first. */
+  private async findV3ConfigFiles(): Promise<string[]> {
     const configNames = [
       'tailwind.config.js',
       'tailwind.config.ts',
@@ -107,14 +127,41 @@ export class TailwindConfigParser {
       'tailwind.config.cjs',
     ];
 
+    const found: string[] = [];
     for (const name of configNames) {
       const path = resolve(this.projectRoot, name);
       if (existsSync(path)) {
-        return path;
+        found.push(path);
+        break;
       }
     }
 
-    return null;
+    try {
+      const nested = (await glob('**/tailwind.config.{js,ts,mjs,cjs}', {
+        cwd: this.projectRoot,
+        ignore: [
+          '**/node_modules/**',
+          '**/dist/**',
+          '**/build/**',
+          '**/.next/**',
+          '**/templates/**',
+          '**/fixtures/**',
+          '**/examples/**',
+          '**/test/**',
+          '**/tests/**',
+          '**/__tests__/**',
+        ],
+        absolute: true,
+        maxDepth: 4,
+      }))
+        .filter((p) => /(^|\/)tailwind\.config\.(js|ts|mjs|cjs)$/.test(p) && !found.includes(p))
+        .sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
+      found.push(...nested);
+    } catch {
+      // Glob failed: the root config (if any) is enough
+    }
+
+    return found;
   }
 
   private async findV4CSSFile(): Promise<string | null> {

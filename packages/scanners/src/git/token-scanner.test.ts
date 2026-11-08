@@ -2614,6 +2614,51 @@ type SizeType = 'sm' | 'lg';
   });
 
   describe("Tailwind config token extraction", () => {
+    it("reads a theme whose comments contain quotes (dub's shared preset)", async () => {
+      vol.fromJSON({
+        "/project/packages/tailwind-config/tailwind.config.ts": `
+          const config = {
+            theme: {
+              extend: {
+                screens: { xs: "420px" },
+                fontFamily: {
+                  display: ["var(--font-satoshi)", "system-ui", "sans-serif"],
+                },
+                fontSize: {
+                  "2xs": ["0.625rem", { lineHeight: "0.875rem" }],
+                },
+                colors: {
+                  // Merged into Tailwind's default neutral scale
+                  neutral: { 150: "#ededed" },
+                  /* brand's palette */
+                  brown: { 50: "#fdf8f6", 900: "#43302b" },
+                },
+              },
+            },
+          };
+          export default config;
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["packages/tailwind-config/tailwind.config.ts"],
+      });
+      const tokens = (await scanner.scan()).items;
+      const byName = (n: string) => tokens.find((t) => t.name === n);
+
+      expect(byName("brown.50")?.category).toBe("color");
+      expect(byName("brown.900")).toBeDefined();
+      expect(byName("neutral.150")).toBeDefined();
+      // A font-size tuple is one size, not a size and a line height.
+      expect(byName("2xs")?.value).toEqual({ type: "raw", value: "0.625rem" });
+      expect(byName("2xs.1")).toBeUndefined();
+      // A font stack is one token.
+      expect(byName("display")?.value).toEqual({ type: "raw", value: "var(--font-satoshi), system-ui, sans-serif" });
+      // A breakpoint is not a size token to suggest.
+      expect(byName("xs")).toBeUndefined();
+    });
+
     it("should extract colors from theme.extend.colors", async () => {
       vol.fromJSON({
         "/project/tailwind.config.ts": `
