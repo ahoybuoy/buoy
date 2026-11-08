@@ -7,6 +7,7 @@ import type {
 } from "@buoy-design/core";
 import { createComponentId } from "@buoy-design/core";
 import * as ts from "typescript";
+import { literalValues, type LiteralValue } from "../signals/extractors/jsx-values.js";
 import { readFile } from "fs/promises";
 import { relative } from "path";
 import {
@@ -1257,11 +1258,8 @@ export class ReactComponentScanner extends SignalAwareScanner<
             attrName,
           )
         ) {
-          const value = this.getJsxAttributeValue(n, sourceFile);
-          if (value && this.isHardcodedColor(value)) {
-            const line =
-              sourceFile.getLineAndCharacterOfPosition(n.getStart(sourceFile))
-                .line + 1;
+          for (const { value, line } of this.getJsxAttributeValues(n, sourceFile)) {
+            if (!this.isHardcodedColor(value)) continue;
             hardcoded.push({
               type: "color",
               value,
@@ -1280,11 +1278,8 @@ export class ReactComponentScanner extends SignalAwareScanner<
             attrName,
           )
         ) {
-          const value = this.getJsxAttributeValue(n, sourceFile);
-          if (value && this.isHardcodedSpacing(value)) {
-            const line =
-              sourceFile.getLineAndCharacterOfPosition(n.getStart(sourceFile))
-                .line + 1;
+          for (const { value, line } of this.getJsxAttributeValues(n, sourceFile)) {
+            if (!this.isHardcodedSpacing(value)) continue;
             hardcoded.push({
               type: "spacing",
               value,
@@ -1331,12 +1326,9 @@ export class ReactComponentScanner extends SignalAwareScanner<
           const valueType = STYLE_PROPERTIES[propName];
 
           if (valueType && prop.initializer) {
-            const value = this.getLiteralValue(prop.initializer, sourceFile);
-            if (value && this.isHardcodedValue(value, valueType)) {
-              const line =
-                sourceFile.getLineAndCharacterOfPosition(
-                  prop.getStart(sourceFile),
-                ).line + 1;
+            // Every value the expression can take: ternary and &&/|| branches, template parts.
+            for (const { value, line } of literalValues(prop.initializer, sourceFile)) {
+              if (!this.isHardcodedValue(value, valueType)) continue;
               values.push({
                 type: valueType,
                 value,
@@ -1362,44 +1354,24 @@ export class ReactComponentScanner extends SignalAwareScanner<
     return values;
   }
 
-  private getJsxAttributeValue(
+  private getJsxAttributeValues(
     attr: ts.JsxAttribute,
     sourceFile: ts.SourceFile,
-  ): string | null {
-    if (!attr.initializer) return null;
+  ): LiteralValue[] {
+    if (!attr.initializer) return [];
 
     // color="red" or color="#fff"
     if (ts.isStringLiteral(attr.initializer)) {
-      return attr.initializer.text;
+      const line = sourceFile.getLineAndCharacterOfPosition(attr.initializer.getStart(sourceFile)).line + 1;
+      return [{ value: attr.initializer.text, line, numeric: false }];
     }
 
-    // color={...}
+    // color={...}, including color={isError ? '#dc2626' : '#16a34a'}
     if (ts.isJsxExpression(attr.initializer) && attr.initializer.expression) {
-      return this.getLiteralValue(attr.initializer.expression, sourceFile);
+      return literalValues(attr.initializer.expression, sourceFile);
     }
 
-    return null;
-  }
-
-  private getLiteralValue(
-    node: ts.Expression,
-    sourceFile: ts.SourceFile,
-  ): string | null {
-    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-      return node.text;
-    }
-    if (ts.isNumericLiteral(node)) {
-      return node.text;
-    }
-    // Template literal with static content
-    if (ts.isTemplateExpression(node)) {
-      // Only if it's a simple template
-      const text = node.getText(sourceFile);
-      if (!text.includes("${")) {
-        return text.slice(1, -1); // Remove backticks
-      }
-    }
-    return null;
+    return [];
   }
 
   private isHardcodedValue(

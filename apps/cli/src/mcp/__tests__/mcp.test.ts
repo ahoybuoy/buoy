@@ -311,3 +311,80 @@ describe("exact line edits for agents", () => {
     expect(result.issues[0]?.edit).toEqual({ line: 2, before: "  color: #1a73e8;", after: "  color: var(--color-brand);" });
   });
 });
+
+describe("values inside expressions (ternaries, &&/||, templates, cn)", () => {
+  const values = (tsx: string) => extractFileSignals(tsx, "src/Status.tsx").map((s) => [s.location.line, s.value]);
+
+  it("flags both branches of a ternary in a style object or style prop", () => {
+    expect(values("<div style={{ color: isError ? '#dc2626' : '#16a34a' }} />")).toEqual([[1, "#dc2626"], [1, "#16a34a"]]);
+    expect(values("<Box bg={isError ? '#dc2626' : '#16a34a'} p={dense ? 8 : 16} />")).toEqual([
+      [1, "#dc2626"], [1, "#16a34a"], [1, "8px"], [1, "16px"],
+    ]);
+  });
+
+  it("flags literals behind && / || / ?? and in template literals", () => {
+    expect(values('<div style={{ color: isError && "#dc2626" }} />')).toEqual([[1, "#dc2626"]]);
+    expect(values('<div style={{ color: c || "#dc2626", background: d ?? "#16a34a" }} />')).toEqual([[1, "#dc2626"], [1, "#16a34a"]]);
+    expect(values("<div style={{ color: `#dc2626` }} />")).toEqual([[1, "#dc2626"]]);
+    expect(values("<div style={{ border: `1px solid ${x ? '#dc2626' : '#16a34a'}` }} />")).toEqual([[1, "#dc2626"], [1, "#16a34a"]]);
+  });
+
+  it("reports each branch of a multi-line ternary on its own line", () => {
+    const tsx = [
+      "export const S = ({ isError }) => (",
+      "  <div",
+      "    style={{",
+      "      color: isError",
+      "        ? '#dc2626'",
+      "        : '#16a34a',",
+      "    }}",
+      "    className={cn(",
+      "      'p-2',",
+      "      isError && 'bg-[#fef2f2]',",
+      "    )}",
+      "  />",
+      ");",
+    ].join("\n");
+    expect(values(tsx)).toEqual([[5, "#dc2626"], [6, "#16a34a"], [10, "#fef2f2"]]);
+  });
+
+  it("flags Tailwind arbitrary values in className, ternaries and cn/clsx/cva calls", () => {
+    expect(values('<div className="bg-[#dc2626] p-2" />')).toEqual([[1, "#dc2626"]]);
+    expect(values("<div className={active ? 'bg-[#dc2626]' : 'bg-white'} />")).toEqual([[1, "#dc2626"]]);
+    expect(values("<div className={clsx('p-[13px]', { 'text-[#16a34a]': ok })} />")).toEqual([[1, "13px"], [1, "#16a34a"]]);
+    expect(values("const button = cva('rounded-[6px]', { variants: { intent: { danger: 'hover:bg-[#dc2626]' } } });")).toEqual([
+      [1, "6px"], [1, "#dc2626"],
+    ]);
+    expect(values("<div className={`flex ${open ? 'border-[#e5e7eb]' : ''} text-[14px]`} />")).toEqual([[1, "#e5e7eb"], [1, "14px"]]);
+  });
+
+  it("names the matching token and gives an exact edit for a class value", () => {
+    const tsx = "<div className={active ? 'bg-[#1a73e8]' : 'bg-white'} />\n";
+    const [issue] = issuesFromSignals(extractFileSignals(tsx, "src/A.tsx"), tokens);
+    expect(issue).toMatchObject({ line: 1, current: "#1a73e8", suggested: "var(--color-primary)" });
+    expect(lineEdit(issue!, tsx.split("\n")[0])?.after).toBe("<div className={active ? 'bg-[var(--color-primary)]' : 'bg-white'} />");
+  });
+
+  it("does not flag token references, CSS variables, conditions or partial template values", () => {
+    expect(values([
+      "<div style={{ color: isError ? 'var(--color-danger)' : theme.colors.ok, padding: `${n}px` }} />",
+      "<div style={{ background: `rgba(0,0,0,${alpha})`, color: `#${hex}` }} />",
+      "<div style={{ color: variant === '#fff' ? fg : undefined }} />",
+      "<div className={cn('bg-[var(--brand)]', on && 'bg-(--brand) text-red-500', 'w-[37px] top-[3px]')} />",
+      "// old: className=\"bg-[#dc2626]\"",
+      "<p>Use bg-[#dc2626] for errors</p>",
+      "<svg className={on ? 'fill-[#dc2626]' : ''} />",
+    ].join("\n"))).toEqual([]);
+  });
+});
+
+describe("bare numbers in JSX", () => {
+  it("are pixels, z-index stays a number, and weights/opacities stay unchecked", () => {
+    const tsx = "<div style={{ zIndex: dragging ? 10 : 1, padding: 8, fontWeight: 600, opacity: 0.5 }} />";
+    const values = extractFileSignals(tsx, "src/A.tsx").map((s) => String(s.value));
+    expect(values).toContain("8px");
+    expect(values.filter((v) => v.endsWith("px"))).toEqual(["8px"]);
+    expect(values).not.toContain("600");
+    expect(values).not.toContain("0.5");
+  });
+});

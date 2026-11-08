@@ -11,3 +11,4 @@ export * from './arbitrary-value.js';
 export * from './opacity.js';
 export * from './motion.js';
 export * from './border.js';
+export * from './jsx-values.js';

@@ -26,10 +26,21 @@ import {
   extractSpacingSignals,
   extractTransitionShorthandSignals,
   extractZIndexSignals,
+  collectArbitraryClasses,
+  collectJsxDeclaredValues,
   type RawSignal,
   type SignalContext,
 } from "@buoy-design/scanners";
-import { classifyFileContext, isDesignDeclaration, isSvgPaintProperty, lineIntent, tokenSizeFamily, type IntentEvidence } from "@buoy-design/core";
+import {
+  classifyFileContext,
+  isDesignDeclaration,
+  isSvgPaintProperty,
+  isTailwindDesignValue,
+  lineIntent,
+  parseArbitraryClass,
+  tokenSizeFamily,
+  type IntentEvidence,
+} from "@buoy-design/core";
 import { findTokensByValue } from "./project.js";
 
 type Extractor =
@@ -120,9 +131,34 @@ const SIGNAL_CATEGORY: Record<string, DesignToken["category"] | undefined> = {
 };
 
 const CSS_PROP = /([a-z-]+)\s*:\s*([^;{}]+)/g;
-const JSX_PROP = /(\w+)\s*:\s*(?:'([^']*)'|"([^"]*)"|(\d+\.?\d*)(?=[,}\s]))/g;
-// JSX attributes: c="#2563eb", bg='#1a1a18', p={16}
-const JSX_ATTR = /\b(\w+)=(?:"([^"]*)"|'([^']*)'|\{(\d+\.?\d*)\})/g;
+
+const UNCHECKED_NUMBERS = new Set<Extractor>(["opacity", "fontWeight", "lineHeight"]);
+
+const COLOR_VALUE = /^(#[0-9a-f]{3,8}|(rgba?|hsla?|oklch|oklab|lab|lch|hwb)\([^)]*\))$/i;
+
+/** Which extractor and CSS property a Tailwind arbitrary class stands for. Null when it is not a design value. */
+export function arbitraryClassRoute(fullClass: string): { extractor: Extractor; property: string; value: string } | null {
+  if (!isTailwindDesignValue(fullClass)) return null;
+  const parsed = parseArbitraryClass(fullClass);
+  if (!parsed) return null;
+  const { utility } = parsed;
+  const value = parsed.value.replace(/^(color|length|size|number|percentage):/, "");
+  if (COLOR_VALUE.test(value)) {
+    // fill-[...] and stroke-[...] paint SVG artwork, same rule as fill/stroke declarations.
+    if (utility === "fill" || utility === "stroke") return null;
+    const property = utility === "bg" ? "background-color" : utility === "text" ? "color" : `${utility}-color`;
+    return { extractor: "color", property, value };
+  }
+  if (utility === "text") return { extractor: "fontSize", property: "font-size", value };
+  if (utility === "shadow" || utility === "drop-shadow") return { extractor: "shadow", property: "box-shadow", value };
+  if (/^rounded/.test(utility)) return { extractor: "radius", property: "border-radius", value };
+  if (/^(border|outline|ring|divide)(-|$)/.test(utility) && !/offset/.test(utility)) return { extractor: "borderWidth", property: "border-width", value };
+  if (utility === "leading") return { extractor: "lineHeight", property: "line-height", value };
+  if (utility === "tracking") return { extractor: "letterSpacing", property: "letter-spacing", value };
+  if (utility === "font") return { extractor: "fontWeight", property: "font-weight", value };
+  const property = /^(scroll-)?p/.test(utility) ? "padding" : /^(scroll-)?m/.test(utility) ? "margin" : "gap";
+  return { extractor: "spacing", property, value };
+}
 
 function route(extractor: Extractor, value: string, path: string, line: number, property: string, ctx: SignalContext): RawSignal[] {
   switch (extractor) {
@@ -167,53 +203,80 @@ export function extractFileSignals(content: string, path: string, judge: LineJud
     scope: "global",
     isTokenized: false,
   };
-  const signals: RawSignal[] = [];
   const lines = content.split("\n");
+  if (isJsx) return extractJsxSignals(content, path, lines, ctx, judge);
+  const signals: RawSignal[] = [];
   // Tailwind v4 `@utility` and `@theme` blocks are where a repo defines its
   // design values; their declarations are the system, not drift from it.
   let depth = 0;
   let definitionDepth: number | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
-    if (isCss) {
-      const opensDefinition = definitionDepth === null && /@(utility|theme)\b/.test(line);
-      if (opensDefinition) definitionDepth = depth;
-      for (const ch of line) {
-        if (ch === "{") depth++;
-        else if (ch === "}") depth--;
-      }
-      if (definitionDepth !== null) {
-        if (depth <= definitionDepth && !opensDefinition) definitionDepth = null;
-        else if (depth <= definitionDepth && opensDefinition && line.includes("}")) definitionDepth = null;
-        continue;
-      }
+    const opensDefinition = definitionDepth === null && /@(utility|theme)\b/.test(line);
+    if (opensDefinition) definitionDepth = depth;
+    for (const ch of line) {
+      if (ch === "{") depth++;
+      else if (ch === "}") depth--;
     }
-    // A line can mix a token reference and a literal (`fg: 'var(--x)', bg: '#fff'`);
-    // the extractors skip var()/$ references per value, so the line is examined.
-    const patterns = isCss ? [CSS_PROP] : [JSX_PROP, JSX_ATTR];
-    const table = isCss ? CSS_PROPERTY_EXTRACTORS : { ...JSX_STYLE_PROP_ALIASES, ...JSX_PROPERTY_EXTRACTORS };
-    for (const pattern of patterns) {
-      pattern.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = pattern.exec(line)) !== null) {
-        const property = (m[1] ?? "").trim();
-        const extractor = table[property];
-        if (!extractor) continue;
-        // fill/stroke/stop-color are SVG artwork, not themed UI colour.
-        if (isSvgPaintProperty(property)) continue;
-        let value = isCss ? (m[2] ?? "").replace(/\s*!important\s*$/i, "").trim() : (m[2] ?? m[3] ?? m[4]);
-        if (value === undefined || value === "") continue;
-        // Bare numbers in JSX style objects and props are pixels.
-        if (isJsx && m[4] !== undefined) value = `${value}px`;
-        // Layout geometry (width, top, ...), keywords, maths and hairlines are not drift.
-        if (!isDesignDeclaration(property, value)) continue;
-        // A comment, a 2-3px nudge or the line's history says it is deliberate.
-        if (judge(i + 1, property, value, lines)) continue;
-        signals.push(...route(extractor, value, path, i + 1, property, ctx));
-      }
+    if (definitionDepth !== null) {
+      if (depth <= definitionDepth && !opensDefinition) definitionDepth = null;
+      else if (depth <= definitionDepth && opensDefinition && line.includes("}")) definitionDepth = null;
+      continue;
+    }
+    CSS_PROP.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = CSS_PROP.exec(line)) !== null) {
+      const property = (m[1] ?? "").trim();
+      // Own keys only: `constructor: ...` must not reach Object.prototype.
+      const extractor = Object.hasOwn(CSS_PROPERTY_EXTRACTORS, property) ? CSS_PROPERTY_EXTRACTORS[property] : undefined;
+      if (!extractor) continue;
+      // fill/stroke/stop-color are SVG artwork, not themed UI colour.
+      if (isSvgPaintProperty(property)) continue;
+      const value = (m[2] ?? "").replace(/\s*!important\s*$/i, "").trim();
+      if (value === "") continue;
+      // Layout geometry (width, top, ...), keywords, maths and hairlines are not drift.
+      if (!isDesignDeclaration(property, value)) continue;
+      // A comment, a 2-3px nudge or the line's history says it is deliberate.
+      if (judge(i + 1, property, value, lines)) continue;
+      signals.push(...route(extractor, value, path, i + 1, property, ctx));
     }
   }
   return signals;
+}
+
+/**
+ * JSX/TSX goes through the AST, so a literal is found wherever an expression
+ * puts it: style objects, theme objects, style props, ternary and &&/||
+ * branches, template literals, and class strings in className or cn()/clsx().
+ * Token references (`var(--x)`, `theme.colors.red`) are not literals, and the
+ * extractors skip var() per value.
+ */
+function extractJsxSignals(content: string, path: string, lines: readonly string[], ctx: SignalContext, judge: LineJudge): RawSignal[] {
+  const table = { ...JSX_STYLE_PROP_ALIASES, ...JSX_PROPERTY_EXTRACTORS };
+  const signals: RawSignal[] = [];
+  for (const found of collectJsxDeclaredValues(content, path)) {
+    // Own keys only: `constructor: ...` or `toString: ...` must not reach Object.prototype.
+    const extractor = Object.hasOwn(table, found.property) ? table[found.property] : undefined;
+    if (!extractor) continue;
+    if (isSvgPaintProperty(found.property)) continue;
+    // React leaves these numbers unitless. A bare-number weight, opacity or
+    // line height has never been checked here (it used to become "600px" and
+    // fail the extractor); keep it that way until it is a decision of its own.
+    if (found.numeric && UNCHECKED_NUMBERS.has(extractor)) continue;
+    // Other bare numbers in JSX style objects and props are pixels; z-index stays a plain number.
+    const value = found.numeric && extractor !== "zIndex" ? `${found.value}px` : found.value;
+    if (value === "") continue;
+    if (!isDesignDeclaration(found.property, value)) continue;
+    if (judge(found.line, found.property, value, lines)) continue;
+    signals.push(...route(extractor, value, path, found.line, found.property, ctx));
+  }
+  for (const found of collectArbitraryClasses(content, path)) {
+    const routed = arbitraryClassRoute(found.fullClass);
+    if (!routed) continue;
+    if (lineIntent(lines, found.line - 1, { fullClass: found.fullClass })) continue;
+    signals.push(...route(routed.extractor, routed.value, path, found.line, routed.property, ctx));
+  }
+  return signals.sort((a, b) => a.location.line - b.location.line);
 }
 
 export interface FileIssue {
