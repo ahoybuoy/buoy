@@ -12,7 +12,7 @@ import { buildAutoConfig } from "../config/auto-detect.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
 import { filterScannableFiles } from "../commands/check.js";
-import { checkFiles } from "./file-check.js";
+import { applyFileIgnoreRules, checkFiles } from "./file-check.js";
 import type { DesignToken, DriftSignal } from "@buoy-design/core";
 
 export interface ProjectContext {
@@ -172,7 +172,10 @@ export async function checkDrift(project: ProjectContext, files?: string[], toke
     const notFound = files.filter((file) => !existsSync(isAbsolute(file) ? file : join(project.projectRoot, file)));
     const scannable = filterScannableFiles(files.filter((file) => !notFound.includes(file)));
     const known = tokens ?? (await scanTokens(project));
-    const issues = scannable.length ? await checkFiles(scannable, project.projectRoot, known) : [];
+    // The team's drift.ignore rules apply here too, as they do to the full scan.
+    const issues = scannable.length
+      ? applyFileIgnoreRules(await checkFiles(scannable, project.projectRoot, known), project.config.drift?.ignore)
+      : [];
     const check = summarize(issues, known.length);
     if (notFound.length === 0) return check;
     return {

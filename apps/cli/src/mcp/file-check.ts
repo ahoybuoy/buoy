@@ -7,6 +7,7 @@
  * runs the same value-level extractors the PR reviewer uses, per file, and
  * looks each value up in the repo's tokens.
  */
+import { minimatch } from "minimatch";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import type { DesignToken } from "@buoy-design/core";
@@ -379,4 +380,38 @@ export async function checkFiles(files: string[], projectRoot: string, tokens: D
     }
   }
   return issues;
+}
+
+/** One `drift.ignore` rule from .buoy.yaml (the fields line-level issues can match). */
+export interface FileIgnoreRule {
+  type?: string;
+  severity?: string;
+  file?: string;
+  component?: string;
+  token?: string;
+  value?: string;
+}
+
+/**
+ * Drop issues a team told Buoy to leave alone in `.buoy.yaml` (`drift.ignore`),
+ * with the same meaning the full scan gives those rules: every field a rule
+ * sets must match, `file` is a glob, `value` a regex on the value. Rules about
+ * a component or token never match a literal on a line, and a rule with no
+ * fields matches nothing. `type: hardcoded-value` covers every hardcoded-* issue.
+ */
+export function applyFileIgnoreRules(issues: FileIssue[], rules: readonly FileIgnoreRule[] | undefined): FileIssue[] {
+  if (!rules?.length) return issues;
+  const matches = (issue: FileIssue, rule: FileIgnoreRule): boolean => {
+    if (!rule.type && !rule.severity && !rule.file && !rule.component && !rule.token && !rule.value) return false;
+    if (rule.component || rule.token) return false;
+    if (rule.type && rule.type !== issue.type && !(rule.type === "hardcoded-value" && issue.type.startsWith("hardcoded-"))) return false;
+    if (rule.severity && rule.severity !== issue.severity) return false;
+    if (rule.file && !(minimatch(issue.file, rule.file, { dot: true }) || issue.file === rule.file)) return false;
+    if (rule.value) {
+      try { if (!new RegExp(rule.value).test(issue.current)) return false; }
+      catch { return false; }
+    }
+    return true;
+  };
+  return issues.filter((issue) => !rules.some((rule) => matches(issue, rule)));
 }
