@@ -18,9 +18,15 @@ if (!hasArgs) {
     existsSync(join(process.cwd(), "buoy.config.js"));
 
   if (!configExists) {
-    // No config - launch wizard
-    console.log("\n🛟 No config found. Launching setup wizard...\n");
-    cli.parse(["node", "buoy", "begin"]);
+    // No config - start setup when someone can answer its prompts,
+    // otherwise show help (piped, CI, an agent's shell)
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      console.log("\n🛟 No config found. Starting setup (buoy dock)...\n");
+      cli.parse(["node", "buoy", "dock"]);
+    } else {
+      console.log("\n🛟 No config found. Run `buoy dock` to set up, or `buoy show all` to look without one.\n");
+      cli.parse(["node", "buoy", "--help"]);
+    }
   } else {
     // Config exists - show help
     cli.parse();

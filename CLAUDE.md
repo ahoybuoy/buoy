@@ -92,7 +92,6 @@ buoy
 │       ├── show            # View ignored drift signals
 │       ├── add             # Add new drift to ignore list (requires --reason)
 │       └── clear           # Remove ignore list
-├── begin                   # Interactive wizard
 ├── dock                    # Dock tools into your project
 │   ├── config              # Create .buoy.yaml
 │   ├── skills              # Create AI agent skills
@@ -133,8 +132,7 @@ All `show` subcommands output JSON by default.
 
 | Command | Purpose |
 |---------|---------|
-| `buoy begin` | Interactive wizard to get started |
-| `buoy dock` | Configure project (config, agents, hooks) |
+| `buoy dock` | Set up the project (config, agents, hooks); bare `buoy` with no config starts it |
 | `buoy dock config` | Create .buoy.yaml |
 | `buoy dock agents` | Set up AI agents with design system |
 | `buoy dock hooks` | Set up git hooks |
