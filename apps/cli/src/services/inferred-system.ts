@@ -135,8 +135,8 @@ export function summarizeInferredSystem(system: InferredSystem, limit = 40) {
       category: t.category,
       value: t.value,
       uses: t.occurrences,
-      // Only colors: spacing/type clustering is too coarse to tell an agent "use X instead".
-      ...(t.category === "color" && new Set(t.sources.map(normalizeLiteral)).size > 1
+      // Sizes merge only near-duplicates (15px into 16px), so "use X instead" holds for them too.
+      ...(new Set(t.sources.map(normalizeLiteral)).size > 1
         ? { replaces: [...new Set(t.sources.map(normalizeLiteral))] }
         : {}),
     })),

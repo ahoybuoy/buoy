@@ -17,6 +17,36 @@ function getHexLightness(hex: string): number {
 
 describe('generateTokens', () => {
   describe('clustering', () => {
+    const sized = (category: ExtractedValue['category'], property: string, list: Array<[string, number]>): ExtractedValue[] =>
+      list.flatMap(([value, n]) =>
+        Array.from({ length: n }, () => ({ property, value, rawValue: value, category, context: category === 'spacing' ? 'spacing' : undefined }) as ExtractedValue),
+      );
+
+    it('keeps a real spacing scale as separate steps', () => {
+      const values = sized('spacing', 'padding', [['4px', 5], ['8px', 5], ['12px', 5], ['16px', 5], ['24px', 5]]);
+      const steps = generateTokens(values).tokens.filter((t) => t.category === 'spacing').map((t) => t.value);
+      expect(steps).toEqual(['4px', '8px', '12px', '16px', '24px']);
+    });
+
+    it('merges near-duplicate spacing into the more used step', () => {
+      const values = sized('spacing', 'padding', [['16px', 9], ['15px', 2], ['12px', 6]]);
+      const tokens = generateTokens(values).tokens.filter((t) => t.category === 'spacing');
+      expect(tokens.map((t) => t.value)).toEqual(['12px', '16px']);
+      expect([...tokens.find((t) => t.value === '16px')!.sources].sort()).toEqual(['15px', '16px']);
+    });
+
+    it('keeps adjacent type sizes apart and half pixels intact', () => {
+      const values = sized('font-size', 'font-size', [['12px', 6], ['12.5px', 4], ['13px', 3], ['14px', 8], ['15.75px', 1], ['16px', 7]]);
+      const steps = generateTokens(values).tokens.filter((t) => t.category === 'font-size').map((t) => t.value);
+      expect(steps).toEqual(['12px', '12.5px', '13px', '14px', '16px']);
+    });
+
+    it('still honours an explicit flat threshold', () => {
+      const values = sized('spacing', 'padding', [['4px', 5], ['8px', 1]]);
+      const steps = generateTokens(values, { spacingThreshold: 4 }).tokens.filter((t) => t.category === 'spacing').map((t) => t.value);
+      expect(steps).toEqual(['4px']);
+    });
+
     it('never clusters 0 with non-zero spacing values', () => {
       const values: ExtractedValue[] = [
         { property: 'padding', value: '0', rawValue: '0', category: 'spacing', context: 'spacing' },

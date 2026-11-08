@@ -6,6 +6,24 @@
 import type { ExtractedValue } from '../extraction/css-parser.js';
 import { hexToRgb, normalizeHexColor, spacingToPx } from '../extraction/css-parser.js';
 
+/** How close two sizes must be to count as one step. */
+type SizeTolerance = number | undefined;
+const SIZE_REL = 0.08;
+const SIZE_ABS = 1;
+const TYPE_REL = 0.03;
+const TYPE_ABS = 0.25;
+
+/**
+ * Same step? With an explicit threshold, a flat px distance. Otherwise a
+ * near-duplicate test relative to the size: 15px is 16px, 12px is not 16px.
+ */
+function sameStep(a: number, b: number, threshold: SizeTolerance, kind: 'size' | 'type' = 'size'): boolean {
+  const d = Math.abs(a - b);
+  if (threshold !== undefined) return d <= threshold;
+  const [rel, abs] = kind === 'type' ? [TYPE_REL, TYPE_ABS] : [SIZE_REL, SIZE_ABS];
+  return d <= Math.max(abs, rel * Math.max(a, b));
+}
+
 // Token generation limits - values above these become orphan tokens
 const MAX_SPACING_TOKENS = 10;
 const MAX_SIZING_TOKENS = 12;
@@ -54,7 +72,12 @@ export interface TokenGenerationResult {
 export interface TokenGenerationOptions {
   /** Color clustering threshold (Delta E, default 10) */
   colorThreshold?: number;
-  /** Spacing clustering threshold (px, default 4) */
+  /**
+   * Size clustering threshold in px. When set, any two values this close are
+   * one step (the old behaviour). When unset, values merge only when they are
+   * near-duplicates (within ~8%, at least 1px; type within 3%), so a real
+   * scale like 4/8/12/16 stays four steps instead of collapsing into one.
+   */
   spacingThreshold?: number;
   /** Prefix for CSS custom properties (default empty) */
   prefix?: string;
@@ -81,7 +104,7 @@ export function generateTokens(
 ): TokenGenerationResult {
   const {
     colorThreshold = 10,
-    spacingThreshold = 4,
+    spacingThreshold,
     prefix = '',
   } = options;
 
@@ -425,7 +448,7 @@ function generateColorTokens(values: ExtractedValue[], threshold: number): Categ
  */
 function generateSpacingTokens(
   values: ExtractedValue[],
-  threshold: number,
+  threshold: SizeTolerance,
   context: string = 'spacing',
   category: 'spacing' | 'sizing' = 'spacing'
 ): CategoryResult {
@@ -468,7 +491,7 @@ function generateSpacingTokens(
       // Don't cluster non-zero values with zero
       if (cluster.value === 0) continue;
 
-      if (Math.abs(px - cluster.value) <= threshold) {
+      if (sameStep(px, cluster.value, threshold)) {
         // Use the more common value as representative
         if (data.count > cluster.count) {
           cluster.value = px;
@@ -545,7 +568,7 @@ function generateSpacingTokens(
 /**
  * Generate sizing tokens (width, height) - different naming convention
  */
-function generateSizingTokens(values: ExtractedValue[], threshold: number): CategoryResult {
+function generateSizingTokens(values: ExtractedValue[], threshold: SizeTolerance): CategoryResult {
   const inputCount = values.length;
   const pxCounts = new Map<number, { count: number; sources: string[] }>();
 
@@ -583,7 +606,7 @@ function generateSizingTokens(values: ExtractedValue[], threshold: number): Cate
       // Don't cluster non-zero values with zero
       if (cluster.value === 0) continue;
 
-      if (Math.abs(px - cluster.value) <= threshold) {
+      if (sameStep(px, cluster.value, threshold)) {
         if (data.count > cluster.count) {
           cluster.value = px;
         }
@@ -655,7 +678,7 @@ function generateSizingTokens(values: ExtractedValue[], threshold: number): Cate
 /**
  * Generate font-size tokens
  */
-function generateFontSizeTokens(values: ExtractedValue[], threshold: number): CategoryResult {
+function generateFontSizeTokens(values: ExtractedValue[], threshold: SizeTolerance): CategoryResult {
   const inputCount = values.length;
 
   // Minimum realistic font size (smaller values are likely border-width or other noise)
@@ -669,7 +692,8 @@ function generateFontSizeTokens(values: ExtractedValue[], threshold: number): Ca
     // Filter out unrealistic font sizes
     if (px === null || px < MIN_FONT_SIZE_PX) continue;
 
-    const rounded = Math.round(px);
+    // Keep half pixels: 12.5px is a real step in some type scales.
+    const rounded = Math.round(px * 4) / 4;
     const existing = pxCounts.get(rounded);
     if (existing) {
       existing.count++;
@@ -700,7 +724,7 @@ function generateFontSizeTokens(values: ExtractedValue[], threshold: number): Ca
       // Don't cluster non-zero values with zero
       if (cluster.value === 0) continue;
 
-      if (Math.abs(px - cluster.value) <= threshold) {
+      if (sameStep(px, cluster.value, threshold, 'type')) {
         if (data.count > cluster.count) {
           cluster.value = px;
         }
@@ -775,7 +799,7 @@ function generateFontSizeTokens(values: ExtractedValue[], threshold: number): Ca
 /**
  * Generate radius tokens
  */
-function generateRadiusTokens(values: ExtractedValue[], threshold: number): CategoryResult {
+function generateRadiusTokens(values: ExtractedValue[], threshold: SizeTolerance): CategoryResult {
   const inputCount = values.length;
   const pxCounts = new Map<number, { count: number; sources: string[] }>();
 
@@ -812,7 +836,7 @@ function generateRadiusTokens(values: ExtractedValue[], threshold: number): Cate
       // Don't cluster non-zero values with zero
       if (cluster.value === 0) continue;
 
-      if (Math.abs(px - cluster.value) <= threshold) {
+      if (sameStep(px, cluster.value, threshold)) {
         if (data.count > cluster.count) {
           cluster.value = px;
         }
