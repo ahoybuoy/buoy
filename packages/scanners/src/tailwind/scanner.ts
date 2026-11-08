@@ -301,6 +301,7 @@ export class TailwindScanner {
         judge: this.config.judge,
         themeColors: themeColorMap(result.tokens),
         themeSizes: themeSizeMap(result.tokens),
+        replacedScales: await new TailwindConfigParser(this.config.projectRoot).replacedScales(),
       });
 
       // One pass: the signals are built from the same values (it used to scan twice).

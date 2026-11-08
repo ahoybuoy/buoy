@@ -92,3 +92,14 @@ describe("classValue", () => {
     }
   });
 });
+
+describe("replaced default scales", () => {
+  it("never suggests a class from a scale the project replaced", () => {
+    const replaced = new Set(["colors", "spacing"]);
+    expect(exactTailwindClass("bg-[#6b7280]", { replaced })).toBeNull();
+    expect(exactTailwindClass("p-[16px]", { replaced })).toBeNull();
+    expect(exactTailwindClass("text-[14px]", { replaced })).toBe("text-sm");
+    const themeColors = new Map([["#6b7280", "muted"]]);
+    expect(exactTailwindClass("bg-[#6b7280]", { replaced, themeColors })).toBe("bg-muted");
+  });
+});

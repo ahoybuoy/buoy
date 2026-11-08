@@ -31,6 +31,8 @@ export interface ArbitraryDetectorConfig {
   themeColors?: Map<string, string>;
   /** The project's theme font sizes, spacing and radii, for exact size fixes. */
   themeSizes?: ThemeSizes;
+  /** Default scales the project replaced, whose classes don't exist there. */
+  replacedScales?: ReadonlySet<string>;
 }
 
 /** A value used in this many files is a de facto step: propose it, don't snap it. */
@@ -1092,6 +1094,7 @@ export class ArbitraryValueDetector {
     const { message, fix, tokenSuggestions, proposals } = describeArbitraryValues(values, {
       themeColors: this.config.themeColors,
       themeSizes: this.config.themeSizes,
+      replaced: this.config.replacedScales,
       filesUsing: repeated,
     });
 
@@ -1137,7 +1140,7 @@ export function arbitraryValueKind(fullClass: string): { kind: string; fix: stri
  */
 export function describeArbitraryValues(
   values: ArbitraryValue[],
-  options: { themeColors?: Map<string, string>; themeSizes?: ThemeSizes; filesUsing?: (v: ArbitraryValue) => number } = {},
+  options: { themeColors?: Map<string, string>; themeSizes?: ThemeSizes; replaced?: ReadonlySet<string>; filesUsing?: (v: ArbitraryValue) => number } = {},
 ): { message: string; fix: string; tokenSuggestions: string[]; proposals: string[] } {
   const classes = [...new Set(values.map((v) => baseClass(v.fullClass)))];
   const kinds = [...new Set(values.map((v) => arbitraryValueKind(v.fullClass).kind))];
@@ -1151,7 +1154,7 @@ export function describeArbitraryValues(
   const exactAsWritten = new Map<string, string>();
   for (const v of values) {
     const cls = baseClass(v.fullClass);
-    const swap = exactTailwindClass(v.fullClass, { themeColors: options.themeColors, themeSizes: options.themeSizes });
+    const swap = exactTailwindClass(v.fullClass, { themeColors: options.themeColors, themeSizes: options.themeSizes, replaced: options.replaced });
     if (swap) {
       exactAsWritten.set(v.fullClass, swap);
       if (!exact.has(cls)) exact.set(cls, baseClass(swap));

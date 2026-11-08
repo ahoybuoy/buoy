@@ -119,6 +119,52 @@ export class TailwindConfigParser {
     return null;
   }
 
+  /**
+   * Default Tailwind scales a project replaced: `theme: { colors: {...} }`
+   * (not under `extend`) in a v3 config, or `--color-*: initial` in a v4
+   * stylesheet. Classes from a replaced scale don't exist in that project,
+   * so no fix may point at them.
+   */
+  async replacedScales(): Promise<Set<'colors' | 'fontSize' | 'spacing' | 'borderRadius'>> {
+    const out = new Set<'colors' | 'fontSize' | 'spacing' | 'borderRadius'>();
+    for (const path of await this.findV3ConfigFiles()) {
+      let content: string;
+      try {
+        content = stripJsComments(readFileSync(path, 'utf-8'));
+      } catch {
+        continue;
+      }
+      const theme = /\btheme\s*:\s*\{/.exec(content);
+      if (!theme) continue;
+      // Direct keys of the theme object (depth 1), skipping `extend`.
+      let depth = 0;
+      for (let i = theme.index + theme[0].length - 1; i < content.length; i++) {
+        const c = content[i];
+        if (c === '{') depth++;
+        else if (c === '}') {
+          depth--;
+          if (depth === 0) break;
+        } else if (depth === 1) {
+          const key = /^['"]?(colors|fontSize|spacing|borderRadius)['"]?\s*:/.exec(content.slice(i));
+          if (key && /[\s{,]/.test(content[i - 1] ?? ' ')) out.add(key[1] as 'colors');
+        }
+      }
+    }
+    const css = await this.findV4CSSFile();
+    if (css) {
+      try {
+        const content = readFileSync(css, 'utf-8');
+        if (/--color-\*\s*:\s*initial/.test(content)) out.add('colors');
+        if (/--text-\*\s*:\s*initial/.test(content)) out.add('fontSize');
+        if (/--spacing(-\*)?\s*:\s*initial/.test(content)) out.add('spacing');
+        if (/--radius-\*\s*:\s*initial/.test(content)) out.add('borderRadius');
+      } catch {
+        // unreadable
+      }
+    }
+    return out;
+  }
+
   /** Root config first, then workspace configs (apps/*, packages/*), nearest first. */
   private async findV3ConfigFiles(): Promise<string[]> {
     const configNames = [

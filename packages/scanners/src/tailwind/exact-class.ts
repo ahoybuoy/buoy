@@ -62,6 +62,8 @@ export interface ExactClassOptions {
   themeColors?: Map<string, string>;
   /** The project's theme sizes in px -> class suffix, per scale. Checked before the defaults. */
   themeSizes?: ThemeSizes;
+  /** Default scales the project replaced (theme.colors, not extend): never suggest their classes. */
+  replaced?: ReadonlySet<string>;
 }
 
 export interface ThemeSizes {
@@ -111,13 +113,14 @@ export function exactTailwindClass(fullClass: string, options: ExactClassOptions
   const { utility } = parsed;
   const value = parsed.value.replace(/^(color|length|size|number|percentage):/, '');
   const sizes = options.themeSizes;
+  const replaced = options.replaced ?? new Set<string>();
   const build = (suffix: string) =>
     `${prefix}${important}${negative}${utility}${suffix === 'DEFAULT' ? '' : `-${suffix}`}${modifier}${importantAfter}`;
 
   const hex = normalizeHexColor(value);
   if (hex) {
     if (!COLOR_UTILITIES.test(utility)) return null;
-    const name = options.themeColors?.get(hex) ?? DEFAULT_PALETTE.get(hex);
+    const name = options.themeColors?.get(hex) ?? (replaced.has('colors') ? undefined : DEFAULT_PALETTE.get(hex));
     return name ? build(name) : null;
   }
   if (modifier) return null;
@@ -127,6 +130,7 @@ export function exactTailwindClass(fullClass: string, options: ExactClassOptions
     if (px === null) return null;
     const own = sizes?.text.get(px);
     if (own) return build(own);
+    if (replaced.has('fontSize')) return null;
     return FONT_SIZES[px] ? build(FONT_SIZES[px]!) : null;
   }
   if (utility === 'font') {
@@ -148,6 +152,7 @@ export function exactTailwindClass(fullClass: string, options: ExactClassOptions
     if (px === null) return null;
     const own = sizes?.radius.get(px);
     if (own) return build(own);
+    if (replaced.has('borderRadius')) return null;
     return RADII[px] !== undefined ? build(RADII[px]!) : null;
   }
   if (SPACING_UTILITIES.test(utility)) {
@@ -155,6 +160,7 @@ export function exactTailwindClass(fullClass: string, options: ExactClassOptions
     if (px === null) return null;
     const own = sizes?.spacing.get(px);
     if (own) return build(own);
+    if (replaced.has('spacing')) return null;
     if (px === 1) return build('px');
     const step = px / 4;
     return SPACING_STEPS.has(step) ? build(fmt(step)) : null;

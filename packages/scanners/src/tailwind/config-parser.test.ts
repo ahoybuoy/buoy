@@ -1659,3 +1659,20 @@ describe('TailwindConfigParser', () => {
     });
   });
 });
+
+describe('TailwindConfigParser.replacedScales', () => {
+  it('finds default scales a v3 config replaces, but not ones it extends', async () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => String(p) === '/test/project/tailwind.config.js');
+    vi.mocked(fs.readFileSync).mockReturnValue(`
+      // the brand's palette replaces Tailwind's
+      module.exports = {
+        theme: {
+          colors: { brand: '#123456' },
+          extend: { spacing: { 18: '4.5rem' }, fontSize: { tiny: '10px' } },
+        },
+      };
+    ` as never);
+    const replaced = await new TailwindConfigParser('/test/project').replacedScales();
+    expect([...replaced]).toEqual(['colors']);
+  });
+});
