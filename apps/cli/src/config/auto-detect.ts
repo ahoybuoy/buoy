@@ -146,6 +146,13 @@ async function detectNestedFrontend(projectRoot: string): Promise<NestedFrontend
 }
 
 /**
+ * Component folders outside src/app/components that hold UI, e.g. a
+ * design-system package's packages/ui/primitives (documenso keeps Button,
+ * Input and Dialog there and they were never scanned).
+ */
+const REACT_UI_DIRS = ['primitives/**/*.tsx', 'primitives/**/*.jsx', 'ui/**/*.tsx', 'ui/**/*.jsx'];
+
+/**
  * Expand include patterns for nested frontend directory.
  * Prefixes patterns with the frontend directory path.
  */
@@ -310,7 +317,7 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
 
     switch (scanner) {
       case 'react': {
-        const baseInclude = ['src/**/*.tsx', 'src/**/*.jsx', 'app/**/*.tsx', 'app/**/*.jsx', 'components/**/*.tsx', 'components/**/*.jsx'];
+        const baseInclude = ['src/**/*.tsx', 'src/**/*.jsx', 'app/**/*.tsx', 'app/**/*.jsx', 'components/**/*.tsx', 'components/**/*.jsx', ...REACT_UI_DIRS];
         config.sources.react = {
           enabled: true,
           include: expandPatterns(baseInclude, monorepo, nestedFrontend),
@@ -320,7 +327,7 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
       }
 
       case 'nextjs': {
-        const baseInclude = ['src/**/*.tsx', 'src/**/*.jsx', 'app/**/*.tsx', 'app/**/*.jsx', 'components/**/*.tsx', 'components/**/*.jsx'];
+        const baseInclude = ['src/**/*.tsx', 'src/**/*.jsx', 'app/**/*.tsx', 'app/**/*.jsx', 'components/**/*.tsx', 'components/**/*.jsx', ...REACT_UI_DIRS];
         config.sources.nextjs = {
           enabled: true,
           include: expandPatterns(baseInclude, monorepo, nestedFrontend),

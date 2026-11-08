@@ -953,6 +953,8 @@ export class ReactComponentScanner extends SignalAwareScanner<
     }
 
     const hardcodedValues = this.extractHardcodedValues(node, sourceFile, signalCollector);
+    // Arrow/function-expression components render children too (was always []).
+    const dependencies = this.extractDependencies(node, sourceFile, signalCollector);
 
     // Emit component definition signal
     signalCollector.collectComponentDef(name, line, {
@@ -967,7 +969,7 @@ export class ReactComponentScanner extends SignalAwareScanner<
       props,
       variants: [],
       tokens: [],
-      dependencies: [],
+      dependencies,
       metadata: {
         tags: [],
         hardcodedValues:
