@@ -12,6 +12,7 @@ const { mkdtemp, rm, writeFile, mkdir, readFile } = await import("fs/promises");
 const { tmpdir } = await import("os");
 
 import { ScanCache } from "./scan-cache.js";
+import { CACHE_VERSION } from "./types.js";
 
 describe("ScanCache", () => {
   let testDir: string;
@@ -129,7 +130,8 @@ describe("ScanCache", () => {
       const content = await readFile(cacheFile, "utf-8");
       const data = JSON.parse(content);
 
-      expect(data.version).toBe(1);
+      expect(data.version).toBe(CACHE_VERSION);
+      expect(String(data.version)).toMatch(/^1:\d+\.\d+\.\d+/);
       expect(data.entries).toHaveProperty("react:src/Button.tsx");
     });
 
@@ -144,6 +146,19 @@ describe("ScanCache", () => {
 
       const result = newCache.getCachedResult(absPath, "react");
       expect(result).toEqual([{ name: "Button" }]);
+    });
+
+    it("ignores a cache written by an older scanners release", async () => {
+      const absPath = join(testDir, "src", "Button.tsx");
+      await cache.storeResult(absPath, "react", [{ name: "Button" }]);
+      await cache.save();
+      const cacheFile = join(testDir, ".buoy", "scan-cache.json");
+      const data = JSON.parse(await readFile(cacheFile, "utf-8"));
+      await writeFile(cacheFile, JSON.stringify({ ...data, version: "1:0.0.1" }));
+
+      const newCache = new ScanCache(testDir);
+      await newCache.load();
+      expect(newCache.getCachedResult(absPath, "react")).toBeNull();
     });
   });
 

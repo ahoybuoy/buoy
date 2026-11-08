@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 // packages/scanners/src/cache/types.ts
 
 /**
@@ -22,8 +23,8 @@ export interface FileCacheEntry {
  * Root structure of the scan cache file
  */
 export interface ScanCacheData {
-  /** Cache format version for migrations */
-  version: number;
+  /** Cache format version plus the scanners release that wrote it */
+  version: number | string;
   /** Project root this cache belongs to */
   projectRoot: string;
   /** Last git commit hash when full scan was done */
@@ -56,5 +57,20 @@ export interface CacheOptions {
   clearCache?: boolean;
 }
 
-/** Current cache version */
-export const CACHE_VERSION = 1;
+const CACHE_SCHEMA = 1;
+
+function scannersVersion(): string {
+  try {
+    // dist/cache/types.js and src/cache/types.ts both sit two levels below package.json.
+    return (createRequire(import.meta.url)('../../package.json') as { version?: string }).version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Current cache version. It changes with every scanners release, so results
+ * written by an older scanner are never reused after an upgrade (0.8.16's
+ * render-dependency fix stayed invisible behind a 0.8.15 cache).
+ */
+export const CACHE_VERSION = `${CACHE_SCHEMA}:${scannersVersion()}`;
