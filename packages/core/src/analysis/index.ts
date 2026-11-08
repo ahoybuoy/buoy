@@ -11,6 +11,10 @@ export {
 // Token suggestion utilities
 export {
   TokenSuggestionService,
+  tokenSuggestionKey,
+  propertySizeFamily,
+  tokenSizeFamily,
+  type SizeFamily,
   type TokenSuggestion,
 } from "./token-suggestions.js";
 

@@ -5,6 +5,57 @@
 import type { DesignToken } from "../models/index.js";
 import { TOKEN_SUGGESTION_CONFIG } from "./config.js";
 
+/** What kind of decision a size value or token encodes. */
+export type SizeFamily = "spacing" | "radius" | "sizing" | "typography" | "other";
+
+/**
+ * Key for {@link TokenSuggestionService.generateTokenSuggestions}: the same
+ * value means different things on different properties (8px padding is a
+ * spacing step, 8px border-radius is a radius), so suggestions are per pair.
+ */
+export function tokenSuggestionKey(property: string, value: string): string {
+  return `${property}\u0000${value}`;
+}
+
+/** The family a CSS/JSX property's size value belongs to. */
+export function propertySizeFamily(property: string): SizeFamily {
+  const p = property.toLowerCase().replace(/[-_\s]/g, "");
+  if (p.includes("radius") || p.startsWith("rounded")) return "radius";
+  if (p.includes("font") || p === "lineheight" || p === "letterspacing" || p === "leading" || p === "tracking") {
+    return "typography";
+  }
+  if (/^(min|max)?(width|height|blocksize|inlinesize)$/.test(p) || p === "size" || p === "w" || p === "h") {
+    return "sizing";
+  }
+  if (p.includes("border") || p.includes("outline") || p.includes("shadow") || p.includes("stroke")) return "other";
+  return "spacing";
+}
+
+/** The family a token belongs to, from its category and then its name. */
+export function tokenSizeFamily(token: DesignToken): SizeFamily | "unknown" {
+  const name = token.name.toLowerCase();
+  if (/radius|rounded/.test(name)) return "radius";
+  switch (token.category) {
+    case "spacing":
+      return "spacing";
+    case "sizing":
+      return "sizing";
+    case "typography":
+      return "typography";
+    case "border":
+    case "shadow":
+    case "motion":
+    case "zIndex":
+    case "color":
+      return "other";
+  }
+  if (/font|text|leading|line-?height|tracking|letter/.test(name)) return "typography";
+  if (/shadow|border|outline|ring|stroke|z-?index|duration|delay|ease|opacity/.test(name)) return "other";
+  if (/space|spacing|gap|gutter|inset|padding|margin|stack/.test(name)) return "spacing";
+  if (/size|width|height|container|screen|breakpoint/.test(name)) return "sizing";
+  return "unknown";
+}
+
 export interface TokenSuggestion {
   hardcodedValue: string;
   suggestedToken: string;
@@ -62,7 +113,7 @@ export class TokenSuggestionService {
     hardcodedValue: string,
     tokens: DesignToken[],
     maxSuggestions: number = TOKEN_SUGGESTION_CONFIG.maxSuggestions,
-    options?: { categoryFilter?: string },
+    options?: { categoryFilter?: string; families?: Array<SizeFamily | "unknown"> },
   ): TokenSuggestion[] {
     const suggestions: TokenSuggestion[] = [];
     const normalizedInput = this.normalizeSpacing(hardcodedValue);
@@ -72,6 +123,8 @@ export class TokenSuggestionService {
     for (const token of tokens) {
       // Skip tokens that don't match the category filter when provided
       if (options?.categoryFilter && token.category !== options.categoryFilter) continue;
+      // Skip tokens for a different kind of decision (a radius for a padding)
+      if (options?.families && !options.families.includes(tokenSizeFamily(token))) continue;
 
       let tokenPx: number | null = null;
       let displayValue: string;
@@ -130,6 +183,7 @@ export class TokenSuggestionService {
     }>,
     tokens: DesignToken[],
   ): Map<string, TokenSuggestion[]> {
+    // Keyed by tokenSuggestionKey(property, value).
     const suggestions = new Map<string, TokenSuggestion[]>();
 
     for (const hv of hardcodedValues) {
@@ -145,15 +199,25 @@ export class TokenSuggestionService {
           // since suggesting --spacing-3-5 for a 14px font-size is misleading
         }
       } else if (hv.type === "spacing") {
-        tokenSuggestions = this.findSpacingTokenSuggestions(hv.value, tokens, undefined, { categoryFilter: "spacing" });
-        if (tokenSuggestions.length === 0) {
-          // Fall back to any sizing/dimension tokens
-          tokenSuggestions = this.findSpacingTokenSuggestions(hv.value, tokens);
+        // Only offer a token that encodes the same kind of decision as the
+        // property: padding/margin/gap take spacing steps, border-radius takes
+        // a radius, width/height take sizes. A same-valued token from another
+        // family (8px padding -> --radius) is a wrong fix, so offer none.
+        const family = propertySizeFamily(hv.property);
+        if (family === "other") {
+          tokenSuggestions = [];
+        } else {
+          tokenSuggestions = this.findSpacingTokenSuggestions(hv.value, tokens, undefined, { families: [family] });
+          if (tokenSuggestions.length === 0 && family !== "radius") {
+            // Uncategorised tokens (no category, no telling name) are the
+            // only fallback; never another family's tokens.
+            tokenSuggestions = this.findSpacingTokenSuggestions(hv.value, tokens, undefined, { families: ["unknown"] });
+          }
         }
       }
 
       if (tokenSuggestions.length > 0) {
-        suggestions.set(hv.value, tokenSuggestions);
+        suggestions.set(tokenSuggestionKey(hv.property, hv.value), tokenSuggestions);
       }
     }
 

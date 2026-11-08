@@ -1,7 +1,13 @@
 // packages/core/src/analysis/token-suggestions.test.ts
 import { describe, it, expect, beforeEach } from "vitest";
-import { TokenSuggestionService } from "./token-suggestions.js";
+import { TokenSuggestionService, tokenSuggestionKey, propertySizeFamily } from "./token-suggestions.js";
 import type { DesignToken } from "../models/index.js";
+
+/** Suggestions for a value on any property (the map is keyed per property). */
+function forValue<T>(map: Map<string, T>, value: string): T | undefined {
+  for (const [key, v] of map) if (key.endsWith(`\u0000${value}`)) return v;
+  return undefined;
+}
 
 describe("TokenSuggestionService", () => {
   let service: TokenSuggestionService;
@@ -307,6 +313,68 @@ describe("TokenSuggestionService", () => {
     });
   });
 
+  describe("property-aware size suggestions", () => {
+    const tok = (name: string, category: DesignToken["category"], value: string): DesignToken => ({
+      id: `token:${name}`,
+      name,
+      category,
+      value: { type: "raw", value },
+      source: { type: "css", path: "globals.css" },
+      metadata: {},
+      scannedAt: new Date(),
+    }) as DesignToken;
+
+    // documenso: --radius is 0.5rem (8px); a padding of 8px is not a radius.
+    const tokens = [tok("--radius", "border", "0.5rem"), tok("--spacing", "spacing", "0.25rem")];
+
+    it("never suggests a radius token for padding", () => {
+      const s = service.generateTokenSuggestions(
+        [{ type: "spacing", value: "8px", property: "padding", location: "a.tsx:1" }],
+        tokens,
+      );
+      expect(s.get(tokenSuggestionKey("padding", "8px"))).toBeUndefined();
+    });
+
+    it("suggests the radius token for border-radius", () => {
+      const s = service.generateTokenSuggestions(
+        [{ type: "spacing", value: "8px", property: "borderRadius", location: "a.tsx:1" }],
+        tokens,
+      );
+      expect(s.get(tokenSuggestionKey("borderRadius", "8px"))![0]!.suggestedToken).toBe("--radius");
+    });
+
+    it("keeps padding and radius suggestions apart for the same value", () => {
+      const s = service.generateTokenSuggestions(
+        [
+          { type: "spacing", value: "4px", property: "gap", location: "a.tsx:1" },
+          { type: "spacing", value: "8px", property: "border-radius", location: "a.tsx:2" },
+          { type: "spacing", value: "8px", property: "margin-top", location: "a.tsx:3" },
+        ],
+        tokens,
+      );
+      expect(s.get(tokenSuggestionKey("gap", "4px"))![0]!.suggestedToken).toBe("--spacing");
+      expect(s.get(tokenSuggestionKey("border-radius", "8px"))![0]!.suggestedToken).toBe("--radius");
+      expect(s.get(tokenSuggestionKey("margin-top", "8px"))).toBeUndefined();
+    });
+
+    it("does not offer a radius named token with no category for spacing", () => {
+      const s = service.generateTokenSuggestions(
+        [{ type: "spacing", value: "8px", property: "padding", location: "a.tsx:1" }],
+        [tok("--rounded-lg", "other", "8px")],
+      );
+      expect(s.size).toBe(0);
+    });
+
+    it("classifies properties", () => {
+      expect(propertySizeFamily("padding-left")).toBe("spacing");
+      expect(propertySizeFamily("marginBottom")).toBe("spacing");
+      expect(propertySizeFamily("gap")).toBe("spacing");
+      expect(propertySizeFamily("border-top-left-radius")).toBe("radius");
+      expect(propertySizeFamily("maxWidth")).toBe("sizing");
+      expect(propertySizeFamily("borderWidth")).toBe("other");
+    });
+  });
+
   describe("generateTokenSuggestions", () => {
     const tokens: DesignToken[] = [
       {
@@ -342,8 +410,8 @@ describe("TokenSuggestionService", () => {
         tokens,
       );
 
-      expect(suggestions.has("#ff6b6b")).toBe(true);
-      expect(suggestions.get("#ff6b6b")![0]!.suggestedToken).toBe("primary");
+      expect(suggestions.has(tokenSuggestionKey("color", "#ff6b6b"))).toBe(true);
+      expect(suggestions.get(tokenSuggestionKey("color", "#ff6b6b"))![0]!.suggestedToken).toBe("primary");
     });
 
     it("generates suggestions for spacing values", () => {
@@ -361,8 +429,8 @@ describe("TokenSuggestionService", () => {
         tokens,
       );
 
-      expect(suggestions.has("8px")).toBe(true);
-      expect(suggestions.get("8px")![0]!.suggestedToken).toBe("spacing-2");
+      expect((forValue(suggestions, "8px") !== undefined)).toBe(true);
+      expect(forValue(suggestions, "8px")![0]!.suggestedToken).toBe("spacing-2");
     });
 
     it("does not match fontSize values to spacing tokens", () => {
@@ -381,7 +449,7 @@ describe("TokenSuggestionService", () => {
       );
 
       // fontSize should NOT match spacing tokens (bug fix: typography/spacing separation)
-      expect(suggestions.has("8px")).toBe(false);
+      expect((forValue(suggestions, "8px") !== undefined)).toBe(false);
     });
 
     it("matches fontSize values to typography tokens", () => {
@@ -412,8 +480,8 @@ describe("TokenSuggestionService", () => {
         typographyTokens,
       );
 
-      expect(suggestions.has("8px")).toBe(true);
-      expect(suggestions.get("8px")![0]!.suggestedToken).toBe("--font-size-xs");
+      expect((forValue(suggestions, "8px") !== undefined)).toBe(true);
+      expect(forValue(suggestions, "8px")![0]!.suggestedToken).toBe("--font-size-xs");
     });
 
     it("skips values with no matching tokens", () => {
@@ -431,7 +499,7 @@ describe("TokenSuggestionService", () => {
         tokens,
       );
 
-      expect(suggestions.has("#123456")).toBe(false);
+      expect((forValue(suggestions, "#123456") !== undefined)).toBe(false);
     });
 
     it("handles mixed value types", () => {
@@ -461,9 +529,9 @@ describe("TokenSuggestionService", () => {
         tokens,
       );
 
-      expect(suggestions.has("#ff6b6b")).toBe(true);
-      expect(suggestions.has("8px")).toBe(true);
-      expect(suggestions.has("solid")).toBe(false);
+      expect(suggestions.has(tokenSuggestionKey("color", "#ff6b6b"))).toBe(true);
+      expect((forValue(suggestions, "8px") !== undefined)).toBe(true);
+      expect((forValue(suggestions, "solid") !== undefined)).toBe(false);
     });
   });
 
