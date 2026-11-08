@@ -69,10 +69,12 @@ export function createMcpCommand(): Command {
     .action(async (options: { file?: string; cursor?: boolean }) => {
       if (options.cursor) {
         try {
-          const input = options.file ? { cwd: null, file: options.file } : parseCursorHookPayload(await readStdin());
+          // --file is relative to where the command runs; a payload carries its own project root.
+          const input = options.file ? { cwd: process.cwd(), file: options.file } : parseCursorHookPayload(await readStdin());
           const cwd = input.cwd ?? process.env.CURSOR_PROJECT_DIR ?? process.cwd();
           const output = cursorHookOutput(await runHook(cwd, input.file));
-          if (output) process.stdout.write(`${output}\n`);
+          // Exiting before a piped write drains would hand Cursor truncated JSON.
+          if (output) await new Promise<void>((done) => process.stdout.write(`${output}\n`, () => done()));
         } catch (error) {
           // Never block or break Cursor's agent; the reason goes to Cursor's hook log.
           console.error(`Buoy hook skipped: ${error instanceof Error ? error.message : String(error)}`);
