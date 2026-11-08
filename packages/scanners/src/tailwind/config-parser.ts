@@ -3,6 +3,7 @@ import { resolve, relative } from 'path';
 import { glob } from 'glob';
 import type { DesignToken, TokenSource } from '@buoy-design/core';
 import { createTokenId } from '@buoy-design/core';
+import { stripJsComments } from '../git/token-scanner.js';
 
 export interface ContainerConfig {
   center?: boolean;
@@ -810,7 +811,8 @@ export class TailwindConfigParser {
   // ============ V3 JS Config Parsing ============
 
   private async extractThemeFromJS(configPath: string): Promise<Partial<TailwindTheme>> {
-    const content = readFileSync(configPath, 'utf-8');
+    // Comments can hold quotes ("Tailwind's default") that would open a string.
+    const content = stripJsComments(readFileSync(configPath, 'utf-8'));
 
     const theme: Partial<TailwindTheme> = {
       colors: {},
@@ -1070,12 +1072,25 @@ export class TailwindConfigParser {
   private parseObjectLiteral(content: string): Record<string, any> {
     const result: Record<string, any> = {};
 
-    // Simple key-value extraction
+    // Simple key-value extraction, top level only: a nested scale's shades
+    // (brown: { 50: ... }) are read below, not as a top-level "50".
+    const depthAt = (index: number) => {
+      let depth = 0;
+      for (let i = 0; i < index; i++) {
+        if (content[i] === '{') depth++;
+        else if (content[i] === '}') depth--;
+      }
+      return depth;
+    };
     const kvPattern = /['"]?(\w+[-\w]*)['"]?\s*:\s*['"]([^'"]+)['"]/g;
     let match;
-
+    const flat: Array<{ key: string; value: string; depth: number }> = [];
     while ((match = kvPattern.exec(content)) !== null) {
-      result[match[1]!] = match[2];
+      flat.push({ key: match[1]!, value: match[2]!, depth: depthAt(match.index) });
+    }
+    const topDepth = Math.min(...flat.map((f) => f.depth), Infinity);
+    for (const f of flat) {
+      if (f.depth === topDepth) result[f.key] = f.value;
     }
 
     // Also try to match nested objects for color scales

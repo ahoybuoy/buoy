@@ -1,3 +1,4 @@
+import { exactTailwindClass, type ThemeSizes } from './exact-class.js';
 import { readFileSync } from 'fs';
 import { glob } from 'glob';
 import { relative } from 'path';
@@ -26,7 +27,14 @@ export interface ArbitraryDetectorConfig {
   include?: string[];
   exclude?: string[];
   judge?: ArbitraryValueJudge;
+  /** The project's theme colours (hex -> class suffix), for exact colour fixes. */
+  themeColors?: Map<string, string>;
+  /** The project's theme font sizes, spacing and radii, for exact size fixes. */
+  themeSizes?: ThemeSizes;
 }
+
+/** A value used in this many files is a de facto step: propose it, don't snap it. */
+export const REPEATED_VALUE_FILES = 3;
 
 const defaultJudge: ArbitraryValueJudge = (_file, line, fullClass, lines) =>
   lineIntent(lines, line - 1, { fullClass });
@@ -169,6 +177,7 @@ const ARBITRARY_PATTERNS = {
 
 export class ArbitraryValueDetector {
   private config: ArbitraryDetectorConfig;
+  private filesPerClass = new Map<string, Set<string>>();
 
   constructor(config: ArbitraryDetectorConfig) {
     this.config = config;
@@ -911,6 +920,17 @@ export class ArbitraryValueDetector {
   }
 
   private valuesToDriftSignals(values: ArbitraryValue[]): DriftSignal[] {
+    // How many files use each class (variants stripped): a value repeated
+    // across the codebase is a step in the real scale, not a typo.
+    const filesPerClass = new Map<string, Set<string>>();
+    for (const v of values) {
+      const key = baseClass(v.fullClass);
+      const set = filesPerClass.get(key) ?? new Set<string>();
+      set.add(v.file);
+      filesPerClass.set(key, set);
+    }
+    this.filesPerClass = filesPerClass;
+
     const byFile = new Map<string, ArbitraryValue[]>();
     for (const value of values) {
       const existing = byFile.get(value.file) || [];
@@ -1068,7 +1088,12 @@ export class ArbitraryValueDetector {
       entityName: file,
       location: `${file}:${values[0]!.line}`,
     };
-    const { message, fix } = describeArbitraryValues(values);
+    const repeated = (v: ArbitraryValue) => (this.filesPerClass.get(baseClass(v.fullClass))?.size ?? 1);
+    const { message, fix, tokenSuggestions, proposals } = describeArbitraryValues(values, {
+      themeColors: this.config.themeColors,
+      themeSizes: this.config.themeSizes,
+      filesUsing: repeated,
+    });
 
     return {
       id: `drift:hardcoded-value:tailwind:${file}:${valueType}`,
@@ -1081,7 +1106,8 @@ export class ArbitraryValueDetector {
         actual: `${values.length} arbitrary ${valueType} value${values.length === 1 ? '' : 's'}`,
         // One entry per class, so reports and reviewers can see exactly what was found.
         affectedFiles: values.map((v) => `${v.fullClass} (line ${v.line})`),
-        suggestions: [fix, 'Add the value to your Tailwind theme if it is a real part of the design'],
+        suggestions: [fix, ...proposals, 'Add the value to your Tailwind theme if it is a real part of the design'],
+        ...(tokenSuggestions.length > 0 ? { tokenSuggestions } : {}),
       },
       detectedAt: new Date(),
     };
@@ -1095,26 +1121,67 @@ export function arbitraryValueKind(fullClass: string): { kind: string; fix: stri
   const v = parsed?.value ?? '';
   const isColour = /^(#|rgb|hsl|oklch|oklab|lab|lch|hwb)/i.test(v.replace(/^color:/, ''));
   if (isColour) return { kind: 'colour', fix: 'a theme colour (bg-primary, text-muted-foreground) or a --color token' };
-  if (/^rounded/.test(u)) return { kind: 'radius', fix: 'a theme radius (rounded-sm, rounded-md) or a --radius token' };
-  if (u === 'text') return { kind: 'font size', fix: 'a type scale step (text-xs, text-sm) or a font-size token' };
-  if (u === 'leading') return { kind: 'line height', fix: 'a leading step (leading-tight, leading-6) or a line-height token' };
+  if (/^rounded/.test(u)) return { kind: 'radius', fix: 'a radius from your theme or a --radius token' };
+  if (u === 'text') return { kind: 'font size', fix: 'a step from your type scale or a font-size token' };
+  if (u === 'leading') return { kind: 'line height', fix: 'a step from your line-height scale or a line-height token' };
   if (u === 'tracking') return { kind: 'letter spacing', fix: 'a tracking step (tracking-tight) or a letter-spacing token' };
   if (u === 'font') return { kind: 'font weight', fix: 'a weight step (font-medium, font-semibold)' };
   if (u === 'shadow' || u === 'drop-shadow') return { kind: 'shadow', fix: 'a theme shadow (shadow-sm, shadow-md) or a --shadow token' };
   if (/^(border|outline|ring|divide)/.test(u) && !/offset/.test(u)) return { kind: 'border width', fix: 'a border width step (border-2) or a token' };
-  return { kind: 'spacing', fix: 'the spacing scale (p-2, gap-3, mt-4) or a --space token' };
+  return { kind: 'spacing', fix: 'a step from your spacing scale or a --space token' };
 }
 
 /**
  * "Hardcoded radius: rounded-[2px], rounded-[3px]. Use a theme radius ..." rather
  * than "2 arbitrary border values found".
  */
-export function describeArbitraryValues(values: ArbitraryValue[]): { message: string; fix: string } {
-  const classes = [...new Set(values.map((v) => v.fullClass.replace(/^(?:(?:[^[\]:]|\[[^\]]*\])*:)*/, '')))];
+export function describeArbitraryValues(
+  values: ArbitraryValue[],
+  options: { themeColors?: Map<string, string>; themeSizes?: ThemeSizes; filesUsing?: (v: ArbitraryValue) => number } = {},
+): { message: string; fix: string; tokenSuggestions: string[]; proposals: string[] } {
+  const classes = [...new Set(values.map((v) => baseClass(v.fullClass)))];
   const kinds = [...new Set(values.map((v) => arbitraryValueKind(v.fullClass).kind))];
   const first = arbitraryValueKind(values[0]!.fullClass);
   const label = kinds.length === 1 ? kinds[0]! : kinds.join(' / ');
-  const shown = classes.slice(0, 4).join(', ') + (classes.length > 4 ? ` and ${classes.length - 4} more` : '');
-  const fix = kinds.length === 1 ? `Use ${first.fix} instead.` : 'Use the matching theme values instead.';
-  return { message: `Hardcoded ${label}: ${shown}. ${fix}`, fix };
+
+  // Exact swaps: "pt-[4px] → pt-1". Font sizes note that text-* also sets a line height.
+  const exact = new Map<string, string>();
+  const proposals: string[] = [];
+  // Keyed by the class as written (md:pt-[4px] -> md:pt-1) so an agent can replace it as is.
+  const exactAsWritten = new Map<string, string>();
+  for (const v of values) {
+    const cls = baseClass(v.fullClass);
+    const swap = exactTailwindClass(v.fullClass, { themeColors: options.themeColors, themeSizes: options.themeSizes });
+    if (swap) {
+      exactAsWritten.set(v.fullClass, swap);
+      if (!exact.has(cls)) exact.set(cls, baseClass(swap));
+      continue;
+    }
+    const files = options.filesUsing?.(v) ?? 1;
+    if (files >= REPEATED_VALUE_FILES && !proposals.some((p) => p.startsWith(`${cls} `))) {
+      proposals.push(`${cls} is used in ${files} files, so it looks like a real step: add it to your theme rather than snapping it to the nearest default, which would change how it looks`);
+    }
+  }
+  const tokenSuggestions = [...exactAsWritten].map(([from, to]) =>
+    /^text-(xs|sm|base|lg|xl|\dxl)$/.test(to.replace(/^.*:/, '').replace(/^!/, ''))
+      ? `${from} → ${to} (same size; ${to.replace(/^.*:/, '')} also sets a line height)`
+      : `${from} → ${to}`,
+  );
+
+  const shown = classes
+    .slice(0, 4)
+    .map((c) => (exact.has(c) ? `${c} (use ${exact.get(c)})` : c))
+    .join(', ') + (classes.length > 4 ? ` and ${classes.length - 4} more` : '');
+  const allExact = classes.every((c) => exact.has(c));
+  const fix = allExact
+    ? 'Use the matching scale class instead.'
+    : kinds.length === 1
+      ? `Use ${first.fix} instead.`
+      : 'Use the matching theme values instead.';
+  return { message: `Hardcoded ${label}: ${shown}. ${fix}`, fix, tokenSuggestions, proposals };
+}
+
+/** The class without variant prefixes (`md:hover:pt-[4px]` -> `pt-[4px]`). */
+function baseClass(fullClass: string): string {
+  return fullClass.replace(/^(?:(?:[^[\]:]|\[[^\]]*\])*:)*/, '');
 }
