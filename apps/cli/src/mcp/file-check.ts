@@ -29,7 +29,7 @@ import {
   type RawSignal,
   type SignalContext,
 } from "@buoy-design/scanners";
-import { classifyFileContext, isDesignDeclaration, isSvgPaintProperty, lineIntent, type IntentEvidence } from "@buoy-design/core";
+import { classifyFileContext, isDesignDeclaration, isSvgPaintProperty, lineIntent, tokenSizeFamily, type IntentEvidence } from "@buoy-design/core";
 import { findTokensByValue } from "./project.js";
 
 type Extractor =
@@ -256,6 +256,20 @@ function tokenRef(token: { name: string }): string {
   return token.name.startsWith("--") ? `var(${token.name})` : token.name;
 }
 
+/**
+ * Tokens that encode the same kind of decision as the signal. Radius and
+ * border-width tokens share the "border" category, and a radius can sit in
+ * "spacing" (shadcn's --radius), so an 8px padding must not get --radius and
+ * a border-radius must not get a border-width token.
+ */
+function sameKindTokens(tokens: DesignToken[], signalType: string): DesignToken[] {
+  if (signalType === "radius-value") return tokens.filter((t) => tokenSizeFamily(t) === "radius");
+  if (signalType === "spacing-value" || signalType === "border-width") {
+    return tokens.filter((t) => tokenSizeFamily(t) !== "radius");
+  }
+  return tokens;
+}
+
 /** Turn raw signals into issues, attaching the token that has the same value when one exists. */
 export function issuesFromSignals(signals: RawSignal[], tokens: DesignToken[]): FileIssue[] {
   const seen = new Set<string>();
@@ -266,7 +280,7 @@ export function issuesFromSignals(signals: RawSignal[], tokens: DesignToken[]): 
     if (seen.has(key)) continue;
     seen.add(key);
     const category = SIGNAL_CATEGORY[s.type];
-    const matches = findTokensByValue(tokens, current, category);
+    const matches = findTokensByValue(sameKindTokens(tokens, s.type), current, category);
     const first = matches[0];
     const label = s.type.replace(/-value$/, "").replace(/-/g, " ");
     issues.push({

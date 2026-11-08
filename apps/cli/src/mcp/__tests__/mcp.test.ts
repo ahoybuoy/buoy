@@ -82,6 +82,23 @@ describe("drift issues", () => {
     ]);
   });
 
+  it("never offers a radius token for spacing or a border width", () => {
+    // shadcn puts --radius (0.5rem) next to the spacing scale; 8px padding is not a radius.
+    const shadcn = [
+      token("--radius", { type: "raw", value: "0.5rem" }, "border"),
+      token("--border-thick", { type: "raw", value: "2px" }, "border"),
+      token("--rounded-xs", { type: "raw", value: "2px" }, "border"),
+    ];
+    const css = ".a {\n  padding: 8px;\n  border-radius: 8px;\n  border-width: 2px;\n  border-radius: 2px;\n}\n";
+    const issues = issuesFromSignals(extractFileSignals(css, "src/a.css"), shadcn);
+    expect(issues.map((i) => [i.line, i.current, i.suggested ?? null])).toEqual([
+      [2, "8px", null],
+      [3, "8px", "var(--radius)"],
+      [4, "2px", "var(--border-thick)"],
+      [5, "2px", "var(--rounded-xs)"],
+    ]);
+  });
+
   it("flattens a drift into an agent-friendly issue", () => {
     expect(toIssue(drift("src/Button.tsx:12"))).toEqual({
       file: "src/Button.tsx", line: 12, type: "hardcoded-value", severity: "warning",

@@ -9,6 +9,7 @@
  * 4. Filtering against ignore list
  */
 
+import { setAsideVendored, shadcnUiDirs } from "./vendored.js";
 import type {
   DriftSignal,
   Severity,
@@ -1063,13 +1064,18 @@ export class DriftAnalysisService {
       }
     }
 
+    // Step 9: Library components copied in (shadcn/ui) hold the library's
+    // design, not the team's drift: list them as noted, don't count them.
+    const vendored = setAsideVendored(drifts, await shadcnUiDirs(this.projectRoot));
+    drifts = vendored.drifts;
+
     return {
       drifts,
       components,
       tokenCount: scannedTokens.length,
       tokens: scannedTokens,
       ignoredCount,
-      noted: judge.noted,
+      noted: [...judge.noted, ...vendored.noted],
       summary: calculateDriftSummary(drifts),
     };
   }

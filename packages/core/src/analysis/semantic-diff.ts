@@ -20,6 +20,7 @@ import {
 } from "../models/index.js";
 import {
   TokenSuggestionService,
+  tokenSuggestionKey,
   type TokenSuggestion,
 } from "./token-suggestions.js";
 import { stringSimilarity as calcStringSimilarity } from "./string-utils.js";
@@ -630,7 +631,7 @@ export class SemanticDiffEngine {
       const nearMisses: string[] = [];
 
       for (const cv of colorValues) {
-        const suggs = tokenSuggestions.get(cv.value);
+        const suggs = tokenSuggestions.get(tokenSuggestionKey(cv.property, cv.value));
         if (suggs?.length) {
           const best = suggs[0]!;
           // Only an exact value is "use this token". A near miss is a different
@@ -669,7 +670,7 @@ export class SemanticDiffEngine {
       const nearMisses: string[] = [];
 
       for (const sv of spacingValues) {
-        const suggs = tokenSuggestions.get(sv.value);
+        const suggs = tokenSuggestions.get(tokenSuggestionKey(sv.property, sv.value));
         if (suggs?.length) {
           const best = suggs[0]!;
           // Only an exact value is "use this token". A near miss is a different

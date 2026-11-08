@@ -25,7 +25,9 @@ export type IntentKind =
   /** The commit that introduced the line says it was deliberate. */
   | "history"
   /** A buoy-ignore / buoy-disable comment. */
-  | "allowlisted";
+  | "allowlisted"
+  /** A component copied in from a library (shadcn/ui's components/ui), not the team's own design. */
+  | "vendored";
 
 export interface IntentEvidence {
   kind: IntentKind;

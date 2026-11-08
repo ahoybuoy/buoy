@@ -11,6 +11,7 @@ import { glob } from "glob";
 import {
   extractStyles,
   extractCssFileStyles,
+  classValue,
   type TemplateType,
 } from "@buoy-design/scanners";
 import {
@@ -63,11 +64,19 @@ export async function findStyleSources(cwd: string, config: BuoyConfig): Promise
   return filesToScan;
 }
 
-export async function extractValues(cwd: string, files: SourceFile[]): Promise<ExtractedValue[]> {
+export async function extractValues(
+  cwd: string,
+  files: SourceFile[],
+  options: { tailwindVersion?: 3 | 4 | null } = {},
+): Promise<ExtractedValue[]> {
   const allValues: ExtractedValue[] = [];
   for (const { path: filePath, type } of files) {
     try {
       const content = await readFile(filePath, "utf-8");
+      // Tailwind repos write most of their design as classes: count those too.
+      if (options.tailwindVersion && type !== "css") {
+        allValues.push(...tailwindClassValues(content, relative(cwd, filePath), options.tailwindVersion));
+      }
       const styles = type === "css" ? extractCssFileStyles(content) : extractStyles(content, type);
       for (const style of styles) {
         const { values } = parseCssValues(style.css);
@@ -103,7 +112,7 @@ export async function inferDesignSystem(
 ): Promise<InferredSystem | null> {
   const files = await findStyleSources(cwd, config);
   if (files.length === 0) return null;
-  const values = await extractValues(cwd, files);
+  const values = await extractValues(cwd, files, { tailwindVersion: await tailwindMajor(cwd) });
   if (values.length === 0) return null;
 
   const result = generateTokens(values, { prefix: options.prefix || "" });
@@ -135,8 +144,8 @@ export function summarizeInferredSystem(system: InferredSystem, limit = 40) {
       category: t.category,
       value: t.value,
       uses: t.occurrences,
-      // Only colors: spacing/type clustering is too coarse to tell an agent "use X instead".
-      ...(t.category === "color" && new Set(t.sources.map(normalizeLiteral)).size > 1
+      // Sizes merge only near-duplicates (15px into 16px), so "use X instead" holds for them too.
+      ...(new Set(t.sources.map(normalizeLiteral)).size > 1
         ? { replaces: [...new Set(t.sources.map(normalizeLiteral))] }
         : {}),
     })),
@@ -200,4 +209,59 @@ export function normalizeLiteral(value: string): string {
   const v = value.trim().toLowerCase();
   const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(v);
   return short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : v;
+}
+
+const CLASS_CONTEXT: Record<string, ExtractedValue["context"]> = {
+  spacing: "spacing",
+  color: "color",
+  "font-size": "typography",
+  radius: "radius",
+};
+
+/** Values set by Tailwind classes in a source file (p-4 -> padding 16px, text-sm -> 14px). */
+export function tailwindClassValues(content: string, file: string, version: 3 | 4): ExtractedValue[] {
+  const out: ExtractedValue[] = [];
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!/[a-z]-/.test(line)) continue;
+    for (const token of line.split(/[\s"'`{}()<>,;]+/)) {
+      if (!token || token.length > 80) continue;
+      const v = classValue(token, version);
+      if (!v) continue;
+      out.push({
+        property: v.property,
+        value: v.value,
+        rawValue: token,
+        category: v.category,
+        context: CLASS_CONTEXT[v.category] ?? "other",
+        file,
+        line: i + 1,
+      });
+    }
+  }
+  return out;
+}
+
+/** The project's Tailwind major version from any package.json, or null when it doesn't use Tailwind. */
+export async function tailwindMajor(cwd: string): Promise<3 | 4 | null> {
+  const manifests = (await glob("**/package.json", {
+    cwd,
+    ignore: ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/build/**"],
+    maxDepth: 4,
+  })).sort();
+  let major: 3 | 4 | null = null;
+  for (const manifest of manifests) {
+    try {
+      const pkg = JSON.parse(await readFile(`${cwd}/${manifest}`, "utf-8"));
+      const range: string | undefined = pkg.dependencies?.tailwindcss ?? pkg.devDependencies?.tailwindcss ?? pkg.peerDependencies?.tailwindcss;
+      if (!range) continue;
+      const m = /(\d+)/.exec(range);
+      if (m && Number(m[1]) >= 4) return 4;
+      major = 3;
+    } catch {
+      // unreadable manifest
+    }
+  }
+  return major;
 }

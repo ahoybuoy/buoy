@@ -1,3 +1,4 @@
+import { themeColorMap, themeSizeMap } from './exact-class.js';
 import type { DesignToken, DriftSignal, TokenSource } from '@buoy-design/core';
 import { createTokenId } from '@buoy-design/core';
 import { TailwindConfigParser } from './config-parser.js';
@@ -298,6 +299,9 @@ export class TailwindScanner {
         include: this.config.include,
         exclude: this.config.exclude,
         judge: this.config.judge,
+        themeColors: themeColorMap(result.tokens),
+        themeSizes: themeSizeMap(result.tokens),
+        replacedScales: await new TailwindConfigParser(this.config.projectRoot).replacedScales(),
       });
 
       // One pass: the signals are built from the same values (it used to scan twice).

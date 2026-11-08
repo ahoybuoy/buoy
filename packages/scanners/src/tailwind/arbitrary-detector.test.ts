@@ -349,8 +349,45 @@ describe("ArbitraryValueDetector", () => {
       vi.mocked(fs.readFileSync).mockReturnValue(`<div className="rounded-[2px] hover:rounded-[3px] text-[13px] tracking-[-0.01em]" />`);
       const signals = await new ArbitraryValueDetector({ projectRoot: mockProjectRoot }).detectAsDriftSignals();
       const messages = signals.map((s) => s.message).sort();
-      expect(messages).toContain("Hardcoded radius: rounded-[2px], rounded-[3px]. Use a theme radius (rounded-sm, rounded-md) or a --radius token instead.");
+      expect(messages).toContain("Hardcoded radius: rounded-[2px], rounded-[3px]. Use a radius from your theme or a --radius token instead.");
       expect(messages.some((m) => m.startsWith("Hardcoded font size / letter spacing: text-[13px], tracking-[-0.01em]."))).toBe(true);
+    });
+
+    it("names the exact scale class when there is one", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Exact.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        `<div className="md:pt-[4px] -mt-[8px] rounded-[8px] font-[500] text-[16px] bg-[#6B7280] text-[13px] leading-[1.25] rounded-[4px]" />`,
+      );
+      const signals = await new ArbitraryValueDetector({ projectRoot: mockProjectRoot }).detectAsDriftSignals();
+      const swaps = signals.flatMap((s) => s.details.tokenSuggestions ?? []).sort();
+      expect(swaps).toEqual([
+        "bg-[#6B7280] → bg-gray-500",
+        "font-[500] → font-medium",
+        "leading-[1.25] → leading-tight",
+        "md:pt-[4px] → md:pt-1",
+        "rounded-[8px] → rounded-lg",
+        "text-[16px] → text-base (same size; text-base also sets a line height)",
+      ]);
+      // 13px is not on the default scale and 4px radius is named differently in v3 and v4: no guess.
+      expect(swaps.some((s) => s.startsWith("text-[13px]") || s.startsWith("rounded-[4px]"))).toBe(false);
+    });
+
+    it("proposes a value used across files as a step instead of snapping it", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/A.tsx", "/test/project/src/B.tsx", "/test/project/src/C.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`<h1 className="leading-[1.15]" />`);
+      const signals = await new ArbitraryValueDetector({ projectRoot: mockProjectRoot }).detectAsDriftSignals();
+      const suggestions = signals.flatMap((s) => s.details.suggestions ?? []);
+      expect(suggestions.some((s) => s.startsWith("leading-[1.15] is used in 3 files"))).toBe(true);
+    });
+
+    it("uses the project's own theme colour name", async () => {
+      vi.mocked(glob.glob).mockResolvedValue(["/test/project/src/Brand.tsx"]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`<div className="text-[#bfa094]" />`);
+      const signals = await new ArbitraryValueDetector({
+        projectRoot: mockProjectRoot,
+        themeColors: new Map([["#bfa094", "brown-500"]]),
+      }).detectAsDriftSignals();
+      expect(signals[0]?.details.tokenSuggestions).toEqual(["text-[#bfa094] → text-brown-500"]);
     });
 
     it("sets correct source location", async () => {

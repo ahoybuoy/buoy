@@ -1392,10 +1392,13 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
    * - export default { theme: { extend: { spacing: { '18': '4.5rem' } } } }
    */
   private extractTailwindThemeTokens(
-    content: string,
+    rawContent: string,
     relativePath: string,
   ): DesignToken[] {
     const tokens: DesignToken[] = [];
+    // Comments can hold quotes ("Tailwind's default"), which the object
+    // parser would read as an unterminated string and drop the whole object.
+    const content = stripJsComments(rawContent);
 
     // Categories to extract from Tailwind theme config
     const themeCategories: Record<string, string> = {
@@ -1409,7 +1412,6 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       backgroundColor: "color",
       textColor: "color",
       boxShadow: "shadow",
-      screens: "dimension",
       lineHeight: "typography",
       letterSpacing: "typography",
       zIndex: "zIndex",
@@ -1455,7 +1457,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           lineNumber,
           `tailwind.${themeKey}`,
         );
-        tokens.push(...parsedTokens);
+        tokens.push(...collapseTailwindTuples(themeKey, parsedTokens));
       }
     }
 
@@ -2477,4 +2479,91 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     // Default to 'other' for variant/style/type patterns
     return "other";
   }
+}
+
+/**
+ * Blank out // and /* *\/ comments, keeping strings and line breaks, so line
+ * numbers stay true and quotes inside comments can't open a string.
+ */
+export function stripJsComments(src: string): string {
+  let out = "";
+  let i = 0;
+  let quote: string | null = null;
+  while (i < src.length) {
+    const c = src[i]!;
+    const next = src[i + 1];
+    if (quote) {
+      out += c;
+      if (c === "\\" && i + 1 < src.length) {
+        out += src[i + 1];
+        i += 2;
+        continue;
+      }
+      if (c === quote) quote = null;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      quote = c;
+      out += c;
+      i++;
+      continue;
+    }
+    if (c === "/" && next === "/") {
+      while (i < src.length && src[i] !== "\n") {
+        out += " ";
+        i++;
+      }
+      continue;
+    }
+    if (c === "/" && next === "*") {
+      out += "  ";
+      i += 2;
+      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) {
+        out += src[i] === "\n" ? "\n" : " ";
+        i++;
+      }
+      if (i < src.length) {
+        out += "  ";
+        i += 2;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+/**
+ * Tailwind writes some theme entries as tuples: fontSize "2xs": ["0.625rem",
+ * { lineHeight }] and fontFamily display: ["Satoshi", "system-ui"]. The object
+ * parser returns them as name.0, name.1, ...; make each one token: the size
+ * for fontSize, the whole stack for fontFamily.
+ */
+function collapseTailwindTuples(themeKey: string, tokens: DesignToken[]): DesignToken[] {
+  if (themeKey !== "fontSize" && themeKey !== "fontFamily") return tokens;
+  const out: DesignToken[] = [];
+  const groups = new Map<string, DesignToken[]>();
+  for (const token of tokens) {
+    const m = token.name.match(/^(.*)\.(\d+)$/);
+    if (!m) {
+      out.push(token);
+      continue;
+    }
+    const list = groups.get(m[1]!) ?? [];
+    list[Number(m[2])] = token;
+    groups.set(m[1]!, list);
+  }
+  for (const [base, list] of groups) {
+    const parts = list.filter(Boolean);
+    const first = parts[0]!;
+    const raw = (t: DesignToken) => (t.value.type === "raw" ? t.value.value : JSON.stringify(t.value));
+    const value: DesignToken["value"] =
+      themeKey === "fontFamily"
+        ? { type: "raw", value: parts.map(raw).join(", ") }
+        : first.value;
+    out.push({ ...first, id: first.id.replace(/\.0$/, ""), name: base, value });
+  }
+  return out;
 }
