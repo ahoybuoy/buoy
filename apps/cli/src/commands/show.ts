@@ -1527,6 +1527,56 @@ export function createShowCommand(): Command {
       }
     });
 
+  // show snapshot
+  cmd
+    .command("snapshot")
+    .description("Print the buoy-snapshot/v1 document visualizers read: tokens, components, connections and drift")
+    .option("--json", "Output as JSON")
+    .option("-o, --output <file>", "Write the snapshot to a file instead of stdout")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      setJsonMode(true);
+      const spin = spinner("Building the design system snapshot...");
+      try {
+        const { config, projectRoot } = await getOrBuildConfigWithRoot();
+        const { result: driftResult } = await withOptionalCache(
+          projectRoot,
+          parentOpts.cache !== false,
+          async (cache: ScanCache | undefined) => {
+            const service = new DriftAnalysisService(config, projectRoot);
+            return service.analyze({ onProgress: (msg) => { spin.text = msg; }, includeIgnored: false, cache });
+          },
+        );
+        const { buildSnapshot } = await import("../services/snapshot.js");
+        const pkg = (await import("../../package.json", { with: { type: "json" } })).default as { version: string };
+        const snapshot = buildSnapshot({
+          components: driftResult.components,
+          tokens: driftResult.tokens,
+          drifts: driftResult.drifts,
+          cliVersion: pkg.version,
+          readFile: (p) => {
+            try {
+              return readFileSync(join(projectRoot, p), "utf-8");
+            } catch {
+              return null;
+            }
+          },
+        });
+        spin.stop();
+        const out = JSON.stringify(snapshot);
+        if (options.output) {
+          writeFileSync(options.output, out);
+          console.error(`Wrote ${options.output}: ${snapshot.stats.components} components, ${snapshot.stats.tokens} tokens, ${snapshot.drift.length} drift findings`);
+        } else {
+          console.log(out);
+        }
+      } catch (err) {
+        spin.stop();
+        error(err instanceof Error ? err.message : String(err));
+        flushAndExit(1);
+      }
+    });
+
   // show map
   cmd
     .command("map")
