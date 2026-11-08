@@ -45,6 +45,24 @@ describe('ReactComponentScanner', () => {
   });
 
   describe('component detection', () => {
+    it('records what arrow-function components render', async () => {
+      vol.fromJSON({
+        '/project/src/ChatInput.tsx': `
+          export const ChatInput = () => (
+            <div>
+              <Input />
+              <ChatFilesDisplay files={[]} />
+            </div>
+          );
+        `,
+      });
+
+      const scanner = new ReactComponentScanner({ projectRoot: '/project', include: ['src/**/*.tsx'] });
+      const result = await scanner.scan();
+
+      expect(result.items[0]!.dependencies.sort()).toEqual(['ChatFilesDisplay', 'Input']);
+    });
+
     it('detects function declaration components', async () => {
       vol.fromJSON({
         '/project/src/Button.tsx': SIMPLE_BUTTON,

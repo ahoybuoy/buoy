@@ -1527,6 +1527,54 @@ export function createShowCommand(): Command {
       }
     });
 
+  // show map
+  cmd
+    .command("map")
+    .description("Show how the UI hangs together: tokens → components → pages, with drift (JSON nodes and edges)")
+    .option("--json", "Output as JSON")
+    .option("-o, --output <file>", "Write the map to a file instead of stdout")
+    .action(async (options, command) => {
+      const parentOpts = command.parent?.opts() || {};
+      setJsonMode(true);
+      const spin = spinner("Mapping the design system...");
+      try {
+        const { config, projectRoot } = await getOrBuildConfigWithRoot();
+        const { result: driftResult } = await withOptionalCache(
+          projectRoot,
+          parentOpts.cache !== false,
+          async (cache: ScanCache | undefined) => {
+            const service = new DriftAnalysisService(config, projectRoot);
+            return service.analyze({ onProgress: (msg) => { spin.text = msg; }, includeIgnored: false, cache });
+          },
+        );
+        const { buildUiMap } = await import("../services/ui-map.js");
+        const map = buildUiMap({
+          components: driftResult.components,
+          tokens: driftResult.tokens,
+          drifts: driftResult.drifts,
+          readFile: (p) => {
+            try {
+              return readFileSync(join(projectRoot, p), "utf-8");
+            } catch {
+              return null;
+            }
+          },
+        });
+        spin.stop();
+        const out = JSON.stringify(map);
+        if (options.output) {
+          writeFileSync(options.output, out);
+          console.error(`Wrote ${options.output}: ${map.stats.components} components, ${map.stats.tokens} tokens, ${map.edges.length} edges`);
+        } else {
+          console.log(out);
+        }
+      } catch (err) {
+        spin.stop();
+        error(err instanceof Error ? err.message : String(err));
+        flushAndExit(1);
+      }
+    });
+
   // show graph
   cmd
     .command("graph")
