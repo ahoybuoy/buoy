@@ -10,6 +10,7 @@ import {
   createRescueCommand,
   createMcpCommand,
 } from "./commands/index.js";
+import { createCaptureCommand, createSeeCommand } from "./commands/capture.js";
 
 export function createCli(): Command {
   const program = new Command();
@@ -43,6 +44,8 @@ Quick Start:
 
   // === View (read-only) ===
   program.addCommand(createShowCommand());
+  program.addCommand(createCaptureCommand());
+  program.addCommand(createSeeCommand());
   program.addCommand(createSystemCommand());
 
   // === Complete product journey ===
