@@ -83,4 +83,11 @@ export {
   extractBorderWidthSignals,
   extractLineHeightSignals,
   extractLetterSpacingSignals,
+  // JSX/TSX literal values through the AST (ternaries, &&/||, templates, cn())
+  literalValues,
+  collectJsxDeclaredValues,
+  collectArbitraryClasses,
+  type LiteralValue,
+  type JsxDeclaredValue,
+  type ArbitraryClassMatch,
 } from './signals/index.js';

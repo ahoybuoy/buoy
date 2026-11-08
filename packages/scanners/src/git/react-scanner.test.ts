@@ -171,6 +171,31 @@ describe('ReactComponentScanner', () => {
         expect.objectContaining({ type: 'spacing', value: '8px' })
       );
     });
+    it('detects literals in ternary and && branches, each on its own line', async () => {
+      vol.fromJSON({
+        '/project/src/Status.tsx': `export const Status = ({ isError, dense }) => (
+  <div
+    style={{
+      color: isError
+        ? '#dc2626'
+        : '#16a34a',
+      background: dense && '#fef2f2',
+      padding: isError ? 'var(--space-2)' : tokens.space,
+    }}
+    bg={isError ? '#111111' : 'var(--bg)'}
+  />
+);`,
+      });
+      const scanner = new ReactComponentScanner({ projectRoot: '/project', include: ['src/**/*.tsx'] });
+      const result = await scanner.scan();
+      const values = (result.items[0]!.metadata.hardcodedValues || []).map((v) => [v.value, v.location]);
+      expect(values).toEqual([
+        ['#dc2626', 'line 5'],
+        ['#16a34a', 'line 6'],
+        ['#fef2f2', 'line 7'],
+        ['#111111', 'line 10'],
+      ]);
+    });
   });
 
   describe('element scope for colour pairs', () => {
