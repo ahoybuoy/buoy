@@ -94,6 +94,7 @@ describe('Base Scanner', () => {
   describe('DEFAULT_EXCLUDES', () => {
     it('includes node_modules', () => {
       expect(DEFAULT_EXCLUDES).toContain('**/node_modules/**');
+      expect(DEFAULT_EXCLUDES).toContain('**/*.sync-conflict-*');
     });
 
     it('includes test files', () => {
