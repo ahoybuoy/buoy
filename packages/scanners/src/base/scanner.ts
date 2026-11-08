@@ -115,6 +115,11 @@ export const CORE_EXCLUDES = [
   "**/.turbo/**",
   "**/.cache/**",
 
+  // File-sync conflict copies (Syncthing, Dropbox): stale duplicates of real
+  // files that otherwise show up as extra components.
+  "**/*.sync-conflict-*",
+  "**/* (conflicted copy*",
+
   // Version control
   "**/.git/**",
 
