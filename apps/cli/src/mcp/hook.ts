@@ -2,6 +2,10 @@
  * Claude Code PostToolUse hook: after the agent edits a file, check that
  * file for drift and hand the issues back as feedback (exit code 2). Other
  * agents can call `buoy mcp hook --file <path>` the same way.
+ *
+ * Cursor (`buoy mcp hook --cursor`): its postToolUse hook reads
+ * `{"additional_context": ...}` from stdout, and exit code 2 there means
+ * "block", so this mode always exits 0.
  */
 import { isAbsolute, relative, resolve } from "node:path";
 import { checkDrift, loadProject, type DriftCheck } from "./project.js";
@@ -19,6 +23,37 @@ export function filePathFromHookPayload(raw: string): string | null {
   } catch {
     return null;
   }
+}
+
+export interface CursorHookInput {
+  /** Project root: the payload's cwd or first workspace root. Plugin hooks run from the plugin's own folder, so process.cwd() is not the project. */
+  cwd: string | null;
+  file: string | null;
+}
+
+/** Pull the project root and edited path out of a Cursor postToolUse (or afterFileEdit) payload. */
+export function parseCursorHookPayload(raw: string): CursorHookInput {
+  try {
+    const payload = JSON.parse(raw) as {
+      cwd?: string;
+      workspace_roots?: string[];
+      file_path?: string;
+      tool_input?: Record<string, unknown>;
+    };
+    const input = payload.tool_input ?? {};
+    const candidate = [input.file_path, input.path, input.target_file, input.filePath, payload.file_path]
+      .find((value): value is string => typeof value === "string" && value.length > 0);
+    const cwd = [payload.cwd, payload.workspace_roots?.[0]]
+      .find((value): value is string => typeof value === "string" && value.length > 0);
+    return { cwd: cwd ?? null, file: candidate ?? null };
+  } catch {
+    return { cwd: null, file: null };
+  }
+}
+
+/** Cursor's hook output: feedback goes in as context after the tool result; a clean file prints nothing. */
+export function cursorHookOutput(result: HookResult): string | null {
+  return result.message ? JSON.stringify({ additional_context: result.message }) : null;
 }
 
 export function isStyleFile(path: string): boolean {
@@ -59,7 +94,8 @@ export async function runHook(cwd: string, file: string | null): Promise<HookRes
   const changed = fileChangedLines(project.projectRoot, absolute);
   const check = changed === null ? full : onlyLines(full, changed);
   if (check.summary.total === 0) return { exitCode: 0, message: null };
-  return { exitCode: 2, message: formatHookFeedback(file, check) };
+  // Name the file the way the issue lines do: Cursor sends absolute paths.
+  return { exitCode: 2, message: formatHookFeedback(inProject.split("\\").join("/"), check) };
 }
 
 /** The same check restricted to the given lines, with the summary recounted. */

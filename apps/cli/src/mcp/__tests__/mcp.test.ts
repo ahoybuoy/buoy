@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { DesignToken, DriftSignal } from "@buoy-design/core";
 import { checkDrift, findRepoRoot, findTokensByValue, normalizeValue, toIssue } from "../project.js";
 import { extractFileSignals, issuesFromSignals, lineEdit, type FileIssue } from "../file-check.js";
-import { filePathFromHookPayload, formatHookFeedback, isStyleFile, runHook } from "../hook.js";
+import { cursorHookOutput, filePathFromHookPayload, formatHookFeedback, isStyleFile, parseCursorHookPayload, runHook } from "../hook.js";
 import { installClient, mergeClaudeHook, mergeMcpServers } from "../install.js";
 import { cssVariableFor, withCssVariableAliases } from "../../scan/token-aliases.js";
 
@@ -154,6 +154,48 @@ describe("Claude Code hook", () => {
     const dir = repoWithTokens();
     expect(await runHook(dir, "node_modules/x/A.tsx")).toEqual({ exitCode: 0, message: null });
     expect(await runHook(join(dir, "src"), "/elsewhere/A.tsx")).toEqual({ exitCode: 0, message: null });
+  }, 60_000);
+});
+
+describe("Cursor hook", () => {
+  function repoWithTokens(): string {
+    const dir = mkdtempSync(join(tmpdir(), "buoy-cursor-hook-"));
+    mkdirSync(join(dir, ".git"));
+    mkdirSync(join(dir, "src"), { recursive: true });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "h", dependencies: { react: "18" } }));
+    writeFileSync(join(dir, "src", "tokens.css"), ":root { --brand: #2563eb; }\n");
+    writeFileSync(join(dir, "src", "A.tsx"), 'export const A = () => <div style={{ color: "#2563eb" }} />;\n');
+    writeFileSync(join(dir, "src", "Clean.tsx"), 'export const B = () => <div style={{ color: "var(--brand)" }} />;\n');
+    return dir;
+  }
+
+  it("reads the project root and edited path from a postToolUse payload", () => {
+    const payload = { hook_event_name: "postToolUse", tool_name: "Write", tool_input: { file_path: "/r/src/a.tsx" }, cwd: "/r", workspace_roots: ["/w"] };
+    expect(parseCursorHookPayload(JSON.stringify(payload))).toEqual({ cwd: "/r", file: "/r/src/a.tsx" });
+    expect(parseCursorHookPayload(JSON.stringify({ tool_input: { path: "src/a.tsx" }, workspace_roots: ["/w"] }))).toEqual({ cwd: "/w", file: "src/a.tsx" });
+    expect(parseCursorHookPayload(JSON.stringify({ hook_event_name: "afterFileEdit", file_path: "/w/a.css" }))).toEqual({ cwd: null, file: "/w/a.css" });
+    expect(parseCursorHookPayload(JSON.stringify({ tool_name: "Shell", tool_input: { command: "ls" }, cwd: "/r" }))).toEqual({ cwd: "/r", file: null });
+    expect(parseCursorHookPayload("not json")).toEqual({ cwd: null, file: null });
+  });
+
+  it("answers with additional_context, and prints nothing for a clean result", () => {
+    expect(cursorHookOutput({ exitCode: 0, message: null })).toBeNull();
+    expect(JSON.parse(cursorHookOutput({ exitCode: 2, message: "Buoy: 1 design drift issue" })!)).toEqual({ additional_context: "Buoy: 1 design drift issue" });
+  });
+
+  it("checks the edited file against the payload's project, not the hook's own folder", async () => {
+    const dir = repoWithTokens();
+    // The shape Cursor 2026.11 sends for an agent edit: no cwd, workspace_roots instead.
+    const input = parseCursorHookPayload(JSON.stringify({
+      hook_event_name: "postToolUse", tool_name: "Write",
+      tool_input: { file_path: join(dir, "src", "A.tsx"), content: "..." },
+      tool_output: "{}", workspace_roots: [dir],
+    }));
+    expect(input.cwd).toBe(dir);
+    const drift = JSON.parse(cursorHookOutput(await runHook(input.cwd!, input.file))!);
+    expect(drift.additional_context).toContain("design drift issue in src/A.tsx");
+    expect(drift.additional_context).toContain("var(--brand)");
+    expect(cursorHookOutput(await runHook(dir, join(dir, "src", "Clean.tsx")))).toBeNull();
   }, 60_000);
 });
 

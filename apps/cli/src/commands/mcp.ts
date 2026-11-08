@@ -4,11 +4,12 @@
  *   buoy mcp serve            stdio MCP server (tokens, drift checks, context)
  *   buoy mcp install [client] write .mcp.json / .cursor/mcp.json and the Claude Code hook
  *   buoy mcp hook             Claude Code PostToolUse hook: check the edited file
+ *   buoy mcp hook --cursor    The same check for Cursor's postToolUse hook (JSON on stdout, never blocks)
  */
 import { Command } from "commander";
 import pkg from "../../package.json" with { type: "json" };
 import { installClient, MCP_CLIENTS, type McpClient } from "../mcp/install.js";
-import { filePathFromHookPayload, runHook } from "../mcp/hook.js";
+import { cursorHookOutput, filePathFromHookPayload, parseCursorHookPayload, runHook } from "../mcp/hook.js";
 
 async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return "";
@@ -64,7 +65,20 @@ export function createMcpCommand(): Command {
     .command("hook")
     .description("PostToolUse hook: reads the Claude Code payload on stdin and reports drift in the edited file")
     .option("--file <path>", "Check this file instead of reading stdin")
-    .action(async (options: { file?: string }) => {
+    .option("--cursor", "Read a Cursor postToolUse payload and answer with additional_context JSON (always exits 0)")
+    .action(async (options: { file?: string; cursor?: boolean }) => {
+      if (options.cursor) {
+        try {
+          const input = options.file ? { cwd: null, file: options.file } : parseCursorHookPayload(await readStdin());
+          const cwd = input.cwd ?? process.env.CURSOR_PROJECT_DIR ?? process.cwd();
+          const output = cursorHookOutput(await runHook(cwd, input.file));
+          if (output) process.stdout.write(`${output}\n`);
+        } catch (error) {
+          // Never block or break Cursor's agent; the reason goes to Cursor's hook log.
+          console.error(`Buoy hook skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        process.exit(0);
+      }
       const file = options.file ?? filePathFromHookPayload(await readStdin());
       try {
         const result = await runHook(process.cwd(), file);
