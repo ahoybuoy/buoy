@@ -155,6 +155,38 @@ sources:
       expect(result.config.project.name).toBe("yaml-project");
     });
 
+    it("loads a .buoy.yaml with only a drift section, naming the project after its folder", async () => {
+      vi.mocked(existsSync).mockImplementation((path) => {
+        return String(path).endsWith(".buoy.yaml");
+      });
+
+      vi.mocked(readFileSync).mockReturnValue(`
+drift:
+  ignore:
+    - file: "src/legacy/**"
+`);
+
+      const result = await loadConfig("/test/project");
+
+      expect(result.config.project.name).toBe("project");
+      expect(result.config.drift.ignore).toEqual([{ file: "src/legacy/**" }]);
+    });
+
+    it("fills in a missing project name and keeps the rest of the project section", async () => {
+      vi.mocked(existsSync).mockImplementation((path) => {
+        return String(path).endsWith(".buoy.yaml");
+      });
+
+      vi.mocked(readFileSync).mockReturnValue(`
+project:
+  apiEndpoint: https://example.test
+`);
+
+      const result = await loadConfig("/test/project");
+
+      expect(result.config.project).toEqual({ name: "project", apiEndpoint: "https://example.test" });
+    });
+
     it("loads YAML config from .buoy.yml", async () => {
       vi.mocked(existsSync).mockImplementation((path) => {
         return String(path).endsWith(".buoy.yml");
@@ -224,10 +256,10 @@ project:
         return String(path).endsWith(".buoyrc.json");
       });
 
-      // Missing required 'project' field
+      // A value the schema refuses (project itself is optional)
       vi.mocked(readFileSync).mockReturnValue(
         JSON.stringify({
-          invalidField: true,
+          drift: { failOn: "sometimes" },
         }),
       );
 

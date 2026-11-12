@@ -10,6 +10,7 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import { checkDrift, loadProject, type DriftCheck } from "./project.js";
 import { fileChangedLines } from "../services/changed-lines.js";
+import { ConfigFileError } from "../config/loader.js";
 
 const STYLE_FILE = /\.(tsx|jsx|vue|svelte|css|scss|html)$/;
 /** Dependencies and build output: an agent may touch them, but they are not the repo's UI code. */
@@ -72,6 +73,20 @@ export function formatHookFeedback(file: string, check: DriftCheck): string {
     ? "Replace the literal values with the tokens above, then continue."
     : "No token holds these values. Use the nearest token from list_design_tokens, or keep the value if it is deliberate.");
   return lines.join("\n");
+}
+
+/**
+ * The one stderr line for a hook that could not run. A rejected .buoy.yaml
+ * names the file and the problem, so a team whose config is refused learns
+ * why their drift.ignore is not applied instead of the hook going quiet.
+ */
+export function hookErrorLine(error: unknown): string {
+  if (error instanceof ConfigFileError) {
+    return `Buoy hook skipped: invalid config ${error.configPath}: ${error.problem}`;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  const firstLine = message.split("\n").find((line) => line.trim().length > 0) ?? message;
+  return `Buoy hook skipped: ${firstLine.trim()}`;
 }
 
 export interface HookResult {
