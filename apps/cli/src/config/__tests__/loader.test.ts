@@ -172,6 +172,27 @@ drift:
       expect(result.config.drift.ignore).toEqual([{ file: "src/legacy/**" }]);
     });
 
+    it("reads a bare string in drift.ignore as a file glob", async () => {
+      vi.mocked(existsSync).mockImplementation((path) => {
+        return String(path).endsWith(".buoy.yaml");
+      });
+
+      vi.mocked(readFileSync).mockReturnValue(`
+drift:
+  ignore:
+    - "src/legacy/**"
+    - file: "src/vendor/**"
+      reason: third-party
+`);
+
+      const result = await loadConfig("/test/project");
+
+      expect(result.config.drift.ignore).toEqual([
+        { file: "src/legacy/**" },
+        { file: "src/vendor/**", reason: "third-party" },
+      ]);
+    });
+
     it("fills in a missing project name and keeps the rest of the project section", async () => {
       vi.mocked(existsSync).mockImplementation((path) => {
         return String(path).endsWith(".buoy.yaml");
