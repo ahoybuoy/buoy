@@ -205,7 +205,8 @@ export const DriftTypeConfigSchema = z.object({
 
 // Drift config
 export const DriftConfigSchema = z.object({
-  ignore: z.array(DriftIgnoreSchema).default([]),
+  /** A bare string is shorthand for a file glob: `- "src/legacy/**"` means `- file: "src/legacy/**"`. */
+  ignore: z.array(z.preprocess((rule) => (typeof rule === 'string' ? { file: rule } : rule), DriftIgnoreSchema)).default([]),
   promote: z.array(DriftPromoteSchema).default([]),
   enforce: z.array(DriftEnforceSchema).default([]),
   severity: z.record(z.enum(['info', 'warning', 'critical'])).default({}),
