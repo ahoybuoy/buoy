@@ -9,7 +9,7 @@
 import { Command } from "commander";
 import pkg from "../../package.json" with { type: "json" };
 import { installClient, MCP_CLIENTS, type McpClient } from "../mcp/install.js";
-import { cursorHookOutput, filePathFromHookPayload, parseCursorHookPayload, runHook } from "../mcp/hook.js";
+import { cursorHookOutput, filePathFromHookPayload, hookErrorLine, parseCursorHookPayload, runHook } from "../mcp/hook.js";
 
 async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return "";
@@ -77,7 +77,7 @@ export function createMcpCommand(): Command {
           if (output) await new Promise<void>((done) => process.stdout.write(`${output}\n`, () => done()));
         } catch (error) {
           // Never block or break Cursor's agent; the reason goes to Cursor's hook log.
-          console.error(`Buoy hook skipped: ${error instanceof Error ? error.message : String(error)}`);
+          console.error(hookErrorLine(error));
         }
         process.exit(0);
       }
@@ -88,7 +88,7 @@ export function createMcpCommand(): Command {
         process.exit(result.exitCode);
       } catch (error) {
         // A broken hook must never block the agent.
-        console.error(`Buoy hook skipped: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(hookErrorLine(error));
         process.exit(0);
       }
     });

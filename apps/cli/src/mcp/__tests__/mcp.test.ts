@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { DesignToken, DriftSignal } from "@buoy-design/core";
 import { checkDrift, findRepoRoot, findTokensByValue, normalizeValue, toIssue } from "../project.js";
 import { applyFileIgnoreRules, extractFileSignals, issuesFromSignals, lineEdit, type FileIssue } from "../file-check.js";
-import { cursorHookOutput, filePathFromHookPayload, formatHookFeedback, isStyleFile, parseCursorHookPayload, runHook } from "../hook.js";
+import { cursorHookOutput, filePathFromHookPayload, formatHookFeedback, hookErrorLine, isStyleFile, parseCursorHookPayload, runHook } from "../hook.js";
 import { installClient, mergeClaudeHook, mergeMcpServers } from "../install.js";
 import { cssVariableFor, withCssVariableAliases } from "../../scan/token-aliases.js";
 
@@ -165,6 +165,35 @@ describe("Claude Code hook", () => {
     const check = await checkDrift({ config: { project: { name: "h" } } as never, projectRoot: dir }, ["src/deep/Missing.tsx"], []);
     expect(check.notFound).toEqual(["src/deep/Missing.tsx"]);
     expect(check.note).toContain("no such file");
+  });
+
+  it("honours drift.ignore from a .buoy.yaml with no project section", async () => {
+    const dir = repoWithTokens();
+    mkdirSync(join(dir, "src", "legacy"));
+    writeFileSync(join(dir, "src", "legacy", "Old.tsx"), 'export const O = () => <div style={{ color: "#2563eb" }} />;\n');
+    writeFileSync(join(dir, ".buoy.yaml"), 'drift:\n  ignore:\n    - file: "src/legacy/**"\n');
+    // The ignored folder is quiet; everything else is still checked.
+    expect(await runHook(dir, "src/legacy/Old.tsx")).toEqual({ exitCode: 0, message: null });
+    const other = await runHook(dir, "src/deep/A.tsx");
+    expect(other.exitCode).toBe(2);
+    expect(other.message).toContain("var(--brand)");
+  }, 60_000);
+
+  it("names the config file and the problem in one line when .buoy.yaml is invalid", async () => {
+    const dir = repoWithTokens();
+    const configPath = join(dir, ".buoy.yaml");
+    writeFileSync(configPath, "drift:\n  failOn: sometimes\n");
+    const error = await runHook(dir, "src/deep/A.tsx").then(() => null, (e: unknown) => e);
+    expect(error).not.toBeNull();
+    const line = hookErrorLine(error);
+    expect(line).not.toContain("\n");
+    expect(line).toContain(`invalid config ${configPath}`);
+    expect(line).toContain('at "drift.failOn"');
+  }, 60_000);
+
+  it("keeps other hook failures to one line", () => {
+    expect(hookErrorLine(new Error("first\n\nsecond"))).toBe("Buoy hook skipped: first");
+    expect(hookErrorLine("plain")).toBe("Buoy hook skipped: plain");
   });
 
   it("skips dependencies and files outside the project", async () => {

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { basename, dirname, resolve } from 'path';
 import { pathToFileURL } from 'url';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, YAMLError } from 'yaml';
 import { ZodError } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { BuoyConfig, BuoyConfigSchema, SourcesConfig } from './schema.js';
@@ -57,6 +57,36 @@ const CONFIG_FILES = [
   '.buoyrc.json',     // Legacy JSON
   '.buoyrc',          // Legacy JSON
 ];
+
+/**
+ * A config file found on disk but rejected (bad YAML/JSON, or a value the
+ * schema refuses). `problem` is the one-line reason, without the file name.
+ */
+export class ConfigFileError extends Error {
+  constructor(message: string, readonly configPath: string, readonly problem: string) {
+    super(message);
+    this.name = 'ConfigFileError';
+  }
+}
+
+/**
+ * `project` is optional in a config file: a .buoy.yaml that only sets
+ * `drift.ignore` is a complete config. Default the name to the folder the
+ * config lives in, the same name zero-config auto-detection uses.
+ */
+export function withDefaultProject(raw: unknown, configDir: string): unknown {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const config = raw as Record<string, unknown>;
+  const name = basename(configDir);
+  if (config.project === undefined || config.project === null) {
+    return { ...config, project: { name } };
+  }
+  const project = config.project;
+  if (typeof project === 'object' && !Array.isArray(project) && (project as Record<string, unknown>).name === undefined) {
+    return { ...config, project: { ...project, name } };
+  }
+  return raw;
+}
 
 export interface LoadConfigResult {
   config: BuoyConfig;
@@ -128,6 +158,7 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
 
   // Load config based on extension
   const ext = configPath.split('.').pop();
+  const configDir = dirname(configPath);
 
   try {
     let userConfig: BuoyConfig;
@@ -136,13 +167,13 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
     if (ext === 'yaml' || ext === 'yml') {
       const content = readFileSync(configPath, 'utf-8');
       const raw = parseYaml(content);
-      userConfig = BuoyConfigSchema.parse(raw);
+      userConfig = BuoyConfigSchema.parse(withDefaultProject(raw, configDir));
     }
     // JSON config files (.buoyrc.json, .buoyrc)
     else if (ext === 'json' || configPath.endsWith('.buoyrc')) {
       const content = readFileSync(configPath, 'utf-8');
       const raw = JSON.parse(content);
-      userConfig = BuoyConfigSchema.parse(raw);
+      userConfig = BuoyConfigSchema.parse(withDefaultProject(raw, configDir));
     }
     // For JS/TS files, we need to import them
     // Note: TypeScript files need tsx or similar runtime
@@ -150,7 +181,7 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
       const fileUrl = pathToFileURL(configPath).href;
       const mod = await import(fileUrl);
       const raw = mod.default || mod;
-      userConfig = BuoyConfigSchema.parse(raw);
+      userConfig = BuoyConfigSchema.parse(withDefaultProject(raw, configDir));
     }
 
     // Apply preset defaults (user-specified values take precedence)
@@ -158,7 +189,6 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
 
     // Merge auto-detected framework sources with user config
     // This ensures partial configs still get framework detection
-    const configDir = dirname(configPath);
     const mergedConfig = await mergeAutoDetectedSources(userConfig, configDir);
 
     return {
@@ -172,15 +202,25 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
         prefix: 'Configuration error',
         prefixSeparator: ': ',
       });
-      throw new Error(
+      const problem = fromZodError(error as any, { prefix: null }).message;
+      throw new ConfigFileError(
         `Invalid config in ${configPath}:\n\n${validationError.message}\n\nRun 'buoy dock' to generate a valid configuration.`,
+        configPath,
+        problem,
       );
     }
 
     if (error instanceof SyntaxError) {
-      throw new Error(
+      throw new ConfigFileError(
         `Invalid JSON in ${configPath}: ${error.message}\n\nCheck for missing commas, trailing commas, or unquoted keys.`,
+        configPath,
+        error.message,
       );
+    }
+
+    if (error instanceof YAMLError) {
+      const problem = error.message.split('\n')[0] ?? error.message;
+      throw new ConfigFileError(`Invalid YAML in ${configPath}: ${error.message}`, configPath, problem);
     }
 
     // Handle import errors (for JS/TS config files)
