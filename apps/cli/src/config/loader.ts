@@ -4,7 +4,7 @@ import { pathToFileURL } from 'url';
 import { parse as parseYaml, YAMLError } from 'yaml';
 import { ZodError } from 'zod';
 import { fromZodError } from 'zod-validation-error';
-import { BuoyConfig, BuoyConfigSchema, SourcesConfig } from './schema.js';
+import { BuoyConfig, BuoyConfigSchema, DriftConfigSchema, SourcesConfig } from './schema.js';
 import { buildAutoConfig } from './auto-detect.js';
 
 /**
@@ -91,6 +91,44 @@ export function withDefaultProject(raw: unknown, configDir: string): unknown {
 export interface LoadConfigResult {
   config: BuoyConfig;
   configPath: string | null;
+  /** Keys in the config file that neither the CLI nor the GitHub App reads (they are ignored). */
+  unknownKeys?: string[];
+}
+
+/**
+ * Top-level keys the Buoy GitHub App reads from the same .buoy.yaml
+ * (buoy-cloud src/lib/repo-settings.ts). They mean nothing to the CLI but are not mistakes.
+ */
+const GITHUB_APP_KEYS = new Set([
+  'frameworks', 'tokens', 'sources', 'components', 'ignore', 'checks', 'severity', 'reviews',
+  'thresholds', 'instructions', 'auto_baseline', 'labels', 'ignore_signals', 'drift', 'health',
+]);
+
+/**
+ * Keys that nothing reads, so a typo or a copied example doesn't vanish without a word.
+ * Covers the top level and the `drift` section (the place ignore rules go).
+ */
+export function unknownConfigKeys(raw: unknown): string[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  const top = raw as Record<string, unknown>;
+  const known = new Set(Object.keys(BuoyConfigSchema.shape));
+  const unknown = Object.keys(top).filter((key) => !known.has(key) && !GITHUB_APP_KEYS.has(key));
+  const drift = top.drift;
+  if (drift && typeof drift === 'object' && !Array.isArray(drift)) {
+    const driftKnown = new Set(Object.keys(DriftConfigSchema.shape));
+    for (const key of Object.keys(drift)) if (!driftKnown.has(key)) unknown.push(`drift.${key}`);
+  }
+  return unknown;
+}
+
+const warnedConfigPaths = new Set<string>();
+
+/** One stderr line per config file per process; stdout stays clean for --json. */
+function warnUnknownKeys(configPath: string, keys: string[]): void {
+  if (keys.length === 0 || warnedConfigPaths.has(configPath)) return;
+  warnedConfigPaths.add(configPath);
+  const list = keys.map((key) => `\`${key}\``).join(', ');
+  process.stderr.write(`Buoy: ignoring unknown key${keys.length > 1 ? 's' : ''} ${list} in ${configPath}\n`);
 }
 
 function findConfigPathUpwards(cwd: string): string | null {
@@ -162,17 +200,18 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
 
   try {
     let userConfig: BuoyConfig;
+    let raw: unknown;
 
     // YAML config files (.buoy.yaml, .buoy.yml)
     if (ext === 'yaml' || ext === 'yml') {
       const content = readFileSync(configPath, 'utf-8');
-      const raw = parseYaml(content);
+      raw = parseYaml(content);
       userConfig = BuoyConfigSchema.parse(withDefaultProject(raw, configDir));
     }
     // JSON config files (.buoyrc.json, .buoyrc)
     else if (ext === 'json' || configPath.endsWith('.buoyrc')) {
       const content = readFileSync(configPath, 'utf-8');
-      const raw = JSON.parse(content);
+      raw = JSON.parse(content);
       userConfig = BuoyConfigSchema.parse(withDefaultProject(raw, configDir));
     }
     // For JS/TS files, we need to import them
@@ -180,7 +219,7 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
     else {
       const fileUrl = pathToFileURL(configPath).href;
       const mod = await import(fileUrl);
-      const raw = mod.default || mod;
+      raw = mod.default || mod;
       userConfig = BuoyConfigSchema.parse(withDefaultProject(raw, configDir));
     }
 
@@ -191,9 +230,13 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
     // This ensures partial configs still get framework detection
     const mergedConfig = await mergeAutoDetectedSources(userConfig, configDir);
 
+    const unknownKeys = unknownConfigKeys(raw);
+    warnUnknownKeys(configPath, unknownKeys);
+
     return {
       config: mergedConfig,
       configPath,
+      unknownKeys,
     };
   } catch (error) {
     // Provide helpful error messages for different error types
