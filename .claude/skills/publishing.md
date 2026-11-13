@@ -5,7 +5,7 @@ description: Use when publishing Buoy packages to npm, bumping versions, or debu
 
 # Publishing Workflow
 
-This skill prevents `workspace:*` references from leaking to npm. This skill prevents `workspace:*` references from leaking to npm.
+This skill prevents `workspace:*` references from leaking to npm. There have been 3 incidents (v0.3.2, v0.3.24, v0.3.34) where unresolved workspace refs shipped. Follow this process exactly.
 
 ## Critical Rule
 
@@ -93,3 +93,9 @@ Smoke test:    npx ahoybuoy@X.Y.Z --version
 | Publishing only cli, forgetting wrappers | `ahoybuoy` / `buoy-design` stuck on old version | Publish all 5 packages every time |
 | Version mismatch between cli and wrappers | Users get wrong version via `npx ahoybuoy` | Keep cli, ahoybuoy, buoy-design in sync |
 | Running `pnpm publish` from package dir instead of using `--filter` | May not resolve workspace refs correctly | Always use `pnpm --filter <pkg> publish` from repo root |
+
+## Past Incidents
+
+- **v0.3.2**: Published with `npm publish` instead of `pnpm publish`. Workspace refs unresolved.
+- **v0.3.24**: Version bump commit used `npm publish` to push packages. Workspace refs unresolved.
+- **v0.3.34**: Core and cli published correctly, but wrapper packages (`ahoybuoy`, `buoy-design`) published with `npm publish`. Workspace refs leaked in wrappers only.

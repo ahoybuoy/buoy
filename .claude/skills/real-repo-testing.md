@@ -11,7 +11,7 @@ This skill defines how to test buoy against real-world repos using buoy-lab.
 
 | Tier | When | Speed | Command |
 |------|------|-------|---------|
-| Unit tests | Every change | ~30s | `pnpm test` (vitest) |
+| Unit tests | Every change | ~30s | `pnpm test` (2512+ vitest tests) |
 | Manual spot-check | Specific fix validation | ~2 min | Build + run on 3-5 relevant repos |
 | Batch testing | Pre-release validation | ~10 min | `buoy-test run batch --top N` |
 | Autonomous loop | Background improvement | Long-running | `pnpm improve` or `pnpm daemon` in buoy-lab |
@@ -31,8 +31,8 @@ Covers scanner logic, drift detection, and token extraction. Run on every change
 Pick 3-5 repos relevant to the change. Run from each repo directory:
 
 ```bash
-cd /Users/dylantarre/dev/ahoybuoy/buoy-lab/repos/<owner>/<name>
-node /Users/dylantarre/dev/ahoybuoy/buoy/apps/cli/dist/bin.js show drift --json > /tmp/before.json
+cd /Users/dylantarre/dev/buoy-lab/repos/<owner>/<name>
+node /Users/dylantarre/dev/buoy/apps/cli/dist/bin.js show drift --json > /tmp/before.json
 ```
 
 ### Step 2: Apply Fix and Rebuild
@@ -45,15 +45,15 @@ pnpm build
 ### Step 3: Run After and Compare
 
 ```bash
-cd /Users/dylantarre/dev/ahoybuoy/buoy-lab/repos/<owner>/<name>
-node /Users/dylantarre/dev/ahoybuoy/buoy/apps/cli/dist/bin.js show drift --json > /tmp/after.json
+cd /Users/dylantarre/dev/buoy-lab/repos/<owner>/<name>
+node /Users/dylantarre/dev/buoy/apps/cli/dist/bin.js show drift --json > /tmp/after.json
 diff /tmp/before.json /tmp/after.json
 ```
 
 ### Step 4: Spot-Check Health Score
 
 ```bash
-node /Users/dylantarre/dev/ahoybuoy/buoy/apps/cli/dist/bin.js show health --json
+node /Users/dylantarre/dev/buoy/apps/cli/dist/bin.js show health --json
 ```
 
 ### Key Repos by Framework
@@ -66,7 +66,7 @@ node /Users/dylantarre/dev/ahoybuoy/buoy/apps/cli/dist/bin.js show health --json
 | Tokens | `mantinedev/mantine`, `radix-ui/primitives` |
 | Svelte | Check buoy-lab registry |
 
-All repos live under `/Users/dylantarre/dev/ahoybuoy/buoy-lab/repos/<owner>/<name>`.
+All repos live under `/Users/dylantarre/dev/buoy-lab/repos/<owner>/<name>`.
 
 ## Tier 3: Batch Testing
 
