@@ -145,9 +145,9 @@ Add an entry under `[Unreleased]` before committing:
 ```
 
 ### "Version sync issues"
-Ensure `apps/cli/package.json` and `apps/ahoybuoy/package.json` have the same version.
+Ensure `apps/cli/package.json`, `packages/ahoybuoy/package.json` and `packages/buoy-design/package.json` have the same version (`pnpm version:set X.Y.Z` sets all of them).
 
 ### "npm publish failed"
-1. Check NPM_TOKEN secret in GitHub
+1. Check the "Publish to npm" workflow run log (it publishes through npm trusted publishing over GitHub OIDC; there is no NPM_TOKEN secret)
 2. Ensure versions don't already exist on npm
 3. Try manual publish: `pnpm --filter <package> publish --access public`

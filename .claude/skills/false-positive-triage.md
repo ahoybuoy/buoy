@@ -65,13 +65,13 @@ For **unused-component** false positives, add a new scanner method to `DriftAnal
 await this.scanNewPattern(componentUsageMap);
 ```
 
-Place the call in the usage detection block (after Fix 13, before the entry point filter at line ~646). The method should:
+Place the call in the usage detection block (after Fix 13, before the Fix 1 entry point filter). The method should:
 1. Glob for relevant files
 2. Read file contents
 3. Match component names against a pattern
 4. Increment `componentUsageMap` for matched components
 
-For **unused-token** false positives, add prefix patterns to the `FRAMEWORK_TOKEN_PREFIXES` array or extend `isFrameworkInternalToken()`.
+For **unused-token** false positives, add prefix patterns to the `FRAMEWORK_INTERNAL_PREFIXES` map or extend `isFrameworkInternalToken()`.
 
 For **semantic-mismatch** false positives, update type normalization in `packages/core/src/analysis/analyzers/prop-analyzer.ts`.
 
@@ -98,8 +98,8 @@ pnpm test
 Spot-check 3-5 repos in buoy-lab to confirm reduction:
 
 ```bash
-cd /Users/dylantarre/dev/buoy-lab/<repo>
-node /Users/dylantarre/dev/buoy/apps/cli/dist/bin.js show drift --json | jq '.drifts | length'
+cd /Users/dylantarre/dev/ahoybuoy/buoy-lab/repos/<owner>/<name>
+node /Users/dylantarre/dev/ahoybuoy/buoy/apps/cli/dist/bin.js show drift --json | jq '.drifts | length'
 ```
 
 Compare before/after counts. Record the reduction.

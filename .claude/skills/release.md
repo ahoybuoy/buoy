@@ -17,7 +17,7 @@ Before starting, verify:
 
 ## Step 1: Update CHANGELOG.md
 
-**REQUIRED** - Never skip this step.
+The GitHub release notes in Step 5 are copied from this section, so update it before bumping versions.
 
 1. Move items from `[Unreleased]` to a new version section
 2. Add the release date
@@ -39,15 +39,11 @@ Before starting, verify:
 ## Step 2: Bump Versions
 
 Version rules:
-- `@buoy-design/cli` and `ahoybuoy` MUST have matching versions
+- `@buoy-design/cli`, `ahoybuoy` and `buoy-design` MUST have matching versions
 - `@buoy-design/core` and `@buoy-design/scanners` SHOULD have matching versions
 - Use semver: patch for fixes, minor for features, major for breaking changes
 
-Files to update:
-- `apps/cli/package.json`
-- `apps/ahoybuoy/package.json`
-- `packages/core/package.json` (if core changed)
-- `packages/scanners/package.json` (if scanners changed)
+Set every version at once with `pnpm version:set X.Y.Z` (`scripts/bump-version.mjs`). It updates the root, `apps/cli`, `packages/core`, `packages/scanners`, `packages/ahoybuoy` and `packages/buoy-design` package.json files and `apps/cli/server.json`.
 
 ## Step 3: Build and Test
 
@@ -78,7 +74,7 @@ gh release create vX.Y.Z --title "vX.Y.Z" --notes "$(cat <<'EOF'
 ## Install
 
 \`\`\`bash
-npx ahoybuoy begin
+npx ahoybuoy dock
 \`\`\`
 EOF
 )"
@@ -116,7 +112,8 @@ If something goes wrong:
 
 | Package | Location | Notes |
 |---------|----------|-------|
-| `ahoybuoy` | `apps/ahoybuoy/` | Wrapper, version matches CLI |
+| `ahoybuoy` | `packages/ahoybuoy/` | Wrapper, version matches CLI |
+| `buoy-design` | `packages/buoy-design/` | Alias, version matches CLI |
 | `@buoy-design/cli` | `apps/cli/` | Main CLI |
 | `@buoy-design/core` | `packages/core/` | Domain models |
 | `@buoy-design/scanners` | `packages/scanners/` | Framework scanners |

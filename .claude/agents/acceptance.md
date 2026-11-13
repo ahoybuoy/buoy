@@ -9,7 +9,7 @@ You analyze repositories to predict whether a proposed change will be accepted a
 
 ## What You Investigate
 
-**Contribution process (CRITICAL - check this first!):**
+**Contribution process (check this first; it decides whether to open an issue or a PR):**
 - Read CONTRIBUTING.md and look for explicit guidance on:
   - "open an issue first" vs "submit PR directly"
   - "for small fixes, PRs are welcome without issue"
