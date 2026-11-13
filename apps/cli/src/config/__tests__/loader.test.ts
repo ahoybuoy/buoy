@@ -172,6 +172,49 @@ drift:
       expect(result.config.drift.ignore).toEqual([{ file: "src/legacy/**" }]);
     });
 
+    it("reports keys nothing reads, but not keys the GitHub App reads", async () => {
+      vi.mocked(existsSync).mockImplementation((path) => String(path).endsWith(".buoy.yaml"));
+      vi.mocked(readFileSync).mockReturnValue(`
+include:
+  - "src/components/**"
+severity:
+  hardcodedColors: error
+drift:
+  ignore:
+    - "src/legacy/**"
+  thresholds:
+    critical: 0
+`);
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+      const result = await loadConfig("/test/unknown-keys");
+
+      expect(result.unknownKeys).toEqual(["include", "drift.thresholds"]);
+      expect(stderr).toHaveBeenCalledWith(
+        expect.stringContaining("ignoring unknown keys `include`, `drift.thresholds` in"),
+      );
+      stderr.mockRestore();
+    });
+
+    it("reports nothing for a config made only of known keys", async () => {
+      vi.mocked(existsSync).mockImplementation((path) => String(path).endsWith(".buoy.yaml"));
+      vi.mocked(readFileSync).mockReturnValue(`
+project:
+  name: app
+checks:
+  colorTokens: true
+drift:
+  failOn: critical
+`);
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+      const result = await loadConfig("/test/known-keys");
+
+      expect(result.unknownKeys).toEqual([]);
+      expect(stderr).not.toHaveBeenCalled();
+      stderr.mockRestore();
+    });
+
     it("reads a bare string in drift.ignore as a file glob", async () => {
       vi.mocked(existsSync).mockImplementation((path) => {
         return String(path).endsWith(".buoy.yaml");
