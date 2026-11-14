@@ -133,7 +133,35 @@ const SIGNAL_CATEGORY: Record<string, DesignToken["category"] | undefined> = {
 
 const CSS_PROP = /([a-z-]+)\s*:\s*([^;{}]+)/g;
 
-const UNCHECKED_NUMBERS = new Set<Extractor>(["opacity", "fontWeight", "lineHeight"]);
+// How a bare JSX number reads depends on the property and the library. Same
+// rule as the cloud scanner container (jsxNumberValue there):
+// - unitless properties (lineHeight: 1.5, fontWeight: 600, opacity, zIndex) are plain numbers;
+// - MUI sx spacing/radius and style-prop systems (MUI, Chakra, Theme UI,
+//   styled-system) read numbers as theme steps: sx={{ p: 3 }} is theme.spacing(3),
+//   <Box gap={4}> the 4th space step. maus-inc/mausVoice#325 was flagged as 3px;
+// - Mantine and plain style={{ padding: 13 }} are px.
+const UNITLESS_EXTRACTORS = new Set<Extractor>(["opacity", "fontWeight", "lineHeight", "zIndex"]);
+const THEME_SCALE_SHORTHANDS = new Set(["p", "px", "py", "pt", "pr", "pb", "pl", "m", "mx", "my", "mt", "mr", "mb", "ml"]);
+const SX_THEME_PROPS = new Set([...THEME_SCALE_SHORTHANDS, "padding", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "paddingX", "paddingY",
+  "margin", "marginTop", "marginRight", "marginBottom", "marginLeft", "marginX", "marginY", "gap", "rowGap", "columnGap", "borderRadius"]);
+// Style-prop attributes take theme steps only for spacing and radius; MUI reads
+// fontSize={19} and letterSpacing={4} as px (CodeRabbit on ahoybuoy/buoy#44).
+const STYLE_PROP_THEME_PROPS = new Set([...SX_THEME_PROPS, "rounded", "radius"]);
+const MANTINE_IMPORT = /from\s+['"]@mantine\//;
+const STYLE_PROP_SYSTEM_IMPORT = /from\s+['"](@mui\/|@chakra-ui\/|theme-ui|@theme-ui\/|styled-system|rebass|@xstyled\/)/;
+
+/** The value a bare JSX number stands for, or null when it is a theme step. */
+export function jsxNumberValue(
+  property: string, value: string, extractor: Extractor,
+  where: { attribute?: boolean; inSx?: boolean; mantine: boolean; styleProps: boolean },
+): string | null {
+  if (UNITLESS_EXTRACTORS.has(extractor)) return value;
+  if (where.mantine) return `${value}px`;
+  if (where.inSx && SX_THEME_PROPS.has(property)) return null;
+  if (where.attribute && where.styleProps && STYLE_PROP_THEME_PROPS.has(property)) return null;
+  if (!where.attribute && THEME_SCALE_SHORTHANDS.has(property)) return null;
+  return `${value}px`;
+}
 
 const COLOR_VALUE = /^(#[0-9a-f]{3,8}|(rgba?|hsla?|oklch|oklab|lab|lch|hwb)\([^)]*\))$/i;
 
@@ -254,19 +282,15 @@ export function extractFileSignals(content: string, path: string, judge: LineJud
  */
 function extractJsxSignals(content: string, path: string, lines: readonly string[], ctx: SignalContext, judge: LineJudge): RawSignal[] {
   const table = { ...JSX_STYLE_PROP_ALIASES, ...JSX_PROPERTY_EXTRACTORS };
+  const numberContext = { mantine: MANTINE_IMPORT.test(content), styleProps: STYLE_PROP_SYSTEM_IMPORT.test(content) };
   const signals: RawSignal[] = [];
   for (const found of collectJsxDeclaredValues(content, path)) {
     // Own keys only: `constructor: ...` or `toString: ...` must not reach Object.prototype.
     const extractor = Object.hasOwn(table, found.property) ? table[found.property] : undefined;
     if (!extractor) continue;
     if (isSvgPaintProperty(found.property)) continue;
-    // React leaves these numbers unitless. A bare-number weight, opacity or
-    // line height has never been checked here (it used to become "600px" and
-    // fail the extractor); keep it that way until it is a decision of its own.
-    if (found.numeric && UNCHECKED_NUMBERS.has(extractor)) continue;
-    // Other bare numbers in JSX style objects and props are pixels; z-index stays a plain number.
-    const value = found.numeric && extractor !== "zIndex" ? `${found.value}px` : found.value;
-    if (value === "") continue;
+    const value = found.numeric ? jsxNumberValue(found.property, found.value, extractor, { ...found, ...numberContext }) : found.value;
+    if (value === null || value === "") continue;
     if (!isDesignDeclaration(found.property, value)) continue;
     if (judge(found.line, found.property, value, lines)) continue;
     signals.push(...route(extractor, value, path, found.line, found.property, ctx));

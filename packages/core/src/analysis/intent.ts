@@ -47,19 +47,24 @@ export interface NotedValue {
 const ALLOWLIST = /\bbuoy-(ignore|disable)\b/i;
 
 // Plans to change it: the team knows, a finding adds nothing.
-const KNOWN_DEBT = /\b(todo|fixme|xxx|legacy|temporary|temporarily|until\b|once\b[^.]{0,60}\b(removed|migrated|lands?|ships?|merged|available|fixed|done)|switch to\b|migrate to\b|deprecated)\b/i;
+// "legacy" and "until" alone describe code ("Legacy card styles", "show until hover");
+// they count only with a plan to change it (audit 2026-11-13).
+const KNOWN_DEBT = /\b(todo|fixme|xxx|temporary|temporarily|legacy\b[^.]{0,60}\b(remove|removed|replace|replaced|migrat\w*|clean ?up|for now)|until\b[^.]{0,60}\b(migrat\w*|remov\w*|replac\w*|lands?|ships?|fixed|switch\w*|upgrad\w*|deprecat\w*|tokens? (exist|land|ship))\b|once\b[^.]{0,60}\b(removed|migrated|lands?|ships?|merged|available|fixed|done)|switch to\b|migrate to\b|deprecated)\b/i;
 
 // Reasons: why the value is what it is.
 const EXPLAINED = new RegExp(
   [
     "\\bworkaround\\b", "\\bhack(y)?\\b", "\\bintentional(ly)?\\b", "\\bdeliberate(ly)?\\b", "\\bon purpose\\b",
-    "\\boptical(ly)?\\b", "\\bvisual(ly)? (align|balance|center|centre)", "(?<!(left|right|top|bottom|center|centre|start|end)[- ])\\balign(s|ed|ing|ment)?\\b", "\\bnudge",
+    "\\boptical(ly)?\\b", "\\bvisual(ly)? (align|balance|center|centre)", "\\balign(s|ed)? (it |this )?(with|to) (the )?\\w+", "\\bnudge",
     "\\bpixel[- ]?perfect\\b", "\\boffset (to|for|by)\\b", "\\bcompensat",
     "\\bmatch(es|ing)? (the )?(design|figma|mocks?|mockup|spec|brand|native|os|system|platform|browser|screenshot)",
     "\\bper (the )?(design|figma|brand|spec)\\b", "\\bdesign(er)?s? (asked|wants?|requested|decision)",
     "\\bbrand (colou?rs?|guidelines?|requirements?)\\b",
     "\\bbecause\\b", "\\bdue to\\b", "\\bneeded (for|to|so|because)\\b", "\\brequired (by|for)\\b", "\\bmust (be|stay|match)\\b",
-    "\\b(safari|firefox|chrome|chromium|webkit|ios|android|edge|ie ?1[01]|ie\\d)\\b",
+    // A browser or platform name is a reason only as one: "for Safari", "iOS bug". "Edge-to-edge"
+    // and "the Android landing page" describe the code (audit 2026-11-13).
+    "\\b(fix(es)?|workaround) (for |on |in )?(old |older |mobile )?(safari|firefox|chrome|chromium|webkit|ios|android|edge|ie ?1[01]|ie\\d)\\b(?!-)",
+    "\\b(safari|firefox|chrome|chromium|webkit|ios|android|edge|ie ?1[01]|ie\\d)('s)? (\\w+ )?(bug|quirk|issue|workaround|rendering|renders?|clips?|needs?|ignores?|breaks?)\\b",
     "\\bbrowser (bug|quirk|default)", "\\boverrides? (the )?\\S+ (default|style)", "\\bthird[- ]party\\b",
     "\\bkeep in sync\\b", "\\bpreserv(e|es|ed|ing) (the |existing |original |current |old )?(\\w+ )?(css|styles?|styling|look|spacing|colou?rs?|padding|margins?|layout|design|appearance|brand\\w*|sizes?|radius|shadows?)\\b", "\\bdo(n'?t| not) change\\b",
   ].join("|"),
