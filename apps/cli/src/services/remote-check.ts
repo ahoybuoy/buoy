@@ -7,6 +7,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import type { DriftSignal, Severity } from "@buoy-design/core";
 import type { BuoyConfig } from "../config/schema.js";
+import { verifySource, type SourceVerification } from "./source-verification.js";
 import { DriftAnalysisService, calculateDriftSummary } from "./drift-analysis.js";
 
 export type InputSourceContextKind = "local" | "remote-url" | "remote-fixture";
@@ -17,6 +18,8 @@ export interface RemoteSourceContext {
   reason?: string;
   source: string;
   tokens?: string[];
+  /** "partial" when parts of the file could not be checked, so zero findings is not proof it is clean */
+  verification?: SourceVerification;
 }
 
 export interface RemoteCheckRunResult {
@@ -188,6 +191,7 @@ export async function runSingleSourceOrRemoteCheck(
           : "No tokens/config context supplied; results may miss semantic-token mappings and project-level drift signals",
         source: sourceRef,
         tokens: tokenRefs.map((t) => (typeof t === "string" ? t : t.url)),
+        verification: verifySource(sourceAsset.content.toString("utf8")),
       },
     };
   } finally {

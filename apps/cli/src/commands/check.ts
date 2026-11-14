@@ -17,6 +17,7 @@ import {
   classifyCheckInput,
   runSingleSourceOrRemoteCheck,
 } from "../services/remote-check.js";
+import { formatVerificationNotice } from "../services/source-verification.js";
 import { askForConsent, sendFirstRunOnce, sendTelemetry } from '../telemetry/index.js';
 import { formatUpgradeHint } from "../utils/upgrade-hints.js";
 import { generatePRCommentPreview } from "../output/pr-comment-preview.js";
@@ -325,6 +326,11 @@ export function createCheckCommand(): Command {
             if (remoteResult.sourceContext.confidence === "reduced") {
               console.log("~ Reduced-confidence remote/single-file check");
               console.log(`  ${remoteResult.sourceContext.reason}`);
+              console.log("");
+            }
+            const partial = formatVerificationNotice(remoteResult.sourceContext.verification ?? { status: "complete", unverified: [] });
+            if (partial.length) {
+              for (const l of partial) console.log(l);
               console.log("");
             }
             console.log(`Source: ${remoteResult.sourceContext.source}`);

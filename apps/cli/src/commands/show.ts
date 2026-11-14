@@ -29,6 +29,7 @@ import {
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
 import { classifyCheckInput, runSingleSourceOrRemoteCheck } from "../services/remote-check.js";
+import { formatVerificationNotice } from "../services/source-verification.js";
 import { saveHistory, getLastScore } from "../services/scan-history.js";
 import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
 import type { DriftSignal, Severity } from "@buoy-design/core";
@@ -475,6 +476,8 @@ export function createShowCommand(): Command {
             info(`Source: ${remote.sourceContext.source}`);
             newline();
           }
+
+          for (const l of formatVerificationNotice(remote.sourceContext.verification ?? { status: "complete", unverified: [] })) info(l);
 
           if (options.verbose) {
             header("Drift Analysis");
