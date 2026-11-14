@@ -64,6 +64,13 @@ describe("verifySource", () => {
     expect(verifySource("import { tokens } from './tokens';\nconst a = other.tokens.x;").status).toBe("complete");
   });
 
+  it("ignores non-UI and test files that build CSS strings as data", () => {
+    const gen = "const ref = `var(--radius-${suffix})`;";
+    expect(verifySource(gen, "src/lib/suggestion-builder.ts").status).toBe("complete");
+    expect(verifySource(gen, "src/lib/review.test.tsx").status).toBe("complete");
+    expect(verifySource(gen, "src/components/Button.tsx").status).toBe("partial");
+  });
+
   it("formats a notice only when partial", () => {
     expect(formatVerificationNotice({ status: "complete", unverified: [] })).toEqual([]);
     const notice = formatVerificationNotice(verifySource(read(byPrefix("e06")[0]!)));

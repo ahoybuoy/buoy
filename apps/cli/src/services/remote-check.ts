@@ -191,7 +191,7 @@ export async function runSingleSourceOrRemoteCheck(
           : "No tokens/config context supplied; results may miss semantic-token mappings and project-level drift signals",
         source: sourceRef,
         tokens: tokenRefs.map((t) => (typeof t === "string" ? t : t.url)),
-        verification: verifySource(sourceAsset.content.toString("utf8")),
+        verification: verifySource(sourceAsset.content.toString("utf8"), sourceNameRef),
       },
     };
   } finally {

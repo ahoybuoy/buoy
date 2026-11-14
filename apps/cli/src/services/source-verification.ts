@@ -67,7 +67,15 @@ function usedAsObject(content: string, importLine: number, local: string): boole
     .some((text, i) => i + 1 !== importLine && use.test(text));
 }
 
-export function verifySource(content: string): SourceVerification {
+// Only files that can hold component styling. A .ts library that builds a
+// "var(--x-${n})" string as data (a code generator, a test) is not styling.
+const UI_FILE = /\.(?:tsx|jsx|vue|svelte|astro|html|mdx)$/i;
+const TEST_FILE = /\.(?:test|spec|stories)\.[a-z]+$|__tests__/i;
+
+export function verifySource(content: string, filename?: string): SourceVerification {
+  if (filename && (!UI_FILE.test(filename) || TEST_FILE.test(filename))) {
+    return { status: "complete", unverified: [] };
+  }
   const unverified: UnverifiedSource[] = [];
   const lines = content.split(/\r?\n/);
 
