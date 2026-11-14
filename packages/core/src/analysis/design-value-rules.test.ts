@@ -98,6 +98,7 @@ describe("folder skips need a design reason", () => {
   });
   it("still skips logos, __mocks__ and tests", () => {
     expect(classifyAudit("src/brand/logo.tsx")).toBe("artwork");
+    expect(classifyAudit("src/brand/logo.css")).toBe("artwork");
     expect(classifyAudit("src/__mocks__/x.ts")).toBe("test-or-story");
   });
 });

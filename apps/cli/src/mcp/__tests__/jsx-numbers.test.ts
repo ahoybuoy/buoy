@@ -14,6 +14,9 @@ describe("bare JSX numbers", () => {
   it("Chakra style props are theme steps", () => {
     expect(px(`import { Box } from "@chakra-ui/react";\nexport const A = () => <Box gap={4} rounded={2} p={3} />;\n`)).toEqual([]);
   });
+  it("style-prop fontSize and letterSpacing are px, not theme steps", () => {
+    expect(px(`import { Box } from "@mui/material";\nexport const A = () => <Box fontSize={19} letterSpacing={4} />;\n`)).toEqual(expect.arrayContaining(["19px", "4px"]));
+  });
   it("Mantine and plain style objects are px", () => {
     expect(px(`import { Box } from "@mantine/core";\nexport const A = () => <Box p={13} />;\n`)).toContain("13px");
     expect(px(`export const A = () => <div style={{ padding: 13 }} />;\n`)).toContain("13px");

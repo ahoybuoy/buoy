@@ -49,7 +49,7 @@ const ALLOWLIST = /\bbuoy-(ignore|disable)\b/i;
 // Plans to change it: the team knows, a finding adds nothing.
 // "legacy" and "until" alone describe code ("Legacy card styles", "show until hover");
 // they count only with a plan to change it (audit 2026-11-13).
-const KNOWN_DEBT = /\b(todo|fixme|xxx|temporary|temporarily|legacy\b[^.]{0,60}\b(remove|removed|replace|replaced|migrat\w*|clean ?up|for now)|until\s+(we|the|it|this|that|[\w-]+\s+(lands?|ships?|is|are))\b[^.]{0,60}|once\b[^.]{0,60}\b(removed|migrated|lands?|ships?|merged|available|fixed|done)|switch to\b|migrate to\b|deprecated)\b/i;
+const KNOWN_DEBT = /\b(todo|fixme|xxx|temporary|temporarily|legacy\b[^.]{0,60}\b(remove|removed|replace|replaced|migrat\w*|clean ?up|for now)|until\b[^.]{0,60}\b(migrat\w*|remov\w*|replac\w*|lands?|ships?|fixed|switch\w*|upgrad\w*|deprecat\w*|tokens? (exist|land|ship))\b|once\b[^.]{0,60}\b(removed|migrated|lands?|ships?|merged|available|fixed|done)|switch to\b|migrate to\b|deprecated)\b/i;
 
 // Reasons: why the value is what it is.
 const EXPLAINED = new RegExp(
@@ -63,8 +63,8 @@ const EXPLAINED = new RegExp(
     "\\bbecause\\b", "\\bdue to\\b", "\\bneeded (for|to|so|because)\\b", "\\brequired (by|for)\\b", "\\bmust (be|stay|match)\\b",
     // A browser or platform name is a reason only as one: "for Safari", "iOS bug". "Edge-to-edge"
     // and "the Android landing page" describe the code (audit 2026-11-13).
-    "\\b(for|on|in|fixes|fix) (old |older |mobile )?(safari|firefox|chrome|chromium|webkit|ios|android|edge|ie ?1[01]|ie\\d)\\b(?!-)",
-    "\\b(safari|firefox|chrome|chromium|webkit|ios|android|ie ?1[01]|ie\\d)('s)? (\\w+ )?(bug|quirk|issue|workaround|rendering|renders?|clips?|needs?)\\b",
+    "\\b(fix(es)?|workaround) (for |on |in )?(old |older |mobile )?(safari|firefox|chrome|chromium|webkit|ios|android|edge|ie ?1[01]|ie\\d)\\b(?!-)",
+    "\\b(safari|firefox|chrome|chromium|webkit|ios|android|edge|ie ?1[01]|ie\\d)('s)? (\\w+ )?(bug|quirk|issue|workaround|rendering|renders?|clips?|needs?|ignores?|breaks?)\\b",
     "\\bbrowser (bug|quirk|default)", "\\boverrides? (the )?\\S+ (default|style)", "\\bthird[- ]party\\b",
     "\\bkeep in sync\\b", "\\bpreserv(e|es|ed|ing) (the |existing |original |current |old )?(\\w+ )?(css|styles?|styling|look|spacing|colou?rs?|padding|margins?|layout|design|appearance|brand\\w*|sizes?|radius|shadows?)\\b", "\\bdo(n'?t| not) change\\b",
   ].join("|"),

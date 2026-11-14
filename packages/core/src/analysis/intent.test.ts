@@ -123,6 +123,8 @@ import { classifyIntentText as classifyAudit } from "./intent.js";
 describe("comment intent only counts reasons, not descriptions", () => {
   it.each([
     "Hero for the Android landing page",
+    "Hero for Android landing page",
+    "Show until the user hovers",
     "Edge-to-edge hero",
     "Legacy card styles",
     "Show until hover",
@@ -132,6 +134,8 @@ describe("comment intent only counts reasons, not descriptions", () => {
   });
   it.each([
     ["Safari bug: clips the shadow", "explained"],
+    ["Edge clips the shadow", "explained"],
+    ["fix for old Safari", "explained"],
     ["needed for iOS", "explained"],
     ["because the logo has padding baked in", "explained"],
     ["aligns with the icon baseline", "explained"],

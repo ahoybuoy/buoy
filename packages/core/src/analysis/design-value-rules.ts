@@ -12,7 +12,7 @@
 
 export type ExemptFileContext = "artwork" | "email" | "og-image" | "test-or-story" | "example-or-demo" | "third-party";
 
-const ARTWORK_PATH = /(^|\/)(icons?|logos?|illustrations?|svgs?|flags?|emojis?|avatars?\/presets?)(\/|$)|(^|\/)[\w.-]*(icon|logo|illustration|flag)s?\.(tsx|jsx|vue|svelte|astro)$|\.svg\.(tsx|jsx)$/i;
+const ARTWORK_PATH = /(^|\/)(icons?|logos?|illustrations?|svgs?|flags?|emojis?|avatars?\/presets?)(\/|$)|(^|\/)[\w.-]*(icon|logo|illustration|flag|wordmark)s?\.(tsx|jsx|vue|svelte|astro|css|scss|sass|less)$|\.svg\.(tsx|jsx)$/i;
 // brand/ and mock(s)/ were skipped whole until the 2026-11-13 audit: product UI
 // lives there too (src/brand/Button.tsx). Logo and icon files are still artwork
 // by file name or SVG-only markup, and __mocks__ is still a test folder.

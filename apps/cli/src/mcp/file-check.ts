@@ -144,6 +144,9 @@ const UNITLESS_EXTRACTORS = new Set<Extractor>(["opacity", "fontWeight", "lineHe
 const THEME_SCALE_SHORTHANDS = new Set(["p", "px", "py", "pt", "pr", "pb", "pl", "m", "mx", "my", "mt", "mr", "mb", "ml"]);
 const SX_THEME_PROPS = new Set([...THEME_SCALE_SHORTHANDS, "padding", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "paddingX", "paddingY",
   "margin", "marginTop", "marginRight", "marginBottom", "marginLeft", "marginX", "marginY", "gap", "rowGap", "columnGap", "borderRadius"]);
+// Style-prop attributes take theme steps only for spacing and radius; MUI reads
+// fontSize={19} and letterSpacing={4} as px (CodeRabbit on ahoybuoy/buoy#44).
+const STYLE_PROP_THEME_PROPS = new Set([...SX_THEME_PROPS, "rounded", "radius"]);
 const MANTINE_IMPORT = /from\s+['"]@mantine\//;
 const STYLE_PROP_SYSTEM_IMPORT = /from\s+['"](@mui\/|@chakra-ui\/|theme-ui|@theme-ui\/|styled-system|rebass|@xstyled\/)/;
 
@@ -155,7 +158,7 @@ export function jsxNumberValue(
   if (UNITLESS_EXTRACTORS.has(extractor)) return value;
   if (where.mantine) return `${value}px`;
   if (where.inSx && SX_THEME_PROPS.has(property)) return null;
-  if (where.attribute && where.styleProps) return null;
+  if (where.attribute && where.styleProps && STYLE_PROP_THEME_PROPS.has(property)) return null;
   if (!where.attribute && THEME_SCALE_SHORTHANDS.has(property)) return null;
   return `${value}px`;
 }
