@@ -36,6 +36,34 @@ describe("verifySource", () => {
     for (const f of byPrefix("d")) expect(verifySource(read(f)).status, f).toBe("complete");
   });
 
+  it("does not flag providers, hooks, contexts, or type-only imports", () => {
+    const src = [
+      "import { ThemeProvider } from './theme';",
+      "import { useTheme } from '../theme/hooks';",
+      "import { ThemeContext } from './theme-context';",
+      "import type { Theme } from './theme';",
+      "import { type Tokens } from './tokens';",
+    ].join("\n");
+    expect(verifySource(src).status).toBe("complete");
+  });
+
+  it("flags value-object imports, including aliases and default imports", () => {
+    expect(verifySource("import { tokens as t } from './tokens';\nconst c = t.colors.primary;").status).toBe("partial");
+    expect(verifySource("import theme from '../theme';\nconst c = theme.x;").status).toBe("partial");
+    expect(verifySource("import { designTokens } from './design-system';\nconst c = designTokens.x;").status).toBe("partial");
+  });
+
+  it("stays silent when an import is unused, side-effect only, or not a value", () => {
+    expect(verifySource("import './globals.css';").status).toBe("complete");
+    expect(verifySource("import styles from './a.module.css';\nexport const A = 1;").status).toBe("complete");
+    expect(verifySource("import { tokens } from './tokens';\nexport type T = typeof tokens;").status).toBe("complete");
+    expect(verifySource("import { colors } from './utils';\nconst x = colors.a;").status).toBe("complete");
+  });
+
+  it("does not match a name that only appears as a property of something else", () => {
+    expect(verifySource("import { tokens } from './tokens';\nconst a = other.tokens.x;").status).toBe("complete");
+  });
+
   it("formats a notice only when partial", () => {
     expect(formatVerificationNotice({ status: "complete", unverified: [] })).toEqual([]);
     const notice = formatVerificationNotice(verifySource(read(byPrefix("e06")[0]!)));

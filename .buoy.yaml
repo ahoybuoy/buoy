@@ -13,6 +13,7 @@ sources:
     exclude:
       - "**/*.test.tsx"
       - "**/*.stories.tsx"
+      - "**/__fixtures__/**"
 
   tokens:
     enabled: true

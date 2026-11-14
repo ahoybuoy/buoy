@@ -2,6 +2,11 @@
  * Detects parts of a single source file whose styling cannot be verified
  * from that file alone. "No findings" only means "clean" when nothing was
  * left unverified, so callers report this next to the drift result.
+ *
+ * Every rule here is deliberately conservative: it fires only when the file
+ * visibly depends on something that was not checked (an imported binding that
+ * the file actually uses, or a CSS variable name built at runtime). Anything
+ * ambiguous stays silent, because a false notice costs more than a miss.
  */
 
 export type UnverifiedKind =
@@ -21,10 +26,46 @@ export interface SourceVerification {
   unverified: UnverifiedSource[];
 }
 
-const STYLE_IMPORT = /^\s*import\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+\.(?:css|scss|sass|less|styl))['"]/;
-const RELATIVE_IMPORT = /^\s*import\s+[^'"]*?\s+from\s+['"](\.{1,2}\/[^'"]*)['"]/;
+const IMPORT = /^\s*import\s+(?!type\b)([^'"]+?)\s+from\s+['"]([^'"]+)['"]/;
+const STYLE_FILE = /\.(?:css|scss|sass|less|styl)$/;
 const TOKEN_PATH = /(token|theme|design-system|designsystem)/i;
+// Names that hold values. Providers, hooks, contexts and types (ThemeProvider,
+// useTheme, ThemeContext) hold none, so they never match.
+const VALUE_NAME = /^(tokens?|theme|designTokens?|colou?rs?|spacing|palette|radii|radius|typography)$|Tokens?$/;
 const DYNAMIC_VAR = /var\(\s*--[\w-]*\$\{[^}]*\}[\w-]*/;
+
+interface Binding {
+  imported: string;
+  local: string;
+}
+
+function bindings(clause: string): Binding[] {
+  const out: Binding[] = [];
+  const braces = /\{([^}]*)\}/.exec(clause);
+  if (braces) {
+    for (const part of braces[1]!.split(",")) {
+      const t = part.trim();
+      if (!t || t.startsWith("type ")) continue;
+      const [imported, local] = t.split(/\s+as\s+/);
+      out.push({ imported: imported!.trim(), local: (local ?? imported)!.trim() });
+    }
+  }
+  const rest = clause
+    .replace(/\{[^}]*\}/, "")
+    .replace(/\*\s+as\s+/, "")
+    .replace(/,/g, " ")
+    .trim();
+  for (const name of rest.split(/\s+/).filter(Boolean)) out.push({ imported: name, local: name });
+  return out;
+}
+
+function usedAsObject(content: string, importLine: number, local: string): boolean {
+  const escaped = local.replace(/[$]/g, "\\$");
+  const use = new RegExp(`(?<![\\w$.])${escaped}\\s*(?:\\.|\\[|\\?\\.)`);
+  return content
+    .split(/\r?\n/)
+    .some((text, i) => i + 1 !== importLine && use.test(text));
+}
 
 export function verifySource(content: string): SourceVerification {
   const unverified: UnverifiedSource[] = [];
@@ -33,26 +74,39 @@ export function verifySource(content: string): SourceVerification {
   lines.forEach((text, i) => {
     const line = i + 1;
     const snippet = text.trim().slice(0, 120);
+    const imp = IMPORT.exec(text);
 
-    const style = STYLE_IMPORT.exec(text);
-    if (style) {
-      unverified.push({
-        kind: "style-module-import",
-        line,
-        snippet,
-        reason: `Styles live in ${style[1]}, which was not checked`,
-      });
-      return;
-    }
+    if (imp) {
+      const [, clause, spec] = imp as unknown as [string, string, string];
+      const names = bindings(clause);
 
-    const rel = RELATIVE_IMPORT.exec(text);
-    if (rel && TOKEN_PATH.test(rel[1]!)) {
-      unverified.push({
-        kind: "token-import",
-        line,
-        snippet,
-        reason: `Values come from ${rel[1]}, which was not checked`,
-      });
+      if (STYLE_FILE.test(spec)) {
+        if (names.some((b) => usedAsObject(content, line, b.local))) {
+          unverified.push({
+            kind: "style-module-import",
+            line,
+            snippet,
+            reason: `Styles live in ${spec}, which was not checked`,
+          });
+        }
+        return;
+      }
+
+      if (/^\.{1,2}\//.test(spec) && TOKEN_PATH.test(spec)) {
+        const hit = names.some(
+          (b) =>
+            (VALUE_NAME.test(b.imported) || VALUE_NAME.test(b.local)) &&
+            usedAsObject(content, line, b.local),
+        );
+        if (hit) {
+          unverified.push({
+            kind: "token-import",
+            line,
+            snippet,
+            reason: `Values come from ${spec}, which was not checked`,
+          });
+        }
+      }
       return;
     }
 
