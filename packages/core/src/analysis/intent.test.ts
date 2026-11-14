@@ -117,3 +117,28 @@ describe("lineIntent", () => {
     expect(lineIntent(["color: #333;"], 0, { property: "color", value: "#333" })).toBeNull();
   });
 });
+
+// Audit 2026-11-13: descriptions that were read as reasons and hid real drift.
+import { classifyIntentText as classifyAudit } from "./intent.js";
+describe("comment intent only counts reasons, not descriptions", () => {
+  it.each([
+    "Hero for the Android landing page",
+    "Edge-to-edge hero",
+    "Legacy card styles",
+    "Show until hover",
+    "Align items in the row",
+  ])("ignores %j", (text) => {
+    expect(classifyAudit(text)).toBeNull();
+  });
+  it.each([
+    ["Safari bug: clips the shadow", "explained"],
+    ["needed for iOS", "explained"],
+    ["because the logo has padding baked in", "explained"],
+    ["aligns with the icon baseline", "explained"],
+    ["legacy value, remove after the migration", "known-debt"],
+    ["until we migrate to tokens", "known-debt"],
+    ["TODO: use a token", "known-debt"],
+  ])("keeps %j", (text, kind) => {
+    expect(classifyAudit(text)?.kind).toBe(kind);
+  });
+});

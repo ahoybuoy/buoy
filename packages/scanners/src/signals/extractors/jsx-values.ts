@@ -20,6 +20,18 @@ export interface LiteralValue {
 export interface JsxDeclaredValue extends LiteralValue {
   /** Object key or JSX attribute name, as written (`backgroundColor`, `bg`). */
   property: string;
+  /** A JSX attribute (`gap={4}`), not an object key. */
+  attribute?: boolean;
+  /** Inside an `sx={...}` prop, where MUI reads spacing and radius numbers as theme steps. */
+  inSx?: boolean;
+}
+
+/** Is this node inside the value of a JSX `sx` attribute? */
+function isInsideSx(node: ts.Node, sourceFile: ts.SourceFile): boolean {
+  for (let n: ts.Node | undefined = node.parent; n; n = n.parent) {
+    if (ts.isJsxAttribute(n)) return n.name.getText(sourceFile) === 'sx';
+  }
+  return false;
 }
 
 export interface ArbitraryClassMatch {
@@ -116,15 +128,16 @@ export function collectJsxDeclaredValues(content: string, path: string): JsxDecl
     if (ts.isPropertyAssignment(node)) {
       const property = propertyName(node.name, sourceFile);
       if (property) {
-        for (const v of literalValues(node.initializer, sourceFile)) found.push({ property, ...v });
+        const inSx = isInsideSx(node, sourceFile);
+        for (const v of literalValues(node.initializer, sourceFile)) found.push({ property, ...v, inSx });
       }
     } else if (ts.isJsxAttribute(node) && node.initializer) {
       const property = node.name.getText(sourceFile);
       const init = node.initializer;
       if (ts.isStringLiteral(init)) {
-        found.push({ property, value: init.text, line: lineOf(sourceFile, init.getStart(sourceFile)), numeric: false });
+        found.push({ property, value: init.text, line: lineOf(sourceFile, init.getStart(sourceFile)), numeric: false, attribute: true });
       } else if (ts.isJsxExpression(init) && init.expression) {
-        for (const v of literalValues(init.expression, sourceFile)) found.push({ property, ...v });
+        for (const v of literalValues(init.expression, sourceFile)) found.push({ property, ...v, attribute: true });
       }
     }
     ts.forEachChild(node, visit);

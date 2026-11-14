@@ -88,3 +88,16 @@ describe("isDesignDeclaration", () => {
     }
   });
 });
+
+// Audit 2026-11-13: product UI under brand/ or mock/ was skipped whole.
+import { classifyFileContext as classifyAudit } from "./design-value-rules.js";
+describe("folder skips need a design reason", () => {
+  it("checks product UI in brand/ and mock/", () => {
+    expect(classifyAudit("src/brand/Button.tsx", "export const B = () => <button style={{ background: '#ff0000' }} />")).toBeNull();
+    expect(classifyAudit("src/features/mock/x.css")).toBeNull();
+  });
+  it("still skips logos, __mocks__ and tests", () => {
+    expect(classifyAudit("src/brand/logo.tsx")).toBe("artwork");
+    expect(classifyAudit("src/__mocks__/x.ts")).toBe("test-or-story");
+  });
+});

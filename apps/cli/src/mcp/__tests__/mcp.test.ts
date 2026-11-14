@@ -408,13 +408,14 @@ describe("values inside expressions (ternaries, &&/||, templates, cn)", () => {
 });
 
 describe("bare numbers in JSX", () => {
-  it("are pixels, z-index stays a number, and weights/opacities stay unchecked", () => {
-    const tsx = "<div style={{ zIndex: dragging ? 10 : 1, padding: 8, fontWeight: 600, opacity: 0.5 }} />";
+  it("are pixels, while z-index, weights and opacities are checked as plain numbers", () => {
+    const tsx = "<div style={{ zIndex: dragging ? 10 : 1, padding: 8, fontWeight: 600, opacity: 0.85 }} />";
     const values = extractFileSignals(tsx, "src/A.tsx").map((s) => String(s.value));
     expect(values).toContain("8px");
     expect(values.filter((v) => v.endsWith("px"))).toEqual(["8px"]);
-    expect(values).not.toContain("600");
-    expect(values).not.toContain("0.5");
+    // Checked as numbers (audit 2026-11-13: they used to be skipped here and read as 600px in the PR reviewer).
+    expect(values).toContain("600");
+    expect(values).toContain("0.85");
   });
 });
 
