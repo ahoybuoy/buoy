@@ -138,12 +138,14 @@ Coding agents hardcode values because they never read your token file. Give them
 npx @buoy-design/cli mcp install claude   # or cursor, codex, windsurf, all
 ```
 
-Claude Code (and any MCP client) gets four tools: `list_design_tokens`, `find_token_for_value`
+Claude Code (and any MCP client) gets five tools: `context_for_file` (just the tokens, scales and components the file being edited needs),
+`list_design_tokens`, `find_token_for_value`
 (`#1a73e8` → `--color-primary`), `check_ui_against_design_system` (line-level, with the token and an exact line edit)
 and `design_system_context`. Claude Code also gets a `PostToolUse` hook that checks every style
 file it edits and hands the fixes back before it moves on. See [docs/integrations/mcp](https://buoy.design/docs/integrations/mcp).
 
 In Claude Code, the plugin bundles all of it: `/plugin marketplace add ahoybuoy/buoy`, then `/plugin install buoy@buoy`.
+To install only the `design-tokens` skill (Claude Code, Codex, Cursor, Windsurf, and others): `npx skills add ahoybuoy/buoy-plugin`.
 
 To review every pull request as well, install the free [GitHub App](https://github.com/marketplace/buoy-design); no Buoy account is needed.
 
