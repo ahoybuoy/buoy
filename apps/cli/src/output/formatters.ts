@@ -1,6 +1,6 @@
 import chalk, { type ChalkInstance } from 'chalk';
 import Table from 'cli-table3';
-import { formatVocabularyFixFromAnnotation, type Component, type DesignToken, type DriftSignal, type Severity } from '@buoy-design/core';
+import { formatVocabularyFixFromAnnotation, inferVocabularyKind, type Component, type DesignToken, type DriftSignal, type Severity } from '@buoy-design/core';
 import { sortDriftsBySeverity } from '../services/drift-analysis.js';
 
 // Severity colors
@@ -299,9 +299,7 @@ function getActionItems(drift: DriftSignal): string[] {
   switch (drift.type) {
     case 'hardcoded-value': {
       const tokenSuggs = drift.details?.tokenSuggestions;
-      const kind = drift.message.includes('size value') || /spacing|font size|type size/i.test(drift.message)
-        ? 'spacing'
-        : 'color';
+      const kind = inferVocabularyKind({ type: drift.type, message: drift.message });
       if (tokenSuggs?.length) {
         for (const suggestion of tokenSuggs) {
           actions.push(formatVocabularyFixFromAnnotation(suggestion, kind));
@@ -505,7 +503,7 @@ export function formatAgent(drifts: DriftSignal[]): string {
       let fix = '';
       if (drift.type === 'hardcoded-value') {
         const tokenSuggs = drift.details?.tokenSuggestions;
-        const kind = drift.message.includes('color') ? 'color' : (drift.message.includes('spacing') ? 'spacing' : (drift.message.includes('size') ? 'spacing' : 'color'));
+        const kind = inferVocabularyKind({ type: drift.type, message: drift.message });
         if (tokenSuggs?.length) {
           fix = tokenSuggs.map((s) => formatVocabularyFixFromAnnotation(s, kind)).join('; ');
         } else if (drift.message.includes('color')) {

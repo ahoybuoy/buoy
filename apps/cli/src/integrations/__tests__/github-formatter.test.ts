@@ -52,6 +52,19 @@ describe("formatInlineComment vocabulary", () => {
       "**Fix:** Harmonize this spacing to the scale: `17px` → `spacing.4`",
     );
   });
+
+  it("keeps color wording when the component name contains radius", () => {
+    const body = formatInlineComment({
+      type: "hardcoded-value",
+      severity: "warning",
+      message: 'Component "RadiusCard" has 1 hardcoded color: #fff',
+      tokenSuggestions: ["#fff → --color-surface"],
+    });
+    expect(body).toContain(
+      "**Fix:** Harmonize this color to the token: `#fff` → `--color-surface`",
+    );
+    expect(body).not.toContain("Harmonize this radius");
+  });
 });
 
 describe("formatDriftSignalForInline", () => {

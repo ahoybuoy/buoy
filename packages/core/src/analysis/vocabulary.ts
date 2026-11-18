@@ -218,6 +218,9 @@ export function formatVocabularyFixIntro(kind: string, count: number): string {
 /**
  * When the drift type is the generic `hardcoded-value`, infer color vs spacing
  * (and friends) from the message or the literal so PR/CLI copy stays accurate.
+ *
+ * Quoted component names are stripped first so names like `RadiusCard` or
+ * `PaddingCard` cannot shadow the real category clause ("hardcoded color").
  */
 export function inferVocabularyKind(input: {
   type?: string;
@@ -228,13 +231,15 @@ export function inferVocabularyKind(input: {
   if (type && type !== "hardcoded-value" && type !== "hardcoded-color") {
     return vocabularyKind(type);
   }
-  const message = input.message ?? "";
-  if (/size value|spacing|font size|type size|padding|margin/i.test(message))
+  // semantic-diff messages look like: Component "RadiusCard" has 1 hardcoded color: #fff
+  const message = (input.message ?? "").replace(/Component\s+"[^"]+"/gi, "");
+  if (/hardcoded color|\bcolors?\b|#(?:[0-9a-f]{3,8})\b|(?:rgba?|hsla?)\(/i.test(message))
+    return "color";
+  if (/size value|font size|type size|\bspacing\b|\bpadding\b|\bmargin\b/i.test(message))
     return "spacing";
-  if (/radius/i.test(message)) return "radius";
-  if (/shadow/i.test(message)) return "shadow";
+  if (/\bradius\b/i.test(message)) return "radius";
+  if (/\bshadow\b/i.test(message)) return "shadow";
   if (/typeface|font-family|font family/i.test(message)) return "font-family";
-  if (/\bcolor\b/i.test(message)) return "color";
   const current = input.current ?? "";
   if (current.startsWith("#") || /^(?:rgba?|hsla?)\(/i.test(current))
     return "color";

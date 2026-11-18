@@ -621,8 +621,9 @@ export class SemanticDiffEngine {
     const colorCount = hardcoded.filter((h) => h.type === "color").length;
     const spacingCount = hardcoded.filter((h) => h.type === "spacing" || h.type === "fontSize").length;
 
-    const tokenSuggestions = options.availableTokens
-      ? this.generateTokenSuggestions(hardcoded, options.availableTokens)
+    const tokensLookedUp = options.availableTokens != null;
+    const tokenSuggestions = tokensLookedUp
+      ? this.generateTokenSuggestions(hardcoded, options.availableTokens!)
       : new Map<string, TokenSuggestion[]>();
 
     if (colorCount > 0) {
@@ -645,7 +646,9 @@ export class SemanticDiffEngine {
       suggestions.push(
         tokenReplacements.length > 0
           ? `${formatVocabularyFixIntro("color", tokenReplacements.length)}:\n  ${tokenReplacements.join("\n  ")}`
-          : "These colors are off-token; no exact match in the system"
+          : tokensLookedUp
+            ? "These colors are off-token; no exact match in the system"
+            : "These colors are off-token"
       );
       suggestions.push(...nearMisses);
 
@@ -684,7 +687,9 @@ export class SemanticDiffEngine {
       suggestions.push(
         tokenReplacements.length > 0
           ? `${formatVocabularyFixIntro("spacing", tokenReplacements.length)}:\n  ${tokenReplacements.join("\n  ")}`
-          : "These sizes are off-token; no exact match in the system"
+          : tokensLookedUp
+            ? "These sizes are off-token; no exact match in the system"
+            : "These sizes are off-token"
       );
       suggestions.push(...nearMisses);
 

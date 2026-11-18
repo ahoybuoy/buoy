@@ -127,4 +127,48 @@ describe("inferVocabularyKind", () => {
       }),
     ).toBe("spacing");
   });
+
+  it("does not take category words from the component name", () => {
+    expect(
+      inferVocabularyKind({
+        type: "hardcoded-value",
+        message: 'Component "RadiusCard" has 1 hardcoded color: #fff',
+        current: "#fff",
+      }),
+    ).toBe("color");
+    expect(
+      inferVocabularyKind({
+        type: "hardcoded-value",
+        message: 'Component "PaddingCard" has 1 hardcoded color: #fff',
+        current: "#fff",
+      }),
+    ).toBe("color");
+    expect(
+      inferVocabularyKind({
+        type: "hardcoded-value",
+        message: 'Component "SpacingCard" has 1 hardcoded color: #fff',
+        current: "#fff",
+      }),
+    ).toBe("color");
+    expect(
+      inferVocabularyKind({
+        type: "hardcoded-value",
+        message: 'Component "colorPicker" has 1 hardcoded size value: 17px',
+        current: "17px",
+      }),
+    ).toBe("spacing");
+    expect(
+      inferVocabularyKind({
+        type: "hardcoded-radius",
+        message: 'Component "Card" has a hardcoded radius: 8px',
+      }),
+    ).toBe("radius");
+    expect(
+      inferVocabularyKind({
+        type: "hardcoded-value",
+        message: "Off-system spacing in layout: 17px",
+        current: "17px",
+      }),
+    ).toBe("spacing");
+  });
 });

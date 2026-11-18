@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDriftTree } from '../formatters.js';
+import { formatAgent, formatDriftTree } from '../formatters.js';
 import type { DriftSignal } from '@buoy-design/core';
 
 function makeDrift(overrides: Partial<DriftSignal> & { location?: string } = {}): DriftSignal {
@@ -59,5 +59,29 @@ describe('formatDriftTree prioritization', () => {
     const buttonIdx = output.indexOf('Button.tsx');
     const cardIdx = output.indexOf('Card.tsx');
     expect(buttonIdx).toBeLessThan(cardIdx);
+  });
+});
+
+describe('formatAgent vocabulary kind', () => {
+  it('does not treat SpacingCard as a spacing signal when the clause is a color', () => {
+    const output = formatAgent([
+      makeDrift({
+        message: 'Component "SpacingCard" has 1 hardcoded color: #fff',
+        details: { tokenSuggestions: ['#fff → --color-surface'] },
+      }),
+    ]);
+    expect(output).toContain('Harmonize this color to the token');
+    expect(output).not.toContain('Harmonize this spacing to the scale');
+  });
+
+  it('does not treat colorPicker as a color signal when the clause is a size', () => {
+    const output = formatAgent([
+      makeDrift({
+        message: 'Component "colorPicker" has 1 hardcoded size value: 17px',
+        details: { tokenSuggestions: ['17px → spacing.4'] },
+      }),
+    ]);
+    expect(output).toContain('Harmonize this spacing to the scale');
+    expect(output).not.toContain('Harmonize this color to the token');
   });
 });
