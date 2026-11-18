@@ -82,6 +82,19 @@ describe("drift issues", () => {
     ]);
   });
 
+  it("names a unitless line height only when a token holds it", () => {
+    const css = ".a {\n  line-height: 1.5;\n  line-height: 24px;\n}\n";
+    const tsx = "export const A = () => <div style={{ lineHeight: 1.5 }} />;\n";
+    // No line-height token: the unitless value is quiet, a px line height is still named.
+    expect(issuesFromSignals(extractFileSignals(css, "src/a.css"), tokens).map((i) => i.current)).toEqual(["24px"]);
+    expect(issuesFromSignals(extractFileSignals(tsx, "src/A.tsx"), tokens)).toEqual([]);
+    // A token with the same value: point to it.
+    const withLeading = [...tokens, token("--leading-normal", { type: "raw", value: "1.5" }, "typography")];
+    expect(issuesFromSignals(extractFileSignals(tsx, "src/A.tsx"), withLeading).map((i) => [i.current, i.suggested])).toEqual([
+      ["1.5", "var(--leading-normal)"],
+    ]);
+  });
+
   it("never offers a radius token for spacing or a border width", () => {
     // shadcn puts --radius (0.5rem) next to the spacing scale; 8px padding is not a radius.
     const shadcn = [

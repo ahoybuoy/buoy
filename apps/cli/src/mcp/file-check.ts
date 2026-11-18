@@ -358,6 +358,10 @@ function sameKindTokens(tokens: DesignToken[], signalType: string): DesignToken[
   return tokens;
 }
 
+function isUnitlessLineHeight(s: RawSignal): boolean {
+  return s.type === "line-height" && (s.metadata as { unitless?: boolean } | undefined)?.unitless === true;
+}
+
 /** Turn raw signals into issues, attaching the token that has the same value when one exists. */
 export function issuesFromSignals(signals: RawSignal[], tokens: DesignToken[]): FileIssue[] {
   const seen = new Set<string>();
@@ -370,6 +374,10 @@ export function issuesFromSignals(signals: RawSignal[], tokens: DesignToken[]): 
     const category = SIGNAL_CATEGORY[s.type];
     const matches = findTokensByValue(sameKindTokens(tokens, s.type), current, category);
     const first = matches[0];
+    // A unitless line height (1.5) scales with the font size and is almost
+    // always a deliberate type decision. Name it only when a token holds the
+    // same value, so there is a fix to point to; otherwise stay quiet.
+    if (!first && isUnitlessLineHeight(s)) continue;
     const label = s.type.replace(/-value$/, "").replace(/-/g, " ");
     issues.push({
       file: s.location.path,
