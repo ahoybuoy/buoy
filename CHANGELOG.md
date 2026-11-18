@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Drift feedback in MCP, hook, CLI, and PR comments now uses vocabulary-first phrasing and annotates both values (for example, `Harmonize this spacing to the scale: 17px → spacing.4`), so coding agents get a precise design decision to apply
+
 ## [0.4.1] - 2026-08-01
 
 ### Fixed

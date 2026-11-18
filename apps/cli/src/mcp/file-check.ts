@@ -5,12 +5,13 @@
  * look at literal values inside plain CSS, and it reports a component's line,
  * not the value's. Agents need "line 12: #fff -> var(--color-white)", so this
  * runs the same value-level extractors the PR reviewer uses, per file, and
- * looks each value up in the repo's tokens.
+ * looks each value up in the repo's tokens. Messages use design language
+ * and annotate both values: "Harmonize this color to the token: #fff → var(--color-white)".
  */
 import { minimatch } from "minimatch";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
-import type { DesignToken } from "@buoy-design/core";
+import { formatVocabularyFix, type DesignToken } from "@buoy-design/core";
 import {
   extractBorderWidthSignals,
   extractColorSignals,
@@ -378,17 +379,15 @@ export function issuesFromSignals(signals: RawSignal[], tokens: DesignToken[]): 
     // always a deliberate type decision. Name it only when a token holds the
     // same value, so there is a fix to point to; otherwise stay quiet.
     if (!first && isUnitlessLineHeight(s)) continue;
-    const label = s.type.replace(/-value$/, "").replace(/-/g, " ");
+    const suggested = first ? tokenRef(first) : undefined;
     issues.push({
       file: s.location.path,
       line: s.location.line,
       type: `hardcoded-${s.type.replace(/-value$/, "")}`,
       severity: first ? "warning" : "info",
-      message: first
-        ? `Hardcoded ${label} ${current} has a token: ${first.name}`
-        : `Hardcoded ${label} ${current} (no matching token)`,
+      message: formatVocabularyFix({ kind: s.type, current, token: suggested }),
       current,
-      ...(first ? { suggested: tokenRef(first), tokenSuggestions: matches.map(tokenRef) } : {}),
+      ...(suggested ? { suggested, tokenSuggestions: matches.map(tokenRef) } : {}),
     });
   }
   return issues;

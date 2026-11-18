@@ -40,6 +40,8 @@ export interface DriftResult {
     file?: string;
     line?: number;
     suggestion?: string;
+    /** Exact `value → token` substitutions, when known. */
+    tokenSuggestions?: string[];
   }>;
   summary: { total: number; critical: number; warning: number; info: number };
 }

@@ -23,6 +23,7 @@ import {
   tokenSuggestionKey,
   type TokenSuggestion,
 } from "./token-suggestions.js";
+import { formatVocabularyFixIntro } from "./vocabulary.js";
 import { stringSimilarity as calcStringSimilarity } from "./string-utils.js";
 import { classifyFileContext, isDesignDeclaration, type ExemptFileContext } from "./design-value-rules.js";
 import { MATCHING_CONFIG } from "./config.js";
@@ -643,8 +644,8 @@ export class SemanticDiffEngine {
 
       suggestions.push(
         tokenReplacements.length > 0
-          ? `Suggested replacements:\n  ${tokenReplacements.join("\n  ")}`
-          : "Replace hardcoded colors with design tokens"
+          ? `${formatVocabularyFixIntro("color", tokenReplacements.length)}:\n  ${tokenReplacements.join("\n  ")}`
+          : "These colors are off-token; no exact match in the system"
       );
       suggestions.push(...nearMisses);
 
@@ -682,8 +683,8 @@ export class SemanticDiffEngine {
 
       suggestions.push(
         tokenReplacements.length > 0
-          ? `Suggested replacements:\n  ${tokenReplacements.join("\n  ")}`
-          : "Consider using spacing tokens for consistency"
+          ? `${formatVocabularyFixIntro("spacing", tokenReplacements.length)}:\n  ${tokenReplacements.join("\n  ")}`
+          : "These sizes are off-token; no exact match in the system"
       );
       suggestions.push(...nearMisses);
 

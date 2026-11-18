@@ -118,6 +118,18 @@ export {
   type StringLiteral,
 } from "./string-literals.js";
 export {
+  formatVocabularyAnnotation,
+  formatVocabularyFix,
+  formatVocabularyFixFromAnnotation,
+  formatVocabularyFixIntro,
+  formatVocabularyFixMarkdown,
+  inferVocabularyKind,
+  parseVocabularyAnnotation,
+  vocabularyKind,
+  type VocabularyFix,
+} from "./vocabulary.js";
+
+export {
   commentText,
   commentIntent,
   classifyIntentText,

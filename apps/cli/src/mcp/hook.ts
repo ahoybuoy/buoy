@@ -10,6 +10,7 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import { checkDrift, loadProject, type DriftCheck } from "./project.js";
 import { fileChangedLines } from "../services/changed-lines.js";
+import { formatVocabularyFix } from "@buoy-design/core";
 import { ConfigFileError } from "../config/loader.js";
 
 const STYLE_FILE = /\.(tsx|jsx|vue|svelte|css|scss|html)$/;
@@ -65,13 +66,20 @@ export function formatHookFeedback(file: string, check: DriftCheck): string {
   const lines = [`Buoy: ${check.summary.total} design drift issue${check.summary.total === 1 ? "" : "s"} in ${file}`];
   for (const issue of check.issues.slice(0, 15)) {
     const where = issue.line ? `:${issue.line}` : "";
-    const fix = issue.suggested ? ` -> use ${issue.suggested}` : issue.tokenSuggestions?.[0] ? ` -> ${issue.tokenSuggestions[0]}` : "";
-    lines.push(`- ${issue.file}${where} ${issue.message}${fix}`);
+    const token = issue.suggested ?? issue.tokenSuggestions?.[0];
+    const current = typeof issue.current === "string" ? issue.current : undefined;
+    const body =
+      current && token
+        ? formatVocabularyFix({ kind: issue.type, current, token })
+        : token && !issue.message.includes(token)
+          ? `${issue.message} → ${token}`
+          : issue.message;
+    lines.push(`- ${issue.file}${where} ${body}`);
   }
   if (check.issues.length > 15) lines.push(`- ... and ${check.issues.length - 15} more`);
   lines.push(check.summary.fixable > 0
-    ? "Replace the literal values with the tokens above, then continue."
-    : "No token holds these values. Use the nearest token from list_design_tokens, or keep the value if it is deliberate.");
+    ? "Harmonize the literals to the tokens above, then continue."
+    : "These values are off-token. Use the nearest token from list_design_tokens, or keep the value if it is a deliberate variation.");
   return lines.join("\n");
 }
 
