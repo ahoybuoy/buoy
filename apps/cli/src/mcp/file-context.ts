@@ -9,7 +9,7 @@
  * and small.
  */
 import { basename, dirname } from "node:path";
-import type { Component, DesignToken } from "@buoy-design/core";
+import { formatVocabularyFix, type Component, type DesignToken } from "@buoy-design/core";
 import { formatTokenValue, type DriftIssue } from "./project.js";
 
 export interface SourceFile {
@@ -204,8 +204,12 @@ export function buildFileContext(input: FileContextInput): FileContext {
     components: uniqueComponents.map((c) => `${c.name} ${c.path}${c.imported ? " (imported)" : ""}`),
     existingIssues: {
       total: issues.length,
-      top: issues.slice(0, MAX_ISSUES).map((i) =>
-        `line ${i.line ?? "?"}: ${typeof i.current === "string" ? i.current : JSON.stringify(i.current ?? "")}${i.suggested ? ` -> ${i.suggested}` : ""}`),
+      top: issues.slice(0, MAX_ISSUES).map((i) => {
+        const current = typeof i.current === "string" ? i.current : JSON.stringify(i.current ?? "");
+        return i.suggested
+          ? `line ${i.line ?? "?"}: ${formatVocabularyFix({ kind: i.type, current, token: i.suggested })}`
+          : `line ${i.line ?? "?"}: ${current}`;
+      }),
     },
     note,
   };

@@ -1,6 +1,14 @@
 // GitHub PR comment formatter for Buoy CLI
 // Styled after CodeRabbit's rich review format
-import type { DriftResult, DriftSignal } from '@buoy-design/core';
+import {
+  formatVocabularyFixFromAnnotation,
+  formatVocabularyFixIntro,
+  formatVocabularyFixMarkdown,
+  inferVocabularyKind,
+  parseVocabularyAnnotation,
+  type DriftResult,
+  type DriftSignal,
+} from '@buoy-design/core';
 import { COMMENT_MARKER, INLINE_MARKER_PREFIX, INLINE_MARKER_SUFFIX } from './github.js';
 
 export interface PRContext {
@@ -11,6 +19,52 @@ export interface PRContext {
   hasDesignReference?: boolean;
   /** Number of tokens found */
   tokenCount?: number;
+}
+
+
+function annotationsFromSignal(signal: {
+  type?: string;
+  suggestion?: string;
+  tokenSuggestions?: string[];
+}): string[] {
+  if (signal.tokenSuggestions?.length) return signal.tokenSuggestions;
+  if (!signal.suggestion) return [];
+  return signal.suggestion
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.includes("→"));
+}
+
+function vocabularyFixSection(signal: {
+  type: string;
+  suggestion?: string;
+  tokenSuggestions?: string[];
+  message?: string;
+}): string | null {
+  const annotations = annotationsFromSignal(signal);
+  if (annotations.length === 0) return null;
+  const first = parseVocabularyAnnotation(annotations[0] ?? "") ?? {
+    current: annotations[0]?.split("→")[0]?.trim() ?? "",
+    token: "",
+  };
+  const kind = inferVocabularyKind({ type: signal.type, message: signal.message, current: first.current });
+  if (annotations.length === 1) {
+    const parsed = parseVocabularyAnnotation(annotations[0]!);
+    if (parsed) {
+      return `**Fix:** ${formatVocabularyFixMarkdown({ kind, current: parsed.current, token: parsed.token })}`;
+    }
+    return `**Fix:** ${formatVocabularyFixFromAnnotation(annotations[0]!, kind)}`;
+  }
+  const lines = [`**Fix:** ${formatVocabularyFixIntro(kind, annotations.length)}:`];
+  for (const annotation of annotations) {
+    const parsed = parseVocabularyAnnotation(annotation);
+    if (parsed) {
+      lines.push(`- \`${parsed.current}\` → \`${parsed.token}\``);
+    } else {
+      lines.push(`- ${annotation}`);
+    }
+  }
+  return lines.join("\n");
 }
 
 export function formatPRComment(results: DriftResult, context?: PRContext): string {
@@ -224,7 +278,11 @@ function formatSignalDetail(signal: DriftResult['signals'][0]): string {
     lines.push(`**Component:** \`${signal.component}\``);
   }
 
-  if (signal.suggestion) {
+  const fix = vocabularyFixSection(signal);
+  if (fix) {
+    lines.push('');
+    lines.push(fix);
+  } else if (signal.suggestion) {
     lines.push('');
     lines.push(`**💡 Suggestion:** ${signal.suggestion}`);
   }
@@ -243,6 +301,7 @@ export function formatInlineComment(signal: {
   suggestion?: string;
   currentValue?: string;
   expectedValue?: string;
+  tokenSuggestions?: string[];
 }, signalId?: string): string {
   const lines: string[] = [];
 
@@ -268,6 +327,12 @@ export function formatInlineComment(signal: {
 
   // Message
   lines.push(signal.message);
+
+  const fix = vocabularyFixSection(signal);
+  if (fix && fix !== signal.message && !signal.message.includes("→")) {
+    lines.push('');
+    lines.push(fix);
+  }
 
   // Component context
   if (signal.component) {
@@ -315,6 +380,7 @@ export function formatDriftSignalForInline(drift: DriftSignal, signalId: string)
     suggestion: drift.details.suggestions?.[0],
     currentValue: drift.details.actual as string | undefined,
     expectedValue: drift.details.expected as string | undefined,
+    tokenSuggestions: drift.details.tokenSuggestions,
   }, signalId);
 }
 

@@ -23,6 +23,7 @@ import {
   tokenSuggestionKey,
   type TokenSuggestion,
 } from "./token-suggestions.js";
+import { formatVocabularyFixIntro } from "./vocabulary.js";
 import { stringSimilarity as calcStringSimilarity } from "./string-utils.js";
 import { classifyFileContext, isDesignDeclaration, type ExemptFileContext } from "./design-value-rules.js";
 import { MATCHING_CONFIG } from "./config.js";
@@ -620,8 +621,9 @@ export class SemanticDiffEngine {
     const colorCount = hardcoded.filter((h) => h.type === "color").length;
     const spacingCount = hardcoded.filter((h) => h.type === "spacing" || h.type === "fontSize").length;
 
-    const tokenSuggestions = options.availableTokens
-      ? this.generateTokenSuggestions(hardcoded, options.availableTokens)
+    const tokensLookedUp = options.availableTokens != null;
+    const tokenSuggestions = tokensLookedUp
+      ? this.generateTokenSuggestions(hardcoded, options.availableTokens!)
       : new Map<string, TokenSuggestion[]>();
 
     if (colorCount > 0) {
@@ -643,8 +645,10 @@ export class SemanticDiffEngine {
 
       suggestions.push(
         tokenReplacements.length > 0
-          ? `Suggested replacements:\n  ${tokenReplacements.join("\n  ")}`
-          : "Replace hardcoded colors with design tokens"
+          ? `${formatVocabularyFixIntro("color", tokenReplacements.length)}:\n  ${tokenReplacements.join("\n  ")}`
+          : tokensLookedUp
+            ? "These colors are off-token; no exact match in the system"
+            : "These colors are off-token"
       );
       suggestions.push(...nearMisses);
 
@@ -682,8 +686,10 @@ export class SemanticDiffEngine {
 
       suggestions.push(
         tokenReplacements.length > 0
-          ? `Suggested replacements:\n  ${tokenReplacements.join("\n  ")}`
-          : "Consider using spacing tokens for consistency"
+          ? `${formatVocabularyFixIntro("spacing", tokenReplacements.length)}:\n  ${tokenReplacements.join("\n  ")}`
+          : tokensLookedUp
+            ? "These sizes are off-token; no exact match in the system"
+            : "These sizes are off-token"
       );
       suggestions.push(...nearMisses);
 

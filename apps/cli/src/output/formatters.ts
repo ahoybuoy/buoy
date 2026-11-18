@@ -1,6 +1,6 @@
 import chalk, { type ChalkInstance } from 'chalk';
 import Table from 'cli-table3';
-import type { Component, DesignToken, DriftSignal, Severity } from '@buoy-design/core';
+import { formatVocabularyFixFromAnnotation, inferVocabularyKind, type Component, type DesignToken, type DriftSignal, type Severity } from '@buoy-design/core';
 import { sortDriftsBySeverity } from '../services/drift-analysis.js';
 
 // Severity colors
@@ -297,16 +297,23 @@ function getActionItems(drift: DriftSignal): string[] {
   const actions: string[] = [];
 
   switch (drift.type) {
-    case 'hardcoded-value':
-      if (drift.message.includes('color')) {
-        actions.push('Replace hardcoded colors with design tokens');
-        actions.push('Example: Change #3b82f6 → var(--color-primary) or theme.colors.primary');
+    case 'hardcoded-value': {
+      const tokenSuggs = drift.details?.tokenSuggestions;
+      const kind = inferVocabularyKind({ type: drift.type, message: drift.message });
+      if (tokenSuggs?.length) {
+        for (const suggestion of tokenSuggs) {
+          actions.push(formatVocabularyFixFromAnnotation(suggestion, kind));
+        }
+      } else if (drift.message.includes('color')) {
+        actions.push('Harmonize hardcoded colors to tokens in the system');
+        actions.push('Example: Harmonize this color to the token: #3b82f6 → var(--color-primary)');
         actions.push('If no token exists, add it to your design system first');
       } else {
-        actions.push('Replace hardcoded values with spacing/size tokens');
-        actions.push('Example: Change 16px → var(--spacing-4) or theme.spacing.md');
+        actions.push('Harmonize hardcoded sizes to the spacing or type scale');
+        actions.push('Example: Harmonize this spacing to the scale: 16px → var(--spacing-4)');
       }
       break;
+    }
 
     case 'naming-inconsistency':
       if (drift.details.relatedComponents) {
@@ -495,19 +502,23 @@ export function formatAgent(drifts: DriftSignal[]): string {
       // Generate specific fix suggestion
       let fix = '';
       if (drift.type === 'hardcoded-value') {
-        if (drift.message.includes('color')) {
+        const tokenSuggs = drift.details?.tokenSuggestions;
+        const kind = inferVocabularyKind({ type: drift.type, message: drift.message });
+        if (tokenSuggs?.length) {
+          fix = tokenSuggs.map((s) => formatVocabularyFixFromAnnotation(s, kind)).join('; ');
+        } else if (drift.message.includes('color')) {
           const match = drift.message.match(/#[0-9a-fA-F]{3,8}/);
           if (match) {
-            fix = `Replace ${match[0]} with design token (e.g., bg-muted, text-primary)`;
+            fix = `Harmonize this color to a token in the system (e.g. ${match[0]} → bg-muted or text-primary)`;
           } else {
-            fix = 'Replace hardcoded color with design token';
+            fix = 'Harmonize this color to a token in the system';
           }
         } else if (drift.message.includes('spacing')) {
-          fix = 'Replace arbitrary spacing with theme value (e.g., p-4, gap-2)';
+          fix = 'Harmonize this spacing to the scale (e.g. p-4, gap-2)';
         } else if (drift.message.includes('size')) {
-          fix = 'Replace arbitrary size with theme value (e.g., w-full, h-10)';
+          fix = 'Harmonize this size to the scale (e.g. w-full, h-10)';
         } else {
-          fix = 'Replace arbitrary value with design token';
+          fix = 'Harmonize this value to a token in the system';
         }
       } else if (drift.type === 'semantic-mismatch') {
         fix = `Standardize prop type: ${drift.details.actual} → ${drift.details.expected}`;

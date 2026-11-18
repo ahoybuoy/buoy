@@ -187,6 +187,45 @@ describe("SemanticDiffEngine", () => {
         expect(colorDrift?.severity).toBe("warning");
       });
 
+      it("uses neutral off-token wording when no token list was supplied", () => {
+        const components = [
+          createMockComponentWithMetadata("Button", {
+            hardcodedValues: [
+              {
+                type: "color",
+                value: "#ff0000",
+                property: "backgroundColor",
+                location: "line 10",
+              },
+            ],
+          }),
+        ];
+        const result = engine.analyzeComponents(components, {});
+        const suggestions = result.drifts.find((d) => d.type === "hardcoded-value")?.details.suggestions ?? [];
+        expect(suggestions.some((s) => s === "These colors are off-token")).toBe(true);
+        expect(suggestions.some((s) => s.includes("no exact match in the system"))).toBe(false);
+      });
+
+      it("says no exact match only after a completed token lookup", () => {
+        const components = [
+          createMockComponentWithMetadata("Button", {
+            hardcodedValues: [
+              {
+                type: "color",
+                value: "#abcdef",
+                property: "backgroundColor",
+                location: "line 10",
+              },
+            ],
+          }),
+        ];
+        const result = engine.analyzeComponents(components, {
+          availableTokens: [createMockToken("--color-primary", "#0066cc", "css")],
+        });
+        const suggestions = result.drifts.find((d) => d.type === "hardcoded-value")?.details.suggestions ?? [];
+        expect(suggestions.some((s) => s === "These colors are off-token; no exact match in the system")).toBe(true);
+      });
+
       it("does not flag artwork files or SVG paint (2026-09 audit)", () => {
         const logo = createMockComponentWithMetadata("BunLogoIcon", {
           hardcodedValues: [{ type: "color", value: "#fbf0df", property: "fill", location: "line 9" }],

@@ -130,22 +130,22 @@ describe("Claude Code hook", () => {
 
   it("formats feedback with the fix on each line", () => {
     const text = formatHookFeedback("src/a.tsx", {
-      issues: [{ file: "src/a.tsx", line: 4, type: "hardcoded-value", severity: "warning", message: "Hardcoded color #fff", suggested: "var(--color-white)" }],
+      issues: [{ file: "src/a.tsx", line: 4, type: "hardcoded-value", severity: "warning", message: "Hardcoded color #fff", current: "#fff", suggested: "var(--color-white)" }],
       summary: { total: 1, critical: 0, warning: 1, info: 0, fixable: 1 },
       tokenCount: 4,
     });
     expect(text).toContain("1 design drift issue in src/a.tsx");
-    expect(text).toContain("src/a.tsx:4 Hardcoded color #fff -> use var(--color-white)");
+    expect(text).toContain("src/a.tsx:4 Harmonize this color to the token: #fff → var(--color-white)");
   });
 
   it("does not point to tokens above when none matched", () => {
     const text = formatHookFeedback("src/a.tsx", {
-      issues: [{ file: "src/a.tsx", line: 4, type: "hardcoded-value", severity: "warning", message: "Hardcoded color #123456 (no matching token)" }],
+      issues: [{ file: "src/a.tsx", line: 4, type: "hardcoded-value", severity: "warning", message: "This color is off-token: #123456 (no exact match in the system)" }],
       summary: { total: 1, critical: 0, warning: 1, info: 0, fixable: 0 },
       tokenCount: 4,
     });
     expect(text).not.toContain("tokens above");
-    expect(text).toContain("No token holds these values");
+    expect(text).toContain("These values are off-token");
   });
 
   function repoWithTokens(): string {

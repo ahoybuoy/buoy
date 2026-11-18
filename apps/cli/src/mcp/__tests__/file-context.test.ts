@@ -73,7 +73,7 @@ describe("buildFileContext", () => {
       "Badge src/components/Badge.tsx",
       "Button src/components/Button.tsx",
     ]);
-    expect(ctx.existingIssues).toEqual({ total: 1, top: ["line 2: 12px -> --space-3"] });
+    expect(ctx.existingIssues).toEqual({ total: 1, top: ["line 2: Harmonize this spacing to the scale: 12px → --space-3"] });
   });
 
   it("handles a file that does not exist yet", () => {
