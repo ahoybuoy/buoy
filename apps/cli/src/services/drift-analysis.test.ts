@@ -333,6 +333,16 @@ describe("applyIgnoreRules bare file names", () => {
     expect(applyIgnoreRules(drifts, [{ file: "*.tsx" }])).toHaveLength(2);
   });
 
+  it("ignores a column suffix on the location", () => {
+    const withColumn = [createDrift({ location: "src/components/Button.tsx:12:4" })];
+    expect(applyIgnoreRules(withColumn, [{ file: "Button.tsx" }])).toHaveLength(0);
+  });
+
+  it("keeps a brace pattern anchored when any alternative names a folder", () => {
+    const docs = [createDrift({ location: "docs/Button.tsx:3" })];
+    expect(applyIgnoreRules(docs, [{ file: "{Button.tsx,src/Card.tsx}" }])).toHaveLength(1);
+  });
+
   it("still anchors a pattern that names a folder", () => {
     expect(applyIgnoreRules(drifts, [{ file: "src/styles/guide-markers.css" }])).toHaveLength(2);
     expect(applyIgnoreRules(drifts, [{ file: "apps/docs/**" }])).toHaveLength(0);
