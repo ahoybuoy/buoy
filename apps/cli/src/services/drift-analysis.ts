@@ -302,9 +302,12 @@ function ruleMatches(
   if (severity && d.severity !== severity) return false;
 
   if (file) {
-    // Strip line numbers from location (e.g., "Button.tsx:42" → "Button.tsx")
-    const loc = d.source.location.replace(/:\d+$/, "");
-    if (!minimatch(loc, file)) return false;
+    // Strip line (and column) from location: "Button.tsx:42:4" → "Button.tsx"
+    const loc = d.source.location.replace(/(:\d+){1,2}$/, "");
+    // A pattern with no folder anywhere in it (`Button.tsx`, `*.css`) matches
+    // by file name in any folder, as in .gitignore and in the cloud reviewer.
+    // Any "/" (also inside braces) keeps the whole pattern anchored.
+    if (!minimatch(loc, file, { matchBase: !file.includes("/") })) return false;
   }
 
   if (component) {
