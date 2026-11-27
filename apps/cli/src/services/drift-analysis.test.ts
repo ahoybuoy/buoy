@@ -314,6 +314,31 @@ describe("applyIgnoreRules", () => {
   });
 });
 
+// Buoy's PR comments name files without their folder, and the cloud ignore
+// command wrote `file: guide-markers.css` to .buoy.yaml. That rule never
+// matched the full path (maus-inc/mausVoice#349).
+describe("applyIgnoreRules bare file names", () => {
+  const drifts = [
+    createDrift({ location: "apps/docs/src/styles/guide-markers.css:23", actual: "3" }),
+    createDrift({ location: "apps/docs/src/styles/guides.css:174", actual: "3" }),
+  ];
+
+  it("matches a bare file name in any folder", () => {
+    const result = applyIgnoreRules(drifts, [{ file: "guide-markers.css" }]);
+    expect(result.map((d) => d.source.location)).toEqual(["apps/docs/src/styles/guides.css:174"]);
+  });
+
+  it("matches a bare glob by file name", () => {
+    expect(applyIgnoreRules(drifts, [{ file: "*.css" }])).toHaveLength(0);
+    expect(applyIgnoreRules(drifts, [{ file: "*.tsx" }])).toHaveLength(2);
+  });
+
+  it("still anchors a pattern that names a folder", () => {
+    expect(applyIgnoreRules(drifts, [{ file: "src/styles/guide-markers.css" }])).toHaveLength(2);
+    expect(applyIgnoreRules(drifts, [{ file: "apps/docs/**" }])).toHaveLength(0);
+  });
+});
+
 describe("applyPromoteRules", () => {
   it("promotes matching drifts by file glob", () => {
     const drifts = [

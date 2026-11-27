@@ -304,7 +304,9 @@ function ruleMatches(
   if (file) {
     // Strip line numbers from location (e.g., "Button.tsx:42" → "Button.tsx")
     const loc = d.source.location.replace(/:\d+$/, "");
-    if (!minimatch(loc, file)) return false;
+    // A pattern with no folder (`Button.tsx`, `*.css`) matches by file name in
+    // any folder, as in .gitignore and in the cloud reviewer.
+    if (!minimatch(loc, file, { matchBase: true })) return false;
   }
 
   if (component) {
